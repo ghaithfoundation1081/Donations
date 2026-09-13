@@ -2,8 +2,6 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="referrer" content="no-referrer">
-<meta http-equiv="X-Content-Type-Options" content="nosniff">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مؤسسة غيث للتنمية المجتمعية</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -1552,34 +1550,6 @@ body{
   background:var(--ghaith-dark)!important;
   border-color:var(--ghaith-dark)!important;
 }
-/* === MAIN ADMIN PORTAL LOGIN / SHEET BOOTSTRAP === */
-#adminSheetGateway{
-  display:none;
-  background:linear-gradient(180deg,#F7FBF9 0%,#FFFFFF 100%);
-  border:1px solid #D7E9E2;
-  border-radius:14px;
-  padding:14px;
-  margin-bottom:14px;
-}
-body.admin-portal #adminSheetGateway{display:block}
-#adminSheetGateway .gateway-title{
-  color:var(--ghaith-dark);font-weight:800;font-size:15px;margin-bottom:5px
-}
-#adminSheetGateway .gateway-note{
-  color:#60706C;font-size:12px;line-height:1.8;margin-bottom:10px
-}
-#adminSheetGateway .gateway-row{display:flex;gap:8px;align-items:stretch}
-#adminSheetGateway input{flex:1;min-width:0;direction:ltr;text-align:left}
-#adminSheetGateway .gateway-status{
-  font-size:12px;margin-top:8px;line-height:1.7
-}
-#adminSheetGateway .gateway-status.ok{color:#08785B}
-#adminSheetGateway .gateway-status.err{color:#D92E2B}
-@media(max-width:560px){
-  #adminSheetGateway .gateway-row{flex-direction:column}
-  #adminSheetGateway button{width:100%}
-}
-
 
 /* Keep hidden welcome element harmless */
 #app header #welcome{display:none!important;}
@@ -1613,24 +1583,6 @@ body.admin-portal #adminSheetGateway{display:block}
   <p class="subtitle" id="loginSubtitle">تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.</p>
 
   <div id="loginFormArea">
-    <div id="adminSheetGateway">
-      <div class="gateway-title">دخول المدير الرئيسي — ربط Google Sheets</div>
-      <div class="gateway-note">
-        الصق هنا <b>رابط تطبيق الويب /exec</b> الخاص بـ Google Apps Script المرتبط بالشيت.
-        عند الضغط على المزامنة سيقرأ النظام حسابات المستخدمين من الشيت، ويحدد حساب المدير الرئيسي تلقائيًا.
-        <br><b>ملاحظة:</b> لا يتم الدخول بدون كلمة المرور؛ الرابط وحده لا يمنح صلاحية الدخول.
-      </div>
-      <div class="gateway-row">
-        <input id="adminSheetUrlInput" type="url" placeholder="https://script.google.com/macros/s/XXXX/exec" autocomplete="off">
-        <button type="button" class="btn-primary" id="adminSheetSyncBtn" onclick="connectAdminSheetAndPrepareLogin()">مزامنة المدير</button>
-      </div>
-      <div class="gateway-script-box" style="margin-top:10px">
-        <label style="display:block;margin-bottom:6px;font-weight:700">كود Google Apps Script</label>
-        <textarea id="adminScriptCode" rows="5" readonly spellcheck="false" placeholder="سيظهر هنا كود Script الجاهز للنسخ"></textarea>
-        <button type="button" class="btn-secondary" style="margin-top:6px" onclick="copyAdminScript()">نسخ كود Script</button>
-      </div>
-      <div id="adminSheetGatewayStatus" class="gateway-status"></div>
-    </div>
     <div id="normalLoginArea">
       <div class="field"><label>اسم المستخدم</label><input id="loginUser" type="text" autocomplete="username"></div>
       <div class="field"><label>كلمة المرور</label><input id="loginPass" type="password" autocomplete="current-password"></div>
@@ -1642,7 +1594,7 @@ body.admin-portal #adminSheetGateway{display:block}
       </div>
     </div>
     <div id="activationArea" class="hidden">
-      <p class="small-note">اسم المستخدم وإعداد كلمة المرور</p><p class="small-note">هذا الرابط مخصص لتفعيل حسابك فقط، ولا يتيح إنشاء مستخدمين إضافيين أو تعديل إعدادات النظام.</p>
+      <p class="small-note">قم بإنشاء كلمة المرور الخاصة بك لتفعيل الحساب لأول مرة.</p>
       <div class="field"><label>اسم المستخدم</label><input id="activationUser" readonly></div>
       <div class="field"><label>كلمة المرور الجديدة</label><input id="activationPass" type="password" autocomplete="new-password"></div>
       <div class="field"><label>تأكيد كلمة المرور</label><input id="activationPass2" type="password" autocomplete="new-password"></div>
@@ -2082,15 +2034,23 @@ body.admin-portal #adminSheetGateway{display:block}
 
 <datalist id="projectsDatalist"></datalist><datalist id="locationsDatalist"></datalist><datalist id="allDonorNamesDatalist"></datalist>
 
+<!--
+  ملف الإعدادات: config.js
+  رابط Google Sheets موجود في ملف منفصل اسمه config.js بجانب هذا الملف.
+  لتغييره لاحقًا (بعد نشر Apps Script والحصول على رابط /exec جديد أو مختلف)
+  عدّل فقط ملف config.js — لا داعي لفتح أو تعديل هذا الملف الكبير إطلاقًا.
+-->
+<script src="config.js"></script>
 <script>
 /* =========================================================
-   إعدادات عامة — يرجى تعديل القيمتين التاليتين قبل توزيع الملف:
-   - DEFAULT_GAS_URL: رابط تطبيق الويب لجوجل شيت (Code.gs) بعد نشره،
-     بحيث يرتبط كل من يفتح هذه النسخة من الملف بنفس الشيت تلقائيًا.
+   إعدادات عامة:
+   - DEFAULT_GAS_URL: تُقرأ تلقائيًا من ملف config.js (المتغير CONFIG_GAS_URL).
+     أي نسخة من هذا الملف (على GitHub أو أي جهاز) ستتصل تلقائيًا بنفس
+     الشيت طالما ملف config.js المرافق لها يحتوي على نفس الرابط.
    - SETUP_CODE: رمز سري يعرفه المدير فقط، يُستخدم مرة واحدة لإنشاء
      أول حساب مدير في النظام. غيّره لرمز خاص بك قبل التوزيع.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyEojuLJNguHzLHnNninNfyFjIQoYSuYE2WjPhKdTpaD3JgioSslWjs4lYW3wUqkM1l/exec'; // رابط Web App الافتراضي للنظام
+const DEFAULT_GAS_URL = (typeof CONFIG_GAS_URL !== 'undefined' && CONFIG_GAS_URL) ? CONFIG_GAS_URL.trim() : '';
 const SETUP_CODE = 'ghaith@2022';
 
 /* browser-safe storage + cross-browser Google Sheets config */
@@ -2112,23 +2072,26 @@ function makePasswordResetLink(u){
   return base+'?portal=user&reset=1&u='+encodeURIComponent(u.username)+'&token='+encodeURIComponent(u.resetToken)+(GAS_URL?'&gas='+encodeURIComponent(GAS_URL):'');
 }
 function prepareActivationScreen(){
+  const activate=getQueryParam('activate')==='1';
+  const reset=getQueryParam('reset')==='1';
+  const username=getQueryParam('u')||'';
+  const token=getQueryParam('token')||'';
+  const user=activate&&username&&token?USERS.find(x=>x.username===username&&x.activationToken===token&&x.activated===false):
+    (reset&&username&&token?USERS.find(x=>x.username===username&&x.resetToken===token&&x.activated!==false):null);
   const normal=document.getElementById('normalLoginArea');
-  const activation=document.getElementById('activationArea');
-  if(normal)normal.classList.add('hidden');
-  if(activation)activation.classList.remove('hidden');
-  const more=document.getElementById('loginMoreOptions');
-  if(more)more.classList.add('hidden');
-  const subtitle=document.getElementById('loginSubtitle');
-  if(subtitle)subtitle.textContent='اسم المستخدم وإعداد كلمة المرور';
+  const box=document.getElementById('activationArea');
+  if(user){
+    normal?.classList.add('hidden'); box?.classList.remove('hidden');
+    document.getElementById('activationUser').value=user.username;
+    document.getElementById('loginSubtitle').textContent=reset?'تعيين كلمة المرور الجديدة':'إنشاء كلمة المرور لأول مرة';
+    const btn=box?.querySelector('button.btn-primary'); if(btn)btn.textContent=reset?'حفظ كلمة المرور وتسجيل الدخول':'تفعيل الحساب';
+  }else{
+    normal?.classList.remove('hidden'); box?.classList.add('hidden');
+    document.getElementById('loginSubtitle').textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
+  }
+  if(!isAdminPortal())document.getElementById('loginMoreOptions')?.classList.add('hidden');
 }
 async function activateAccount(){
-  const activationUsername=(document.getElementById('activationUser')?.value||getQueryParam('u')||'').trim();
-  const activationToken=getQueryParam('token')||'';
-  if(!activationUsername || !activationToken){
-    alert('رابط التفعيل غير صالح.');
-    return;
-  }
-
   const username=getQueryParam('u')||'', token=getQueryParam('token')||'';
   const activate=getQueryParam('activate')==='1', reset=getQueryParam('reset')==='1';
   const user=activate?USERS.find(x=>x.username===username&&x.activationToken===token&&x.activated===false):
@@ -2603,11 +2566,6 @@ function saveIntentions(){safeSet(localStorage,IKEY,JSON.stringify(intentions));
 function saveManagerCategories(){safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));syncPushDebounced()}
 
 /* ---------- roles ---------- */
-function isMainAdminRecord(u){
-  if(!u||typeof u!=='object')return false;
-  const role=String(u.role||u.Role||u['الدور']||'').trim().toLowerCase();
-  return u.isSuperAdmin===true || u.isMainAdmin===true || role==='superadmin' || role==='mainadmin' || role==='المدير الرئيسي' || role==='المدير الرئيسي للنظام';
-}
 function isSuperAdmin(u){return !!u&&u.role==='superadmin'}
 function isActiveUser(u){return !!u&&(u.active!==false)}
 function isManagerRole(u){return !!u&&(u.role==='manager'||u.role==='superadmin')}
@@ -2766,17 +2724,7 @@ function restoreLocalUsersIfMissing(){
 }
 
 async function loadAll(){
-  try{
-    const remote=await fetchUsersFromSheet();
-    USERS=remote;
-    setLocalUsers(remote);
-  }catch(e){
-    USERS=getLocalUsers();
-  }
-  // Do not overwrite freshly fetched Google Sheet users with stale local cache.
-  if(!Array.isArray(USERS) || !USERS.length){
-    try{USERS=JSON.parse(safeGet(localStorage,UKEY)||'[]')}catch(e){USERS=[]}
-  }
+  try{USERS=JSON.parse(safeGet(localStorage,UKEY)||'[]')}catch(e){USERS=[]}
   try{donors=JSON.parse(safeGet(localStorage,DKEY)||'[]');donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}))}catch(e){donors=[]}
   try{companies=JSON.parse(safeGet(localStorage,COMPANYKEY)||'[]');companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}))}catch(e){companies=[]}
   try{companyConfig=normalizeCompanyConfig(JSON.parse(safeGet(localStorage,COMPANYCONFIGKEY)||'null'))}catch(e){companyConfig=normalizeCompanyConfig(null)}
@@ -2796,38 +2744,10 @@ async function loadAll(){
   USERS.forEach(u=>{if(typeof u.active==='undefined')u.active=true;if(!u.followScope)u.followScope='both';if(!u.permissions)u.permissions=defaultPermissionsFor(u);});
   await migrateLegacyPasswords();
   saveUsers();
-  const sid=safeGet(sessionStorage,SESSION);
-    let sessionValid=!!sid;
-    try{
-      const meta=JSON.parse(safeGet(sessionStorage,'ghaith_auth_security')||'null');
-      if(meta?.expiresAt && meta.expiresAt<Date.now())sessionValid=false;
-    }catch(e){}
-    if(sessionValid) currentUser=USERS.find(u=>String(u.id)===String(sid))||null;
-    if(!sessionValid){
-      safeRemove(sessionStorage,SESSION);
-      safeRemove(sessionStorage,'ghaith_auth_security');
-      currentUser=null;
-    }
+  const sid=safeGet(sessionStorage,SESSION); if(sid) currentUser=USERS.find(u=>u.id===sid)||null;
   restoreLocalUsersIfMissing();
   if(currentUser){showApp();return}
-  if(isAdminPortal()){
-    const admin=USERS.find(u=>u && (u.role==='superadmin'||u.isSuperAdmin===true));
-    const input=document.getElementById('adminSheetUrlInput');
-    if(input && GAS_URL)input.value=GAS_URL;
-     const scriptBox=document.getElementById('adminScriptCode'); if(scriptBox)scriptBox.value=getAdminScriptCode();
-    if(admin){
-      const userInput=document.getElementById('loginUser');
-      if(userInput)userInput.value=admin.username||'';
-      const status=document.getElementById('adminSheetGatewayStatus');
-      if(status)status.textContent='تمت مزامنة حساب المدير من الشيت. أدخل كلمة المرور واضغط «دخول».';
-      if(status)status.className='gateway-status ok';
-    }
-  }
-  if(USERS.length===0){
-      showLogin();
-      if(!GAS_URL)openRegister(true);
-      return;
-    }
+  if(USERS.length===0){showLogin();openRegister(true);return} /* genuine first run only: no accounts exist yet */
   showLogin();
 }
 
@@ -2976,126 +2896,14 @@ function loginTitleClicked(){
     document.getElementById('loginMoreOptions')?.classList.remove('hidden');
   }
 }
-
-
-/* === SECURITY HARDENING === */
-const SECURITY={
-  maxLoginAttempts:5,
-  lockMinutes:10,
-  sessionMinutes:120
-};
-let loginFailures=0;
-let loginLockedUntil=0;
-
-function securityNow(){return Date.now();}
-function isLoginLocked(){
-  return loginLockedUntil>securityNow();
-}
-function registerLoginFailure(){
-  loginFailures++;
-  if(loginFailures>=SECURITY.maxLoginAttempts){
-    loginLockedUntil=securityNow()+SECURITY.lockMinutes*60*1000;
-    loginFailures=0;
-  }
-}
-function resetLoginFailures(){
-  loginFailures=0;
-  loginLockedUntil=0;
-}
-function setSecuritySession(user){
-  const id=String(user?.id||'');
-  if(!id)return;
-  // Keep the original session format used by the existing app.
-  safeSet(sessionStorage,SESSION,id);
-  // Separate security metadata avoids breaking legacy code that reads SESSION.
-  safeSet(sessionStorage,'ghaith_security_meta',JSON.stringify({
-    issuedAt:securityNow(),
-    expiresAt:securityNow()+SECURITY.sessionMinutes*60*1000
-  }));
-}
-function getSecuritySession(){
-  try{
-    const id=safeGet(sessionStorage,SESSION);
-    if(!id)return null;
-    let meta=null;
-    try{meta=JSON.parse(safeGet(sessionStorage,'ghaith_security_meta')||'null')}catch(e){}
-    if(meta && meta.expiresAt && meta.expiresAt<securityNow()){
-      safeRemove(sessionStorage,SESSION);
-      safeRemove(sessionStorage,'ghaith_security_meta');
-      return null;
-    }
-    return {
-      id:String(id),
-      issuedAt:meta?.issuedAt||securityNow(),
-      expiresAt:meta?.expiresAt||securityNow()+SECURITY.sessionMinutes*60*1000
-    };
-  }catch(e){return null}
-}
-function clearSecuritySession(){
-  try{safeRemove(sessionStorage,SESSION)}catch(e){}
-  try{safeRemove(sessionStorage,'ghaith_security_meta')}catch(e){}
-  currentUser=null;
-}
-function isPrivilegedUser(){
-  return !!currentUser && (
-    currentUser.role==='superadmin' ||
-    currentUser.role==='admin' ||
-    currentUser.isSuperAdmin===true
-  );
-}
-function denySubUserAction(){
-  alert('غير مسموح. هذا الإجراء متاح لمدير النظام فقط.');
-  return false;
-}
-
-function applySubUserRestrictions(){
-  const more=document.getElementById('loginMoreOptions');
-  const sync=document.getElementById('syncSettingsSection');
-  const setup=document.getElementById('setupCodeSection');
-  const reg=document.getElementById('registerArea');
-  const activation=document.getElementById('activationArea');
-  if(more && !isMainAdmin())more.classList.add('hidden');
-  if(sync && !isMainAdmin())sync.classList.add('hidden');
-  if(setup && !isMainAdmin())setup.classList.add('hidden');
-  if(reg && !isMainAdmin())reg.classList.add('hidden');
-  if(activation && !isMainAdmin()){
-    activation.querySelectorAll('a').forEach(el=>el.classList.add('hidden'));
-  }
-}
-
 function showLogin(){
-  applySubUserRestrictions();
-  document.body.classList.toggle('admin-portal',isAdminPortal());
   document.getElementById('loginScreen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
-
-  const isActivation=getQueryParam('activate')==='1' || getQueryParam('reset')==='1';
-  const normal=document.getElementById('normalLoginArea');
-  const activation=document.getElementById('activationArea');
-  const more=document.getElementById('loginMoreOptions');
-  const subtitle=document.getElementById('loginSubtitle');
-
-  if(isActivation){
-    prepareActivationScreen();
-  }else{
-    if(normal)normal.classList.remove('hidden');
-    if(activation)activation.classList.add('hidden');
-    if(more)more.classList.add('hidden');
-    if(subtitle)subtitle.textContent=isAdminPortal()
-      ? 'دخول المدير الرئيسي للنظام.'
-      : 'تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
-    const gateway=document.getElementById('adminSheetGateway');
-    if(gateway && isAdminPortal()) gateway.style.display='block';
-  }
+  prepareActivationScreen();
 }
 /* === LEGACY BROWSER / OLD DATA LOGIN COMPATIBILITY === */
 function normalizeLoginUsername(v){
-  return String(v || '')
-    .normalize('NFKC')
-    .replace(/[\u200B-\u200D\uFEFF]/g,'')
-    .replace(/[\u00A0\u202F]/g,' ')
-    .trim()
-    .toLowerCase();
+  return String(v || '').trim().toLowerCase();
 }
 
 async function verifyLegacyPassword(found, plainPassword){
@@ -3120,382 +2928,62 @@ async function verifyLegacyPassword(found, plainPassword){
   return false;
 }
 
-
-/* === AUTHENTICATION: GOOGLE SHEET FIRST, LOCAL CACHE SECOND === */
-const AUTH_CONFIG={
-  maxAttempts:5,
-  lockMinutes:10,
-  sessionMinutes:120,
-  securityKey:'ghaith_auth_security'
-};
-
-function normalizeLoginUsername(v){
-  return String(v||'').normalize('NFKC')
-    .replace(/[\u200B-\u200D\uFEFF]/g,'')
-    .replace(/[\u00A0\u202F]/g,' ')
-    .trim().toLowerCase();
-}
-function getConfiguredGasUrl(){
-  return String(
-    (typeof GAS_URL!=='undefined'&&GAS_URL) ||
-    safeGet(localStorage,GASKEY) ||
-    safeGet(localStorage,'GAS_URL') ||
-    ''
-  ).trim();
-}
-function getLocalUsers(){
-  try{
-    const x=JSON.parse(safeGet(localStorage,UKEY)||'[]');
-    return Array.isArray(x)?x:[];
-  }catch(e){return []}
-}
-function setLocalUsers(x){
-  if(Array.isArray(x))safeSet(localStorage,UKEY,JSON.stringify(x));
-}
-function authLockUntil(){
-  try{
-    const x=JSON.parse(safeGet(localStorage,'ghaith_login_lock')||'{}');
-    return Number(x.until||0);
-  }catch(e){return 0}
-}
-function registerAuthFailure(){
-  try{
-    const x=JSON.parse(safeGet(localStorage,'ghaith_login_lock')||'{}');
-    x.count=Number(x.count||0)+1;
-    if(x.count>=AUTH_CONFIG.maxAttempts){
-      x.count=0;
-      x.until=Date.now()+AUTH_CONFIG.lockMinutes*60000;
-    }
-    safeSet(localStorage,'ghaith_login_lock',JSON.stringify(x));
-  }catch(e){}
-}
-function clearAuthFailures(){try{safeRemove(localStorage,'ghaith_login_lock')}catch(e){}}
-
-function saveAuthSession(user){
-  if(!user?.id)return;
-  safeSet(sessionStorage,SESSION,String(user.id));
-  safeSet(sessionStorage,AUTH_CONFIG.securityKey,JSON.stringify({
-    expiresAt:Date.now()+AUTH_CONFIG.sessionMinutes*60000
-  }));
-}
-function clearAuthSession(){
-  try{safeRemove(sessionStorage,SESSION)}catch(e){}
-  try{safeRemove(sessionStorage,AUTH_CONFIG.securityKey)}catch(e){}
-  currentUser=null;
-}
-function readAuthSession(){
-  const id=safeGet(sessionStorage,SESSION);
-  if(!id)return null;
-  try{
-    const m=JSON.parse(safeGet(sessionStorage,AUTH_CONFIG.securityKey)||'null');
-    if(m?.expiresAt && m.expiresAt<Date.now()){
-      clearAuthSession(); return null;
-    }
-  }catch(e){}
-  return String(id);
-}
-
-function normalizeRemoteUsers(data){
-  const rows=Array.isArray(data)?data:
-    Array.isArray(data?.users)?data.users:
-    Array.isArray(data?.data)?data.data:
-    Array.isArray(data?.rows)?data.rows:[];
-  return rows.map((r,i)=>{
-    if(!r||typeof r!=='object')return null;
-    const username=r.username??r.Username??r['اسم المستخدم']??'';
-    return {
-      ...r,
-      id:String(r.id??r.ID??r['المعرف']??username??('sheet-'+i)),
-      username:String(username).trim(),
-      passwordHash:String(r.passwordHash??r.password_hash??r.passHash??'').trim(),
-      password:typeof (r.password??r['كلمة المرور'])==='string'?(r.password??r['كلمة المرور']):'',
-      active:!(['false','0','غير نشط'].includes(String(r.active??r.Active??r['الحالة']??true).toLowerCase())),
-      activated:!(['false','0','غير مفعل'].includes(String(r.activated??r.Activated??r['مفعل']??true).toLowerCase()))
-    };
-  }).filter(Boolean);
-}
-
-async function fetchUsersFromSheet(){
-  const url=getConfiguredGasUrl();
-  if(!url)throw new Error('NO_GAS_URL');
-  let lastError=null;
-  try{
-    const res=await fetch(url+(url.includes('?')?'&':'?')+'action=getAll&ts='+Date.now(),{method:'GET',cache:'no-store',credentials:'omit'});
-    if(!res.ok)throw new Error('GAS_HTTP_'+res.status);
-    const txt=await res.text();
-    let data; try{data=JSON.parse(txt)}catch(e){throw new Error('GAS_INVALID_JSON')}
-    if(data && data.error)throw new Error(String(data.error));
-    const users=normalizeRemoteUsers(data);
-    if(!users.length)throw new Error('GAS_NO_USERS');
-    return users;
-  }catch(e){
-    lastError=e;
-  }
-  // JSONP works around browsers that block cross-origin fetch/CORS.
-  try{
-    const data=await gasJsonpGet();
-    if(data && data.error)throw new Error(String(data.error));
-    const users=normalizeRemoteUsers(data);
-    if(!users.length)throw new Error('GAS_NO_USERS');
-    return users;
-  }catch(e){
-    throw lastError||e;
-  }
-}
-
-async function verifyAuthPassword(user,password){
-  if(user?.passwordHash){
-    try{return (await hashPassword(password)).toLowerCase()===String(user.passwordHash).trim().toLowerCase()}catch(e){}
-  }
-  if(typeof user?.password==='string' && user.password){
-    return user.password===password;
-  }
-  return false;
-}
-
-function setAdminGatewayStatus(message,type=''){
-  const el=document.getElementById('adminSheetGatewayStatus');
-  if(!el)return;
-  el.textContent=message||'';
-  el.className='gateway-status '+(type||'');
-}
-function adminSheetUrlIsValid(v){
-  return /^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(?:[?#].*)?$/i.test(String(v||'').trim());
-}
-function getAdminScriptCode(){
-  return `// Google Apps Script — اتصال نظام مؤسسة غيث
-// ضع هذا الكود في Code.gs داخل Apps Script المرتبط بالـGoogle Sheet.
-function doGet(e){
-  try{
-    var action=(e&&e.parameter&&e.parameter.action)||'';
-    if(action==='getAll') return jsonOut(readAll());
-    return jsonOut({ok:true,message:'الخدمة تعمل. أرسل طلبات POST من داخل النظام.'});
-  }catch(err){ return jsonOut({ok:false,error:String(err&&err.message||err)}); }
-}
-function doPost(e){
-  try{
-    var body=e&&e.postData&&e.postData.contents?JSON.parse(e.postData.contents||'{}'):{};
-    var action=body.action||'';
-    if(action==='getAll') return jsonOut(readAll());
-    return jsonOut({ok:false,error:'Action غير معروف: '+action});
-  }catch(err){ return jsonOut({ok:false,error:String(err&&err.message||err)}); }
-}
-function jsonOut(obj){
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}
-function readAll(){
-  var ss=SpreadsheetApp.getActiveSpreadsheet();
-  if(!ss) throw new Error('تعذر الوصول إلى Google Sheet المرتبط بالسكريبت');
-  var out={};
-  ['users','donors','companies','projects','channels','intentions','managerCategories','companyConfig'].forEach(function(name){
-    var sh=ss.getSheetByName(name);
-    if(!sh){ out[name]=[]; return; }
-    var values=sh.getDataRange().getValues();
-    if(!values.length){ out[name]=[]; return; }
-    var headers=values.shift().map(String);
-    out[name]=values.map(function(row){
-      var o={}; headers.forEach(function(h,i){ if(h) o[h]=row[i]; }); return o;
-    });
-  });
-  return out;
-}`;
-}
-function copyAdminScript(){
-  var code=getAdminScriptCode();
-  var ta=document.getElementById('adminScriptCode');
-  if(ta) ta.value=code;
-  if(navigator.clipboard){
-    navigator.clipboard.writeText(code).then(function(){setAdminGatewayStatus('تم نسخ كود Script.','ok');}).catch(function(){fallbackCopyAdminScript();});
-  }else fallbackCopyAdminScript();
-}
-function fallbackCopyAdminScript(){
-  var ta=document.getElementById('adminScriptCode');
-  if(!ta)return;
-  ta.focus(); ta.select();
-  try{document.execCommand('copy');setAdminGatewayStatus('تم نسخ كود Script.','ok');}catch(e){setAdminGatewayStatus('حدد الكود وانسخه يدويًا.','err');}
-}
-
-async function connectAdminSheetAndPrepareLogin(){
-  if(!isAdminPortal())return;
-  const input=document.getElementById('adminSheetUrlInput');
-  const btn=document.getElementById('adminSheetSyncBtn');
-  const url=String(input?.value||'').trim() || getQueryParam('gas') || String(GAS_URL||'').trim();
-
-  if(!adminSheetUrlIsValid(url)){
-    setAdminGatewayStatus('يرجى لصق رابط تطبيق الويب الصحيح الذي ينتهي بـ /exec.','err');
-    return;
-  }
-
-  GAS_URL=url;
-  safeSet(localStorage,GASKEY,GAS_URL);
-  if(btn)btn.disabled=true;
-  setAdminGatewayStatus('جارِ الاتصال بالشيت وقراءة حسابات المستخدمين...');
-
-  try{
-    let remote;
-    try{
-      remote=await gasCall('getAll');
-    }catch(e){
-      remote=await gasJsonpGet();
-    }
-    if(!remote || remote.error)throw new Error(remote?.error||'تعذر قراءة بيانات الشيت');
-
-    const remoteUsers=normalizeRemoteUsers(remote.users||remote.data||remote.rows||remote);
-    if(!remoteUsers.length)throw new Error('لم يتم العثور على حسابات مستخدمين في الشيت');
-
-    USERS=remoteUsers;
-    setLocalUsers(remoteUsers);
-    saveUsers();
-
-    let admins=remoteUsers.filter(u=>u && isMainAdminRecord(u));
-    if(!admins.length){
-      const legacyManagers=remoteUsers.filter(u=>u && String(u.role||'').trim().toLowerCase()==='manager');
-      if(legacyManagers.length) admins=legacyManagers;
-    }
-    if(!admins.length)throw new Error('لم يتم العثور على حساب مدير رئيسي في الشيت');
-
-    // Keep the latest remote dataset locally, including donations and other modules.
-    try{await syncPull({preserveLocalIfRemoteEmpty:true});}catch(e){}
-
-    const admin=admins[0];
-    const userInput=document.getElementById('loginUser');
-    if(userInput)userInput.value=admin.username||'';
-
-    const pass=document.getElementById('loginPass');
-    if(pass)pass.focus();
-
-    updateSyncViewBadge?.('on');
-    setConnStatus?.('on');
-    setAdminGatewayStatus(
-      'تمت المزامنة بنجاح ✓ تم العثور على حساب المدير الرئيسي: '+(admin.username||'—')+
-      '. أدخل كلمة المرور ثم اضغط «دخول».','ok'
-    );
-  }catch(e){
-    setAdminGatewayStatus(
-      'تعذر الاتصال أو العثور على حساب المدير الرئيسي. تأكد من أن الرابط /exec صحيح وأن Web App منشور بصلاحية Anyone.',
-      'err'
-    );
-  }finally{
-    if(btn)btn.disabled=false;
-  }
-}
-
 async function login(){
-  const username=(document.getElementById('loginUser')?.value||'').trim();
-  const password=document.getElementById('loginPass')?.value||'';
+  const userInput=document.getElementById('loginUser');
+  const passInput=document.getElementById('loginPass');
+  const u=(userInput?.value||'').trim();
+  const p=passInput?.value||'';
 
-  if(!username||!password){
+  if(!u || !p){
     alert('يرجى إدخال اسم المستخدم وكلمة المرور.');
     return;
   }
 
-  const gasConfigured=!!String(GAS_URL||'').trim();
-  let users=[];
-  let remoteOk=false;
+  // Exact match first.
+  let found=USERS.find(x=>x && String(x.username||'').trim()===u);
 
-  // Google Sheet is the authority whenever GAS_URL is configured.
-  if(gasConfigured){
-    try{
-      let data;
-      try{data=await gasCall('getAll')}catch(e){data=await gasJsonpGet();}
-      if(!data||data.error)throw new Error(data?.error||'تعذر قراءة Google Sheet');
-
-      const normalizedUsers=normalizeRemoteUsers(data);
-      if(normalizedUsers.length){
-        users=normalizedUsers;
-        remoteOk=true;
-        USERS=normalizedUsers;
-        setLocalUsers(normalizedUsers);
-      }
-    }catch(e){
-      remoteOk=false;
-    }
-
-    if(!remoteOk){
-      // Only use the previously verified local cache as an emergency fallback.
-      // Never report a cached account as invalid merely because the Sheet is offline.
-      try{users=JSON.parse(safeGet(localStorage,UKEY)||'[]')}catch(e){users=[]}
-      if(!Array.isArray(users))users=[];
-      const cached=users.find(u=>u&&normalizeLoginUsername(u.username)===normalizeLoginUsername(username));
-      if(!cached){
-        alert('تعذر الاتصال ببيانات المستخدمين في Google Sheet. تأكد من رابط Apps Script ثم حاول مرة أخرى.');
-        return;
-      }
-    }
-  }else{
-    try{users=JSON.parse(safeGet(localStorage,UKEY)||'[]')}catch(e){users=[]}
-    if(!Array.isArray(users))users=[];
+  // Then normalized match for old data (spaces/case differences).
+  if(!found){
+    const nu=normalizeLoginUsername(u);
+    found=USERS.find(x=>x && normalizeLoginUsername(x.username)===nu);
   }
 
-  const n=normalizeLoginUsername(username);
-  const user=users.find(u=>u&&normalizeLoginUsername(u.username)===n);
-
-  if(!user){
+  if(!found){
     alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
     return;
   }
-  if(user.active===false){
+
+  if(found.activated===false){
+    alert('هذا الحساب لم يتم تفعيله بعد. استخدم رابط التفعيل الذي أرسله لك مدير النظام.');
+    return;
+  }
+
+  if(found.active===false){
     alert('هذا الحساب غير نشط. يرجى مراجعة مدير النظام.');
     return;
   }
-  if(user.activated===false){
-    alert('هذا الحساب لم يتم تفعيله بعد.');
-    return;
+
+  let ok=false;
+  try{
+    ok=await verifyLegacyPassword(found,p);
+  }catch(e){
+    ok=false;
   }
 
-  let passwordOK=false;
-  try{
-    if(user.passwordHash){
-      passwordOK=(await hashPassword(password)).trim().toLowerCase()===String(user.passwordHash).trim().toLowerCase();
-    }else if(typeof user.password==='string'){
-      passwordOK=user.password===password;
-    }
-  }catch(e){passwordOK=false}
-
-  if(!passwordOK){
+  if(!ok){
     alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
     return;
   }
 
-  currentUser=user;
-  USERS=users;
-  saveUsers();
-
-  // Preserve the original session format used by the application.
-  safeSet(sessionStorage,SESSION,String(user.id));
-  try{
-    safeSet(sessionStorage,'ghaith_auth_security',JSON.stringify({
-      expiresAt:Date.now()+120*60*1000
-    }));
-  }catch(e){}
-
-  document.body.classList.toggle('sub-user',!isSuperAdmin(user));
-  document.getElementById('loginUser').value='';
-  document.getElementById('loginPass').value='';
+  currentUser=found;
+  safeSet(sessionStorage,SESSION,found.id);
+  if(userInput)userInput.value='';
+  if(passInput)passInput.value='';
   showApp();
 }
 
-function validateCurrentSession(){
-  const id=readAuthSession();
-  if(!id)return false;
-  const found=(Array.isArray(USERS)?USERS:[]).find(u=>String(u?.id)===String(id));
-  if(!found)return false;
-  currentUser=found;
-  return true;
-}
-
-
-
-function logout(){
-  clearAuthSession();
-  document.body.classList.remove('sub-user');
-  showLogin();
-}
-
+function logout(){safeRemove(sessionStorage,SESSION);currentUser=null;showLogin()}
 function showApp(){
-  if(!validateCurrentSession()){showLogin();return;}
-  if(!validateCurrentSession()){showLogin();return;}
-  applySubUserRestrictions();
   document.getElementById('loginScreen').classList.add('hidden');document.getElementById('app').classList.remove('hidden');
   document.getElementById('welcome').textContent='مرحبًا '+currentUser.fullName+' — '+userRoleLabel(currentUser);
   document.getElementById('topUserName').textContent=currentUser.fullName||'المستخدم';
@@ -3531,7 +3019,6 @@ function showApp(){
 
 /* ---------- first-time setup (hidden behind a secret code) ---------- */
 function openSetupCode(){
-  if(currentUser && !isMainAdmin()){alert('هذا الخيار متاح لمدير النظام فقط.');return;}
   openModal(`<h3>إنشاء / استعادة حساب المدير الرئيسي للنظام</h3>
   <p class="small-note">استخدم هذا الخيار عند بدء النظام لأول مرة، أو إذا فقدت الوصول إلى حساب المدير الرئيسي بعد ربط Google Sheets. أدخل رمز الإعداد السري.</p>
   <div class="field"><label>رمز الإعداد</label><input id="setupCodeInput" type="password" autocomplete="off"></div>
@@ -3548,7 +3035,6 @@ function managerCategoryOptions(selected){
   return `<option value="">بدون فئة (مدير)</option>`+managerCategories.map(c=>`<option value="${escapeHtml(c)}" ${c===selected?'selected':''}>${escapeHtml(c)}</option>`).join('');
 }
 function openRegister(forceSuper){
-  if(currentUser && !isMainAdmin()){alert('هذا الخيار متاح لمدير النظام فقط.');return;}
   const isFirst=USERS.length===0;
   const locked=forceSuper||isFirst;
   if(!locked && !isSuperAdmin(currentUser)){alert('إضافة الحسابات (موظفين أو مديرين) متاحة للمدير الرئيسي للنظام فقط.');return}
@@ -4034,7 +3520,6 @@ function exportBackup(){
   a.click();
 }
 function restoreBackup(file){
-  if(!isMainAdmin())return denySubUserAction();
   if(!file)return;
   if(!confirm('سيتم استبدال كل البيانات الحالية (الحسابات والمتبرعين والمشاريع والقنوات) بمحتوى الملف المستورد. هل تريد المتابعة؟'))return;
   const r=new FileReader();
@@ -6569,24 +6054,6 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
 /* === CHROME / LEGACY DATA COMPATIBILITY === */
 #loginScreen .login-links a{cursor:pointer}
 
-
-body.sub-user #loginMoreOptions,
-body.sub-user #syncSettingsSection,
-body.sub-user #setupCodeSection,
-body.sub-user #registerArea,
-body.sub-user .sync-settings{display:none!important;}
-
-/* Security: never expose administrative controls to sub-users */
-body.sub-user [data-admin-only],
-body.sub-user .admin-only,
-body.sub-user #loginMoreOptions,
-body.sub-user #syncSettingsSection,
-body.sub-user #setupCodeSection,
-body.sub-user #registerArea{display:none!important;}
-
-body.sub-user #syncSettingsSection,
-body.sub-user [data-admin-only],
-body.sub-user .admin-only{display:none!important;}
 </style>
 <script>
 /* ================================================================
@@ -7781,12 +7248,6 @@ async function chromeLoginRecovery(){
 
 
 document.addEventListener('DOMContentLoaded',function(){
-  if(isAdminPortal()){
-    document.body.classList.add('admin-portal');
-    const gatewayInput=document.getElementById('adminSheetUrlInput');
-    const fromUrl=getQueryParam('gas');
-    if(gatewayInput)gatewayInput.value=fromUrl||String(GAS_URL||'');
-  }
   const form=document.getElementById('normalLoginArea');
   const u=document.getElementById('loginUser');
   const p=document.getElementById('loginPass');
@@ -7800,22 +7261,6 @@ document.addEventListener('DOMContentLoaded',function(){
   });
 });
 
-
-setInterval(function(){
-  if(currentUser && !validateCurrentSession()){
-    document.body.classList.remove('sub-user');
-    showLogin();
-    alert('انتهت جلسة الدخول لأسباب أمنية. يرجى تسجيل الدخول مرة أخرى.');
-  }
-},60000);
-
-
-setInterval(function(){
-  if(currentUser && !validateCurrentSession()){
-    document.body.classList.remove('sub-user');
-    showLogin();
-  }
-},60000);
 </script>
 
 </body>
