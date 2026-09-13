@@ -2056,7 +2056,7 @@ body{
    - SETUP_CODE: رمز سري يعرفه المدير فقط، يُستخدم مرة واحدة لإنشاء
      أول حساب مدير في النظام. غيّره لرمز خاص بك قبل التوزيع.
    ========================================================= */
-const DEFAULT_GAS_URL = (typeof CONFIG_GAS_URL !== 'undefined' && CONFIG_GAS_URL) ? CONFIG_GAS_URL.trim() : '';
+const DEFAULT_GAS_URL = (typeof CONFIG_GAS_URL !== 'undefined' && CONFIG_GAS_URL) ? CONFIG_GAS_URL.trim() : 'https://script.google.com/macros/s/AKfycbyhw0UCs_jL8TQhGKtxHx0Es0vzIMaF845B4iyqpwzVujUBSQi0OQIes_xdb5ynue5F/exec';
 const SETUP_CODE = 'ghaith@2022';
 
 /* browser-safe storage + cross-browser Google Sheets config */
