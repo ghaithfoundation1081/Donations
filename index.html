@@ -43,6 +43,12 @@ input,select,textarea{padding:9px 11px;border:1px solid var(--line);border-radiu
 .actions{display:flex;gap:7px;flex-wrap:wrap}
 .badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;margin-inline-end:5px}.badge.green{background:var(--green-bg);color:var(--green)}.badge.amber{background:var(--amber-bg);color:var(--amber)}.badge.red{background:var(--red-bg);color:var(--red)}.badge.gold{background:#FCEED9;color:var(--gold)}
 .overlay{position:fixed;inset:0;background:rgba(43,40,35,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:15px}
+.sync-loading-overlay{position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;background:rgba(43,40,35,.10)}
+.sync-loading-box{background:rgba(255,255,255,.97);border-radius:16px;padding:20px 28px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 10px 34px rgba(0,0,0,.2)}
+.sync-spinner{width:32px;height:32px;border-radius:50%;border:4px solid var(--primary-light);border-top-color:var(--primary);animation:syncSpin .7s linear infinite}
+.sync-loading-text{font-size:13px;color:var(--primary-dark);font-weight:700;text-align:center}
+@keyframes syncSpin{to{transform:rotate(360deg)}}
+body.sync-blur-active #app,body.sync-blur-active #loginScreen{filter:blur(4px);transition:filter .12s ease;pointer-events:none;user-select:none}
 .modal{background:#fff;border-radius:16px;padding:22px;width:100%;max-width:620px;max-height:92vh;overflow:auto}
 .modal h3{margin:0 0 15px;color:var(--primary-dark)}
 .field{margin-bottom:11px}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}.field input,.field select,.field textarea{width:100%}
@@ -2577,8 +2583,9 @@ function donationLinkedToFinance(entry){return normalizeMovementStatus(entry&&en
    للحركة، يصبح التعديل أو الحذف حكرًا على الإدارة المالية فقط، ولا يمكن لأحد آخر (ولا حتى مدير النظام) فعل ذلك. */
 function canEditDeleteDonationEntry(entry,action,u=currentUser){
   if(!entry||entry.type!=='donation'||!u)return false;
-  if(isFinance(u))return canModule('financeReview',action,u)&&entry.financeStatus!=='approved';
-  if(entry.financeStatus==='approved')return false; // بعد اعتماد الإدارة المالية، لا يمكن التعديل أو الحذف إلا من الإدارة المالية
+  /* الإدارة المالية تحتفظ بصلاحية التعديل والحذف حتى بعد اعتماد الحركة ماليًا. */
+  if(isFinance(u))return canModule('financeReview',action,u);
+  if(entry.financeStatus==='approved')return false; // بعد اعتماد الإدارة المالية، لا يمكن التعديل أو الحذف إلا من الإدارة المالية (لا لمدخل البيانات ولا للمدير)
   if(isSuperAdmin(u))return true;
   return canModule('donors',action,u);
 }
@@ -2751,6 +2758,26 @@ async function loadAll(){
   showLogin();
 }
 
+/* ---------- مؤشر التحميل + بلور الشاشة أثناء تنفيذ العمليات التي تحتاج وقتًا (كالحفظ/السحب من جوجل شيت) ---------- */
+let syncLoadingDepth=0;
+function showSyncLoading(text){
+  syncLoadingDepth++;
+  let ov=document.getElementById('syncLoadingOverlay');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='syncLoadingOverlay';ov.className='sync-loading-overlay';
+    ov.innerHTML='<div class="sync-loading-box"><div class="sync-spinner"></div><div class="sync-loading-text" id="syncLoadingText"></div></div>';
+    document.body.appendChild(ov);
+  }
+  const t=document.getElementById('syncLoadingText');if(t)t.textContent=text||'جارِ تنفيذ العملية وحفظها في الشيت المرتبط...';
+  document.body.classList.add('sync-blur-active');
+}
+function hideSyncLoading(){
+  syncLoadingDepth=Math.max(0,syncLoadingDepth-1);
+  if(syncLoadingDepth>0)return;
+  document.body.classList.remove('sync-blur-active');
+  const ov=document.getElementById('syncLoadingOverlay');if(ov)ov.remove();
+}
 /* ---------- Google Sheets sync ---------- */
 function gasCall(action,payload){
   if(!GAS_URL)return Promise.reject('no-url');
@@ -2785,6 +2812,7 @@ function gasFormPost(action,payload){
 async function syncPull(options){
   if(!GAS_URL)return false;
   options=options||{};
+  showSyncLoading('جارِ سحب البيانات من Google Sheet...');
   try{
     setConnStatus('connecting');let data;
     try{data=await gasCall('getAll')}catch(e){data=await gasJsonpGet()}
@@ -2822,16 +2850,26 @@ async function syncPull(options){
     safeSet(localStorage,UKEY,JSON.stringify(USERS));safeSet(localStorage,DKEY,JSON.stringify(donors));safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));safeSet(localStorage,PKEY,JSON.stringify(projects));safeSet(localStorage,CKEY,JSON.stringify(channels));safeSet(localStorage,IKEY,JSON.stringify(intentions));safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));
     lastSyncAt=new Date().toISOString();safeSet(localStorage,SYNCKEY,lastSyncAt);setConnStatus('on');return true;
   }catch(e){setConnStatus('off');return false}
+  finally{hideSyncLoading();}
 }
 let pushTimer=null;
-function syncPushDebounced(){if(!GAS_URL)return;clearTimeout(pushTimer);pushTimer=setTimeout(syncPushNow,700)}
+let pushOverlayPending=false;
+function syncPushDebounced(){
+  if(!GAS_URL)return;
+  clearTimeout(pushTimer);
+  /* إظهار مؤشر التحميل فورًا عند صدور الأمر، بدل انتظار بدء الاتصال الفعلي بالشيت — لضمان شعور فوري بالاستجابة. */
+  if(!pushOverlayPending){pushOverlayPending=true;showSyncLoading('جارِ تنفيذ العملية وحفظها في الشيت المرتبط...');}
+  pushTimer=setTimeout(()=>{pushOverlayPending=false;syncPushNow().finally(hideSyncLoading);},300);
+}
 async function syncPushNow(){
   if(!GAS_URL)return false;
+  showSyncLoading('جارِ حفظ البيانات في Google Sheet...');
   try{
     setConnStatus('connecting');let res;
     try{res=await gasCall('saveAll',{users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig})}catch(e){res=await gasFormPost('saveAll',{users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig})}
     if(!res||res.error)throw new Error(res&&res.error||'فشل الحفظ');lastSyncAt=new Date().toISOString();safeSet(localStorage,SYNCKEY,lastSyncAt);setConnStatus('on');return true;
   }catch(e){setConnStatus('off');return false}
+  finally{hideSyncLoading();}
 }
 function setConnStatus(s){
   const el=document.getElementById('connBadge');if(!el)return;
@@ -5265,7 +5303,7 @@ function editDonation(id,hid){
   <div class="field"><label>مكان التبرع</label><input id="ed_location" list="locationsDatalist" value="${escapeHtml(entry.location||'')}"></div><div class="field"><label>قناة/طريقة التبرع</label><select id="ed_method">${channels.map(x=>`<option ${normName(x)===normName(entry.method||'')?'selected':''}>${escapeHtml(x)}</option>`).join('')}</select></div>
   <div class="field"><label>حالة الحركة <span style="color:var(--red)">*</span></label><select id="ed_movementStatus"><option value="">— اختر حالة الحركة —</option>${['ناجحة','مرفوضة','قيد التنفيذ','اخرى'].map(x=>`<option value="${x}" ${normalizeMovementStatus(entry.movementStatus)===x?'selected':''}>${x}</option>`).join('')}</select></div></div>
   <div class="field"><label>صورة التبرع / الإيصال</label><input id="ed_attachment" type="file" accept="image/*">${entry.attachmentData?`${attachmentMarkup(entry)}<label style="display:flex;align-items:center;gap:7px;margin-top:7px"><input id="ed_remove_attachment" type="checkbox" style="width:auto"> حذف الصورة الحالية</label>`:'<div class="attachment-note">لا توجد صورة مرفقة حاليًا.</div>'}<div class="attachment-note">اختياري — اختيار صورة جديدة يستبدل الصورة الحالية.</div></div>
-  <div class="field"><label>ملاحظات</label><textarea id="ed_notes">${escapeHtml(entry.notes||'')}</textarea></div><div class="small-note">${isFinance(currentUser)?'يمكن للإدارة المالية تعديل أو حذف حركة التبرع طالما لم تُعتمد ماليًا بعد؛ بعد اعتمادها لا يمكن تعديلها أو حذفها إطلاقًا.':'ملحوظة: يمكنك تعديل أو حذف هذه الحركة طالما لم تعتمدها الإدارة المالية ماليًا بعد. بمجرد اعتماد الإدارة المالية لها، لن يكون بإمكانك أنت أو مدير النظام تعديلها أو حذفها بعد ذلك إلا من خلال الإدارة المالية.'}</div>
+  <div class="field"><label>ملاحظات</label><textarea id="ed_notes">${escapeHtml(entry.notes||'')}</textarea></div><div class="small-note">${isFinance(currentUser)?'الإدارة المالية يمكنها تعديل أو حذف حركة التبرع في أي وقت، حتى بعد اعتمادها ماليًا.':'ملحوظة: يمكنك تعديل أو حذف هذه الحركة طالما لم تعتمدها الإدارة المالية ماليًا بعد. بمجرد اعتماد الإدارة المالية لها، لن يكون بإمكانك أنت أو مدير النظام تعديلها أو حذفها بعد ذلك إلا من خلال الإدارة المالية.'}</div>
   <div class="modal-actions"><button class="btn-primary" onclick="saveEditedDonation('${id}','${hid}')">حفظ التعديل</button><button class="btn-outline" onclick="closeModal();openRecord('${id}')">إلغاء</button></div>`);
 }
 function syncEditDonationIntention(){const project=document.getElementById('ed_project')?.value||'',sel=document.getElementById('ed_intention');if(!sel)return;const p=projects.find(x=>normName(x.name)===normName(project));if(p&&p.intention)sel.value=p.intention;}
@@ -5274,7 +5312,12 @@ async function saveEditedDonation(id,hid){
   if(!canEditDeleteDonationEntry(entry,'edit')){alert(entry.financeStatus==='approved'?'هذه الحركة معتمدة ماليًا بالفعل، والتعديل عليها متاح للإدارة المالية فقط.':'ليس لديك صلاحية تعديل هذه الحركة.');return}
   const amount=document.getElementById('ed_amount').value,project=document.getElementById('ed_project').value.trim(),intention=document.getElementById('ed_intention').value.trim();if(!amount){alert('يرجى إدخال قيمة التبرع.');return}if(!project){alert('يرجى اختيار المشروع.');return}if(!intention){alert('يرجى اختيار النية.');return}if(!projects.some(p=>normName(p.name)===normName(project))){alert('المشروع المختار غير مكود في النظام.');return}
   try{const file=document.getElementById('ed_attachment')?.files?.[0];if(file)entry.attachmentData=await compressDonationImage(file)}catch(e){alert(e.message||'تعذر تجهيز الصورة المرفقة.');return}if(document.getElementById('ed_remove_attachment')?.checked)entry.attachmentData='';
-  const rawMovementStatus=document.getElementById('ed_movementStatus')?.value||'';if(!rawMovementStatus){alert('يرجى اختيار حالة الحركة قبل حفظ التعديل.');return}const movementStatus=normalizeMovementStatus(rawMovementStatus);entry.status='confirmed';entry.date=document.getElementById('ed_date').value||todayStr();entry.amount=amount;entry.project=project;entry.intention=intention;entry.location=document.getElementById('ed_location').value.trim();entry.method=document.getElementById('ed_method').value;entry.movementStatus=movementStatus;entry.financeStatus=movementStatus==='ناجحة'?'pending':'approved';entry.notes=document.getElementById('ed_notes').value.trim();if(isFinance(currentUser)){entry.financeEditedBy=currentUser.fullName;entry.financeEditedAt=new Date().toISOString()}else{entry.lastEditedBy=currentUser.fullName;entry.lastEditedAt=new Date().toISOString()}if(project)ensureProject(project);persist();closeModal();render();openRecord(id);
+  const rawMovementStatus=document.getElementById('ed_movementStatus')?.value||'';if(!rawMovementStatus){alert('يرجى اختيار حالة الحركة قبل حفظ التعديل.');return}const movementStatus=normalizeMovementStatus(rawMovementStatus);
+  /* إذا كانت الحركة معتمدة ماليًا بالفعل وقامت الإدارة المالية بتعديلها، تبقى معتمدة ولا يتم إرجاعها لحالة "بانتظار الاعتماد" تلقائيًا. */
+  const wasApprovedByFinance=entry.financeStatus==='approved';
+  entry.status='confirmed';entry.date=document.getElementById('ed_date').value||todayStr();entry.amount=amount;entry.project=project;entry.intention=intention;entry.location=document.getElementById('ed_location').value.trim();entry.method=document.getElementById('ed_method').value;entry.movementStatus=movementStatus;
+  entry.financeStatus=wasApprovedByFinance?'approved':(movementStatus==='ناجحة'?'pending':'approved');
+  entry.notes=document.getElementById('ed_notes').value.trim();if(isFinance(currentUser)){entry.financeEditedBy=currentUser.fullName;entry.financeEditedAt=new Date().toISOString()}else{entry.lastEditedBy=currentUser.fullName;entry.lastEditedAt=new Date().toISOString()}if(project)ensureProject(project);persist();closeModal();render();openRecord(id);
 }
 
 /* ---------- edit/delete permissions ----------
@@ -5286,7 +5329,8 @@ function deleteDonation(id,hid){
  const d=donors.find(x=>x.id===id);if(!d)return;
  const entry=(d.history||[]).find(h=>h.hid===hid);if(!entry||entry.type!=='donation')return;
  if(!canEditDeleteDonationEntry(entry,'delete')){alert(entry.financeStatus==='approved'?'هذه الحركة معتمدة ماليًا بالفعل، والحذف متاح للإدارة المالية فقط.':'ليس لديك صلاحية حذف هذه الحركة.');return}
- if(!confirm('حذف هذا التبرع نهائيًا؟ لا يمكن التراجع عن هذا الإجراء.'))return;
+ const confirmMsg=entry.financeStatus==='approved'?'تنبيه: هذه حركة معتمدة ماليًا. هل أنت متأكد من حذفها نهائيًا؟ لا يمكن التراجع عن هذا الإجراء.':'حذف هذا التبرع نهائيًا؟ لا يمكن التراجع عن هذا الإجراء.';
+ if(!confirm(confirmMsg))return;
  d.history=(d.history||[]).filter(h=>h.hid!==hid);
  persist();closeModal();render();
  if(currentView==='financeReview')renderFinanceReview();
