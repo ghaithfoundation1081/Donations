@@ -2,6 +2,8 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مؤسسة غيث للتنمية المجتمعية</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -1594,7 +1596,7 @@ body{
       </div>
     </div>
     <div id="activationArea" class="hidden">
-      <p class="small-note">قم بإنشاء كلمة المرور الخاصة بك لتفعيل الحساب لأول مرة.</p>
+      <p class="small-note">اسم المستخدم وإعداد كلمة المرور</p><p class="small-note">هذا الرابط مخصص لتفعيل حسابك فقط، ولا يتيح إنشاء مستخدمين إضافيين أو تعديل إعدادات النظام.</p>
       <div class="field"><label>اسم المستخدم</label><input id="activationUser" readonly></div>
       <div class="field"><label>كلمة المرور الجديدة</label><input id="activationPass" type="password" autocomplete="new-password"></div>
       <div class="field"><label>تأكيد كلمة المرور</label><input id="activationPass2" type="password" autocomplete="new-password"></div>
@@ -2064,26 +2066,24 @@ function makePasswordResetLink(u){
   return base+'?portal=user&reset=1&u='+encodeURIComponent(u.username)+'&token='+encodeURIComponent(u.resetToken)+(GAS_URL?'&gas='+encodeURIComponent(GAS_URL):'');
 }
 function prepareActivationScreen(){
-  const activate=getQueryParam('activate')==='1';
-  const reset=getQueryParam('reset')==='1';
-  const username=getQueryParam('u')||'';
-  const token=getQueryParam('token')||'';
-  const user=activate&&username&&token?USERS.find(x=>x.username===username&&x.activationToken===token&&x.activated===false):
-    (reset&&username&&token?USERS.find(x=>x.username===username&&x.resetToken===token&&x.activated!==false):null);
   const normal=document.getElementById('normalLoginArea');
-  const box=document.getElementById('activationArea');
-  if(user){
-    normal?.classList.add('hidden'); box?.classList.remove('hidden');
-    document.getElementById('activationUser').value=user.username;
-    document.getElementById('loginSubtitle').textContent=reset?'تعيين كلمة المرور الجديدة':'إنشاء كلمة المرور لأول مرة';
-    const btn=box?.querySelector('button.btn-primary'); if(btn)btn.textContent=reset?'حفظ كلمة المرور وتسجيل الدخول':'تفعيل الحساب';
-  }else{
-    normal?.classList.remove('hidden'); box?.classList.add('hidden');
-    document.getElementById('loginSubtitle').textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
-  }
-  if(!isAdminPortal())document.getElementById('loginMoreOptions')?.classList.add('hidden');
+  const activation=document.getElementById('activationArea');
+  const subtitle=document.getElementById('loginSubtitle');
+  if(normal)normal.classList.add('hidden');
+  if(activation)activation.classList.remove('hidden');
+  if(subtitle)subtitle.textContent='اسم المستخدم وإعداد كلمة المرور';
+  const more=document.getElementById('loginMoreOptions');
+  if(more)more.classList.add('hidden');
+  applySubUserRestrictions();
 }
 async function activateAccount(){
+  const activationUsername=(document.getElementById('activationUser')?.value||getQueryParam('u')||'').trim();
+  const activationToken=getQueryParam('token')||'';
+  if(!activationUsername || !activationToken){
+    alert('رابط التفعيل غير صالح.');
+    return;
+  }
+
   const username=getQueryParam('u')||'', token=getQueryParam('token')||'';
   const activate=getQueryParam('activate')==='1', reset=getQueryParam('reset')==='1';
   const user=activate?USERS.find(x=>x.username===username&&x.activationToken===token&&x.activated===false):
@@ -2888,7 +2888,87 @@ function loginTitleClicked(){
     document.getElementById('loginMoreOptions')?.classList.remove('hidden');
   }
 }
+
+
+/* === SECURITY HARDENING === */
+const SECURITY={
+  maxLoginAttempts:5,
+  lockMinutes:10,
+  sessionMinutes:120
+};
+let loginFailures=0;
+let loginLockedUntil=0;
+
+function securityNow(){return Date.now();}
+function isLoginLocked(){
+  return loginLockedUntil>securityNow();
+}
+function registerLoginFailure(){
+  loginFailures++;
+  if(loginFailures>=SECURITY.maxLoginAttempts){
+    loginLockedUntil=securityNow()+SECURITY.lockMinutes*60*1000;
+    loginFailures=0;
+  }
+}
+function resetLoginFailures(){
+  loginFailures=0;
+  loginLockedUntil=0;
+}
+function setSecuritySession(user){
+  const payload={id:user.id,issuedAt:securityNow(),expiresAt:securityNow()+SECURITY.sessionMinutes*60*1000};
+  safeSet(sessionStorage,SESSION,JSON.stringify(payload));
+}
+function getSecuritySession(){
+  try{
+    const raw=safeGet(sessionStorage,SESSION);
+    if(!raw)return null;
+    try{
+      const p=JSON.parse(raw);
+      if(p && p.id){
+        if(p.expiresAt && p.expiresAt<securityNow()){
+          safeRemove(sessionStorage,SESSION);
+          return null;
+        }
+        return p;
+      }
+    }catch(e){}
+    // Legacy session was just a user id.
+    return {id:raw,issuedAt:securityNow(),expiresAt:securityNow()+SECURITY.sessionMinutes*60*1000};
+  }catch(e){return null}
+}
+function clearSecuritySession(){
+  try{safeRemove(sessionStorage,SESSION)}catch(e){}
+  currentUser=null;
+}
+function isPrivilegedUser(){
+  return !!currentUser && (
+    currentUser.role==='superadmin' ||
+    currentUser.role==='admin' ||
+    currentUser.isSuperAdmin===true
+  );
+}
+function denySubUserAction(){
+  alert('غير مسموح. هذا الإجراء متاح لمدير النظام فقط.');
+  return false;
+}
+
+function applySubUserRestrictions(){
+  const more=document.getElementById('loginMoreOptions');
+  const sync=document.getElementById('syncSettingsSection');
+  const setup=document.getElementById('setupCodeSection');
+  const reg=document.getElementById('registerArea');
+  const activation=document.getElementById('activationArea');
+  if(more && !isMainAdmin())more.classList.add('hidden');
+  if(sync && !isMainAdmin())sync.classList.add('hidden');
+  if(setup && !isMainAdmin())setup.classList.add('hidden');
+  if(reg && !isMainAdmin())reg.classList.add('hidden');
+  if(activation && !isMainAdmin()){
+    activation.querySelectorAll('a').forEach(el=>el.classList.add('hidden'));
+  }
+}
+
 function showLogin(){
+  applySubUserRestrictions();
   document.getElementById('loginScreen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
   prepareActivationScreen();
@@ -2926,56 +3006,62 @@ async function login(){
   const u=(userInput?.value||'').trim();
   const p=passInput?.value||'';
 
+  if(isLoginLocked()){
+    const mins=Math.max(1,Math.ceil((loginLockedUntil-securityNow())/60000));
+    alert('تم إيقاف محاولات الدخول مؤقتًا. حاول بعد '+mins+' دقيقة.');
+    return;
+  }
   if(!u || !p){
     alert('يرجى إدخال اسم المستخدم وكلمة المرور.');
     return;
   }
 
-  // Exact match first.
   let found=USERS.find(x=>x && String(x.username||'').trim()===u);
-
-  // Then normalized match for old data (spaces/case differences).
   if(!found){
     const nu=normalizeLoginUsername(u);
     found=USERS.find(x=>x && normalizeLoginUsername(x.username)===nu);
   }
 
-  if(!found){
-    alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
-    return;
-  }
-
-  if(found.activated===false){
-    alert('هذا الحساب لم يتم تفعيله بعد. استخدم رابط التفعيل الذي أرسله لك مدير النظام.');
-    return;
-  }
-
-  if(found.active===false){
-    alert('هذا الحساب غير نشط. يرجى مراجعة مدير النظام.');
-    return;
-  }
-
   let ok=false;
   try{
-    ok=await verifyLegacyPassword(found,p);
-  }catch(e){
-    ok=false;
-  }
+    if(found && found.activated!==false && found.active!==false){
+      ok=await verifyLegacyPassword(found,p);
+    }
+  }catch(e){ok=false}
 
-  if(!ok){
+  if(!found || !ok){
+    registerLoginFailure();
     alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
+    if(userInput)userInput.focus();
     return;
   }
 
+  resetLoginFailures();
   currentUser=found;
-  safeSet(sessionStorage,SESSION,found.id);
+  document.body.classList.toggle('sub-user', !isMainAdmin());
+  setSecuritySession(found);
   if(userInput)userInput.value='';
   if(passInput)passInput.value='';
   showApp();
 }
 
-function logout(){safeRemove(sessionStorage,SESSION);currentUser=null;showLogin()}
+function logout(){
+  clearSecuritySession();
+  document.body.classList.remove('sub-user');safeRemove(sessionStorage,SESSION);currentUser=null;showLogin()}
+
+function validateCurrentSession(){
+  const s=getSecuritySession();
+  if(!s){currentUser=null;return false}
+  const found=USERS.find(u=>u && u.id===s.id);
+  if(!found){clearSecuritySession();return false}
+  if(found.active===false){clearSecuritySession();return false}
+  currentUser=found;
+  return true;
+}
+
 function showApp(){
+  if(!validateCurrentSession()){showLogin();return;}
+  applySubUserRestrictions();
   document.getElementById('loginScreen').classList.add('hidden');document.getElementById('app').classList.remove('hidden');
   document.getElementById('welcome').textContent='مرحبًا '+currentUser.fullName+' — '+userRoleLabel(currentUser);
   document.getElementById('topUserName').textContent=currentUser.fullName||'المستخدم';
@@ -3011,6 +3097,7 @@ function showApp(){
 
 /* ---------- first-time setup (hidden behind a secret code) ---------- */
 function openSetupCode(){
+  if(currentUser && !isMainAdmin()){alert('هذا الخيار متاح لمدير النظام فقط.');return;}
   openModal(`<h3>إنشاء / استعادة حساب المدير الرئيسي للنظام</h3>
   <p class="small-note">استخدم هذا الخيار عند بدء النظام لأول مرة، أو إذا فقدت الوصول إلى حساب المدير الرئيسي بعد ربط Google Sheets. أدخل رمز الإعداد السري.</p>
   <div class="field"><label>رمز الإعداد</label><input id="setupCodeInput" type="password" autocomplete="off"></div>
@@ -3027,6 +3114,7 @@ function managerCategoryOptions(selected){
   return `<option value="">بدون فئة (مدير)</option>`+managerCategories.map(c=>`<option value="${escapeHtml(c)}" ${c===selected?'selected':''}>${escapeHtml(c)}</option>`).join('');
 }
 function openRegister(forceSuper){
+  if(currentUser && !isMainAdmin()){alert('هذا الخيار متاح لمدير النظام فقط.');return;}
   const isFirst=USERS.length===0;
   const locked=forceSuper||isFirst;
   if(!locked && !isSuperAdmin(currentUser)){alert('إضافة الحسابات (موظفين أو مديرين) متاحة للمدير الرئيسي للنظام فقط.');return}
@@ -3512,6 +3600,7 @@ function exportBackup(){
   a.click();
 }
 function restoreBackup(file){
+  if(!isMainAdmin())return denySubUserAction();
   if(!file)return;
   if(!confirm('سيتم استبدال كل البيانات الحالية (الحسابات والمتبرعين والمشاريع والقنوات) بمحتوى الملف المستورد. هل تريد المتابعة؟'))return;
   const r=new FileReader();
@@ -6046,6 +6135,20 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
 /* === CHROME / LEGACY DATA COMPATIBILITY === */
 #loginScreen .login-links a{cursor:pointer}
 
+
+body.sub-user #loginMoreOptions,
+body.sub-user #syncSettingsSection,
+body.sub-user #setupCodeSection,
+body.sub-user #registerArea,
+body.sub-user .sync-settings{display:none!important;}
+
+/* Security: never expose administrative controls to sub-users */
+body.sub-user [data-admin-only],
+body.sub-user .admin-only,
+body.sub-user #loginMoreOptions,
+body.sub-user #syncSettingsSection,
+body.sub-user #setupCodeSection,
+body.sub-user #registerArea{display:none!important;}
 </style>
 <script>
 /* ================================================================
@@ -7252,6 +7355,15 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   });
 });
+
+
+setInterval(function(){
+  if(currentUser && !validateCurrentSession()){
+    document.body.classList.remove('sub-user');
+    showLogin();
+    alert('انتهت جلسة الدخول لأسباب أمنية. يرجى تسجيل الدخول مرة أخرى.');
+  }
+},60000);
 
 </script>
 
