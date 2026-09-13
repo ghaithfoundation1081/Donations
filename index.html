@@ -1552,6 +1552,34 @@ body{
   background:var(--ghaith-dark)!important;
   border-color:var(--ghaith-dark)!important;
 }
+/* === MAIN ADMIN PORTAL LOGIN / SHEET BOOTSTRAP === */
+#adminSheetGateway{
+  display:none;
+  background:linear-gradient(180deg,#F7FBF9 0%,#FFFFFF 100%);
+  border:1px solid #D7E9E2;
+  border-radius:14px;
+  padding:14px;
+  margin-bottom:14px;
+}
+body.admin-portal #adminSheetGateway{display:block}
+#adminSheetGateway .gateway-title{
+  color:var(--ghaith-dark);font-weight:800;font-size:15px;margin-bottom:5px
+}
+#adminSheetGateway .gateway-note{
+  color:#60706C;font-size:12px;line-height:1.8;margin-bottom:10px
+}
+#adminSheetGateway .gateway-row{display:flex;gap:8px;align-items:stretch}
+#adminSheetGateway input{flex:1;min-width:0;direction:ltr;text-align:left}
+#adminSheetGateway .gateway-status{
+  font-size:12px;margin-top:8px;line-height:1.7
+}
+#adminSheetGateway .gateway-status.ok{color:#08785B}
+#adminSheetGateway .gateway-status.err{color:#D92E2B}
+@media(max-width:560px){
+  #adminSheetGateway .gateway-row{flex-direction:column}
+  #adminSheetGateway button{width:100%}
+}
+
 
 /* Keep hidden welcome element harmless */
 #app header #welcome{display:none!important;}
@@ -1585,6 +1613,19 @@ body{
   <p class="subtitle" id="loginSubtitle">تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.</p>
 
   <div id="loginFormArea">
+    <div id="adminSheetGateway">
+      <div class="gateway-title">دخول المدير الرئيسي — ربط Google Sheets</div>
+      <div class="gateway-note">
+        الصق هنا <b>رابط تطبيق الويب /exec</b> الخاص بـ Google Apps Script المرتبط بالشيت.
+        عند الضغط على المزامنة سيقرأ النظام حسابات المستخدمين من الشيت، ويحدد حساب المدير الرئيسي تلقائيًا.
+        <br><b>ملاحظة:</b> لا يتم الدخول بدون كلمة المرور؛ الرابط وحده لا يمنح صلاحية الدخول.
+      </div>
+      <div class="gateway-row">
+        <input id="adminSheetUrlInput" type="url" placeholder="https://script.google.com/macros/s/XXXX/exec" autocomplete="off">
+        <button type="button" class="btn-primary" id="adminSheetSyncBtn" onclick="connectAdminSheetAndPrepareLogin()">مزامنة المدير</button>
+      </div>
+      <div id="adminSheetGatewayStatus" class="gateway-status"></div>
+    </div>
     <div id="normalLoginArea">
       <div class="field"><label>اسم المستخدم</label><input id="loginUser" type="text" autocomplete="username"></div>
       <div class="field"><label>كلمة المرور</label><input id="loginPass" type="password" autocomplete="current-password"></div>
@@ -2756,6 +2797,18 @@ async function loadAll(){
     }
   restoreLocalUsersIfMissing();
   if(currentUser){showApp();return}
+  if(isAdminPortal()){
+    const admin=USERS.find(u=>u && (u.role==='superadmin'||u.isSuperAdmin===true));
+    const input=document.getElementById('adminSheetUrlInput');
+    if(input && GAS_URL)input.value=GAS_URL;
+    if(admin){
+      const userInput=document.getElementById('loginUser');
+      if(userInput)userInput.value=admin.username||'';
+      const status=document.getElementById('adminSheetGatewayStatus');
+      if(status)status.textContent='تمت مزامنة حساب المدير من الشيت. أدخل كلمة المرور واضغط «دخول».';
+      if(status)status.className='gateway-status ok';
+    }
+  }
   if(USERS.length===0){
       showLogin();
       if(!GAS_URL)openRegister(true);
@@ -2998,9 +3051,28 @@ function applySubUserRestrictions(){
 
 function showLogin(){
   applySubUserRestrictions();
+  document.body.classList.toggle('admin-portal',isAdminPortal());
   document.getElementById('loginScreen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
-  prepareActivationScreen();
+
+  const isActivation=getQueryParam('activate')==='1' || getQueryParam('reset')==='1';
+  const normal=document.getElementById('normalLoginArea');
+  const activation=document.getElementById('activationArea');
+  const more=document.getElementById('loginMoreOptions');
+  const subtitle=document.getElementById('loginSubtitle');
+
+  if(isActivation){
+    prepareActivationScreen();
+  }else{
+    if(normal)normal.classList.remove('hidden');
+    if(activation)activation.classList.add('hidden');
+    if(more)more.classList.add('hidden');
+    if(subtitle)subtitle.textContent=isAdminPortal()
+      ? 'دخول المدير الرئيسي للنظام.'
+      : 'تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
+    const gateway=document.getElementById('adminSheetGateway');
+    if(gateway && isAdminPortal()) gateway.style.display='block';
+  }
 }
 /* === LEGACY BROWSER / OLD DATA LOGIN COMPATIBILITY === */
 function normalizeLoginUsername(v){
@@ -3148,6 +3220,78 @@ async function verifyAuthPassword(user,password){
     return user.password===password;
   }
   return false;
+}
+
+function setAdminGatewayStatus(message,type=''){
+  const el=document.getElementById('adminSheetGatewayStatus');
+  if(!el)return;
+  el.textContent=message||'';
+  el.className='gateway-status '+(type||'');
+}
+function adminSheetUrlIsValid(v){
+  return /^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(?:[?#].*)?$/i.test(String(v||'').trim());
+}
+async function connectAdminSheetAndPrepareLogin(){
+  if(!isAdminPortal())return;
+  const input=document.getElementById('adminSheetUrlInput');
+  const btn=document.getElementById('adminSheetSyncBtn');
+  const url=String(input?.value||'').trim() || getQueryParam('gas') || String(GAS_URL||'').trim();
+
+  if(!adminSheetUrlIsValid(url)){
+    setAdminGatewayStatus('يرجى لصق رابط تطبيق الويب الصحيح الذي ينتهي بـ /exec.','err');
+    return;
+  }
+
+  GAS_URL=url;
+  safeSet(localStorage,GASKEY,GAS_URL);
+  if(btn)btn.disabled=true;
+  setAdminGatewayStatus('جارِ الاتصال بالشيت وقراءة حسابات المستخدمين...');
+
+  try{
+    let remote;
+    try{
+      remote=await gasCall('getAll');
+    }catch(e){
+      remote=await gasJsonpGet();
+    }
+    if(!remote || remote.error)throw new Error(remote?.error||'تعذر قراءة بيانات الشيت');
+
+    const remoteUsers=normalizeRemoteUsers(remote.users||remote.data||remote.rows||[]);
+    if(!remoteUsers.length)throw new Error('لم يتم العثور على حسابات مستخدمين في الشيت');
+
+    USERS=remoteUsers;
+    setLocalUsers(remoteUsers);
+    saveUsers();
+
+    const admins=remoteUsers.filter(u=>u && (
+      u.role==='superadmin' || u.isSuperAdmin===true
+    ));
+    if(!admins.length)throw new Error('لم يتم العثور على حساب مدير رئيسي في الشيت');
+
+    // Keep the latest remote dataset locally, including donations and other modules.
+    try{await syncPull({preserveLocalIfRemoteEmpty:true});}catch(e){}
+
+    const admin=admins[0];
+    const userInput=document.getElementById('loginUser');
+    if(userInput)userInput.value=admin.username||'';
+
+    const pass=document.getElementById('loginPass');
+    if(pass)pass.focus();
+
+    updateSyncViewBadge?.('on');
+    setConnStatus?.('on');
+    setAdminGatewayStatus(
+      'تمت المزامنة بنجاح ✓ تم العثور على حساب المدير الرئيسي: '+(admin.username||'—')+
+      '. أدخل كلمة المرور ثم اضغط «دخول».','ok'
+    );
+  }catch(e){
+    setAdminGatewayStatus(
+      'تعذر الاتصال أو العثور على حساب المدير الرئيسي. تأكد من أن الرابط /exec صحيح وأن Web App منشور بصلاحية Anyone.',
+      'err'
+    );
+  }finally{
+    if(btn)btn.disabled=false;
+  }
 }
 
 async function login(){
@@ -7550,6 +7694,12 @@ async function chromeLoginRecovery(){
 
 
 document.addEventListener('DOMContentLoaded',function(){
+  if(isAdminPortal()){
+    document.body.classList.add('admin-portal');
+    const gatewayInput=document.getElementById('adminSheetUrlInput');
+    const fromUrl=getQueryParam('gas');
+    if(gatewayInput)gatewayInput.value=fromUrl||String(GAS_URL||'');
+  }
   const form=document.getElementById('normalLoginArea');
   const u=document.getElementById('loginUser');
   const p=document.getElementById('loginPass');
