@@ -2029,7 +2029,7 @@ body.admin-portal #adminSheetGateway{display:block}
   </div>
   <div class="settings-section">
     <h4>رابط Google Sheets</h4>
-    <p class="small-note">الصق رابط تطبيق الويب المنشور من Google Apps Script، ويجب أن ينتهي عادةً بـ <b>/exec</b>.</p>
+    <p class="small-note">الصق <b>رابط تطبيق الويب المنشور من Google Apps Script</b> (وليس رابط ملف Google Sheets نفسه)، ويجب أن ينتهي بـ <b>/exec</b>. إذا كان رابط المدير يحتوي على <b>?gas=</b> سيتم الاتصال تلقائيًا.</p>
     <div id="syncConnBadge" class="conn-badge off">غير مرتبط بجوجل شيت</div>
     <div class="field" style="margin-top:10px">
       <label>رابط تطبيق الويب</label>
@@ -2763,7 +2763,9 @@ async function loadAll(){
   }catch(e){
     USERS=getLocalUsers();
   }
-  try{USERS=JSON.parse(safeGet(localStorage,UKEY)||'[]')}catch(e){USERS=[]}
+  // Do not overwrite freshly fetched Google-Sheets users with stale local users.
+  // If the remote fetch failed, the catch above already loaded the local cache.
+  if(!Array.isArray(USERS))USERS=[];
   try{donors=JSON.parse(safeGet(localStorage,DKEY)||'[]');donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}))}catch(e){donors=[]}
   try{companies=JSON.parse(safeGet(localStorage,COMPANYKEY)||'[]');companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}))}catch(e){companies=[]}
   try{companyConfig=normalizeCompanyConfig(JSON.parse(safeGet(localStorage,COMPANYCONFIGKEY)||'null'))}catch(e){companyConfig=normalizeCompanyConfig(null)}
@@ -3203,10 +3205,25 @@ function normalizeRemoteUsers(data){
 async function fetchUsersFromSheet(){
   const url=getConfiguredGasUrl();
   if(!url)throw new Error('NO_GAS_URL');
-  const res=await fetch(url,{method:'GET',cache:'no-store',credentials:'omit'});
-  if(!res.ok)throw new Error('GAS_HTTP_'+res.status);
-  const txt=await res.text();
-  let data; try{data=JSON.parse(txt)}catch(e){throw new Error('GAS_INVALID_JSON')}
+
+  // Always call the actual getAll endpoint. A bare Web-App URL only returns
+  // the generic "service is running" message and therefore cannot be used
+  // to authenticate the main administrator.
+  let data=null;
+  try{
+    const sep=url.includes('?')?'&':'?';
+    const res=await fetch(url+sep+'action=getAll&ts='+Date.now(),{
+      method:'GET',cache:'no-store',credentials:'omit'
+    });
+    if(!res.ok)throw new Error('GAS_HTTP_'+res.status);
+    const txt=await res.text();
+    try{data=JSON.parse(txt)}catch(e){throw new Error('GAS_INVALID_JSON')}
+  }catch(e){
+    // JSONP is the cross-origin fallback used by this system.
+    try{data=await gasJsonpGet()}catch(e2){throw e2||e}
+  }
+
+  if(!data||data.error)throw new Error(data?.error||'GAS_READ_FAILED');
   const users=normalizeRemoteUsers(data);
   if(!users.length)throw new Error('GAS_NO_USERS');
   return users;
@@ -3230,6 +3247,20 @@ function setAdminGatewayStatus(message,type=''){
 }
 function adminSheetUrlIsValid(v){
   return /^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(?:[?#].*)?$/i.test(String(v||'').trim());
+}
+function isMainAdminRecord(u){
+  if(!u)return false;
+  const role=normalizeLoginUsername(u.role||u.Role||u['الدور']||u['نوع الحساب']||'');
+  const name=normalizeLoginUsername(u.fullName||u.name||u['الاسم']||'');
+  return u.isSuperAdmin===true ||
+    role==='superadmin' ||
+    role==='super admin' ||
+    role==='مدير رئيسي' ||
+    role==='المدير الرئيسي' ||
+    role==='main admin' ||
+    role==='main administrator' ||
+    /مدير\s*رئيسي/.test(role) ||
+    /مدير\s*رئيسي/.test(name);
 }
 async function connectAdminSheetAndPrepareLogin(){
   if(!isAdminPortal())return;
@@ -3256,7 +3287,7 @@ async function connectAdminSheetAndPrepareLogin(){
     }
     if(!remote || remote.error)throw new Error(remote?.error||'تعذر قراءة بيانات الشيت');
 
-    const remoteUsers=normalizeRemoteUsers(remote.users||remote.data||remote.rows||[]);
+    const remoteUsers=normalizeRemoteUsers(remote);
     if(!remoteUsers.length)throw new Error('لم يتم العثور على حسابات مستخدمين في الشيت');
 
     USERS=remoteUsers;
@@ -3264,7 +3295,7 @@ async function connectAdminSheetAndPrepareLogin(){
     saveUsers();
 
     const admins=remoteUsers.filter(u=>u && (
-      u.role==='superadmin' || u.isSuperAdmin===true
+      isMainAdminRecord(u)
     ));
     if(!admins.length)throw new Error('لم يتم العثور على حساب مدير رئيسي في الشيت');
 
@@ -3314,10 +3345,11 @@ async function login(){
       try{data=await gasCall('getAll')}catch(e){data=await gasJsonpGet();}
       if(!data||data.error)throw new Error(data?.error||'تعذر قراءة Google Sheet');
 
-      if(Array.isArray(data.users)){
-        users=data.users;
+      users=normalizeRemoteUsers(data);
+      if(users.length){
         remoteOk=true;
         USERS=users;
+        setLocalUsers(users);
         saveUsers();
       }
     }catch(e){
@@ -7698,7 +7730,15 @@ document.addEventListener('DOMContentLoaded',function(){
     document.body.classList.add('admin-portal');
     const gatewayInput=document.getElementById('adminSheetUrlInput');
     const fromUrl=getQueryParam('gas');
+    if(fromUrl){
+      GAS_URL=fromUrl.trim();
+      safeSet(localStorage,GASKEY,GAS_URL);
+    }
     if(gatewayInput)gatewayInput.value=fromUrl||String(GAS_URL||'');
+    // If the admin link already contains ?gas=..., connect automatically.
+    if(fromUrl && typeof connectAdminSheetAndPrepareLogin==='function'){
+      setTimeout(()=>connectAdminSheetAndPrepareLogin(),80);
+    }
   }
   const form=document.getElementById('normalLoginArea');
   const u=document.getElementById('loginUser');
