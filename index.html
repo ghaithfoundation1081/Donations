@@ -2742,10 +2742,25 @@ async function loadAll(){
   USERS.forEach(u=>{if(typeof u.active==='undefined')u.active=true;if(!u.followScope)u.followScope='both';if(!u.permissions)u.permissions=defaultPermissionsFor(u);});
   await migrateLegacyPasswords();
   saveUsers();
-  const sid=safeGet(sessionStorage,SESSION); if(sid) currentUser=USERS.find(u=>u.id===sid)||null;
+  const sid=safeGet(sessionStorage,SESSION);
+    let sessionValid=!!sid;
+    try{
+      const meta=JSON.parse(safeGet(sessionStorage,'ghaith_auth_security')||'null');
+      if(meta?.expiresAt && meta.expiresAt<Date.now())sessionValid=false;
+    }catch(e){}
+    if(sessionValid) currentUser=USERS.find(u=>String(u.id)===String(sid))||null;
+    if(!sessionValid){
+      safeRemove(sessionStorage,SESSION);
+      safeRemove(sessionStorage,'ghaith_auth_security');
+      currentUser=null;
+    }
   restoreLocalUsersIfMissing();
   if(currentUser){showApp();return}
-  if(USERS.length===0){showLogin();openRegister(true);return} /* genuine first run only: no accounts exist yet */
+  if(USERS.length===0){
+      showLogin();
+      if(!GAS_URL)openRegister(true);
+      return;
+    }
   showLogin();
 }
 
@@ -3138,53 +3153,92 @@ async function verifyAuthPassword(user,password){
 async function login(){
   const username=(document.getElementById('loginUser')?.value||'').trim();
   const password=document.getElementById('loginPass')?.value||'';
-  const until=authLockUntil();
-  if(until>Date.now()){
-    alert('تم إيقاف محاولات الدخول مؤقتًا. حاول بعد '+Math.ceil((until-Date.now())/60000)+' دقيقة.');
+
+  if(!username||!password){
+    alert('يرجى إدخال اسم المستخدم وكلمة المرور.');
     return;
   }
-  if(!username||!password){alert('يرجى إدخال اسم المستخدم وكلمة المرور.');return}
 
-  const gasUrl=getConfiguredGasUrl();
+  const gasConfigured=!!String(GAS_URL||'').trim();
   let users=[];
-  let source='local';
+  let remoteOk=false;
 
-  if(gasUrl){
+  // Google Sheet is the authority whenever GAS_URL is configured.
+  if(gasConfigured){
     try{
-      users=await fetchUsersFromSheet();
-      source='sheet';
+      let data;
+      try{data=await gasCall('getAll')}catch(e){data=await gasJsonpGet();}
+      if(!data||data.error)throw new Error(data?.error||'تعذر قراءة Google Sheet');
+
+      if(Array.isArray(data.users)){
+        users=data.users;
+        remoteOk=true;
+        USERS=users;
+        saveUsers();
+      }
     }catch(e){
-      // Sheet is the authority when reachable. Local data is only continuity
-      // when the Sheet is temporarily unavailable.
-      users=getLocalUsers();
+      remoteOk=false;
+    }
+
+    if(!remoteOk){
+      // Only use the previously verified local cache as an emergency fallback.
+      // Never report a cached account as invalid merely because the Sheet is offline.
+      try{users=JSON.parse(safeGet(localStorage,UKEY)||'[]')}catch(e){users=[]}
+      if(!Array.isArray(users))users=[];
+      const cached=users.find(u=>u&&normalizeLoginUsername(u.username)===normalizeLoginUsername(username));
+      if(!cached){
+        alert('تعذر الاتصال ببيانات المستخدمين في Google Sheet. تأكد من رابط Apps Script ثم حاول مرة أخرى.');
+        return;
+      }
     }
   }else{
-    users=getLocalUsers();
+    try{users=JSON.parse(safeGet(localStorage,UKEY)||'[]')}catch(e){users=[]}
+    if(!Array.isArray(users))users=[];
   }
 
   const n=normalizeLoginUsername(username);
   const user=users.find(u=>u&&normalizeLoginUsername(u.username)===n);
 
   if(!user){
-    registerAuthFailure();
-    alert(gasUrl && source==='local'
-      ? 'تعذر الوصول إلى بيانات المستخدمين في Google Sheet، ولم يتم العثور على الحساب في البيانات المحلية.'
-      : 'اسم المستخدم أو كلمة المرور غير صحيحة.');
+    alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
+    return;
+  }
+  if(user.active===false){
+    alert('هذا الحساب غير نشط. يرجى مراجعة مدير النظام.');
+    return;
+  }
+  if(user.activated===false){
+    alert('هذا الحساب لم يتم تفعيله بعد.');
     return;
   }
 
-  if(user.active===false){alert('هذا الحساب غير نشط. يرجى مراجعة مدير النظام.');return}
-  if(user.activated===false){alert('هذا الحساب لم يتم تفعيله بعد.');return}
+  let passwordOK=false;
+  try{
+    if(user.passwordHash){
+      passwordOK=(await hashPassword(password)).trim().toLowerCase()===String(user.passwordHash).trim().toLowerCase();
+    }else if(typeof user.password==='string'){
+      passwordOK=user.password===password;
+    }
+  }catch(e){passwordOK=false}
 
-  const ok=await verifyAuthPassword(user,password);
-  if(!ok){registerAuthFailure();alert('اسم المستخدم أو كلمة المرور غير صحيحة.');return}
+  if(!passwordOK){
+    alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
+    return;
+  }
 
-  clearAuthFailures();
   currentUser=user;
   USERS=users;
-  setLocalUsers(users);
-  saveAuthSession(user);
-  document.body.classList.toggle('sub-user',!isMainAdmin());
+  saveUsers();
+
+  // Preserve the original session format used by the application.
+  safeSet(sessionStorage,SESSION,String(user.id));
+  try{
+    safeSet(sessionStorage,'ghaith_auth_security',JSON.stringify({
+      expiresAt:Date.now()+120*60*1000
+    }));
+  }catch(e){}
+
+  document.body.classList.toggle('sub-user',!isSuperAdmin(user));
   document.getElementById('loginUser').value='';
   document.getElementById('loginPass').value='';
   showApp();
@@ -6298,6 +6352,10 @@ body.sub-user #loginMoreOptions,
 body.sub-user #syncSettingsSection,
 body.sub-user #setupCodeSection,
 body.sub-user #registerArea{display:none!important;}
+
+body.sub-user #syncSettingsSection,
+body.sub-user [data-admin-only],
+body.sub-user .admin-only{display:none!important;}
 </style>
 <script>
 /* ================================================================
