@@ -2047,8 +2047,21 @@ body{
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw0qtLapqoxIN1g1IyxxdvXn94frVhnz0Sryk9AIxdW18HnMCgG8S7adFDkhbKRUVw/exec'; // ضع رابط /exec هنا إذا أردت أن يعمل الملف مباشرة على أي متصفح بدون ?gas=
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwTCuIZuKZpKCHO1_bT3K7-CM6xNU65jrh69OJrl8Bfi4KPfP80Zn18ygQMph3wPVuh/exec'; // ضع رابط /exec هنا إذا أردت أن يعمل الملف مباشرة على أي متصفح بدون ?gas=
 const SETUP_CODE_HASH = '2068577e31aa7a760405a780ee6fd281df5196b39f0ef0dbf1ebf0f7614d8618';
+/* =========================================================
+   GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
+   الغرض منه: أن معرفة رابط /exec وحدها لا تكفي لقراءة أو تعديل بيانات الشيت —
+   أي طلب لا يحمل هذا المفتاح يرفضه الشيت نفسه.
+   خطوات التفعيل (مرة واحدة):
+   1) اختر نصًا سريًا طويلًا (30 حرفًا أو أكثر، حروف وأرقام ورموز).
+   2) ضعه هنا بين علامتي التنصيص أدناه.
+   3) ضع نفس النص في ACCESS_KEY أعلى كود Code.gs داخل محرر Apps Script.
+   4) من Apps Script: Deploy ← Manage deployments ← ✏️ ← Version: New version ← Deploy.
+   ملاحظة: إذا تُرك فارغًا هنا وفي Code.gs يعمل النظام كما كان بدون هذه الطبقة،
+   حتى لا تتوقف النسخ الموزَّعة قبل التحديث. فعّله في الطرفين معًا.
+   ========================================================= */
+const GAS_ACCESS_KEY = '';
 /* يُضبط هذا العلم مؤقتًا (مرة واحدة) فور التحقق الصحيح من رمز الإعداد السري،
    ليُستخدم كإذن مؤقت لإكمال إنشاء/استعادة حساب المدير الرئيسي عبر submitRegister،
    ثم يُعاد ضبطه فور الاستخدام أو عند إغلاق النافذة — لا يمنح أي صلاحية دائمة. */
@@ -2242,6 +2255,28 @@ var SHEET_EVENTS = 'سجل الأحداث الفوري';
 var CHUNK_SIZE = 45000; // أقل من الحد الأقصى لعدد أحرف الخلية في جوجل شيت (50000)
 var IMAGES_FOLDER_NAME = 'صور إيصالات نظام المتبرعين';
 
+/* ============================================================
+   ACCESS_KEY — مفتاح الوصول السري للشيت
+   ------------------------------------------------------------
+   ضع هنا نفس النص السري الموجود في GAS_ACCESS_KEY داخل ملف النظام (HTML).
+   بعد ضبطه، أي طلب يصل لهذا الرابط بدون المفتاح الصحيح يُرفض — فلا يكفي
+   أن يعرف أحد رابط /exec حتى يقرأ بيانات المتبرعين أو يكتب عليها.
+   إذا تُرك فارغًا هنا تعمل الخدمة كما كانت بدون هذه الطبقة (وضع التوافق).
+   تذكير: أي تعديل على هذا الملف يتطلب نشرًا جديدًا حتى يسري:
+   Deploy ← Manage deployments ← ✏️ ← Version: New version ← Deploy.
+   ============================================================ */
+var ACCESS_KEY = '';
+
+function extractKey_(e, body) {
+  if (body && body.key) return String(body.key);
+  if (e && e.parameter && e.parameter.key) return String(e.parameter.key);
+  return '';
+}
+function keyAllowed_(provided) {
+  if (!ACCESS_KEY) return true; // وضع التوافق: لم يُضبط مفتاح بعد
+  return String(provided || '') === String(ACCESS_KEY);
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -2253,6 +2288,9 @@ function doPost(e) {
     };
     var action = body.action;
     var payload = body.payload || {};
+    if (!keyAllowed_(extractKey_(e, body))) {
+      return jsonOut({ error: 'غير مصرح: مفتاح الوصول غير صحيح أو غير موجود.' });
+    }
     if (action === 'getAll') {
       return jsonOut(readAll());
     } else if (action === 'saveAll') {
@@ -2278,7 +2316,12 @@ function doPost(e) {
 function doGet(e) {
   var callback = e && e.parameter ? String(e.parameter.callback || '') : '';
   var action = e && e.parameter ? String(e.parameter.action || '') : '';
-  var obj = action === 'getAll' ? readAll() : { ok: true, message: 'الخدمة تعمل. أرسل طلبات POST من داخل النظام.' };
+  var obj;
+  if (!keyAllowed_(extractKey_(e, null))) {
+    obj = { error: 'غير مصرح: مفتاح الوصول غير صحيح أو غير موجود.' };
+  } else {
+    obj = action === 'getAll' ? readAll() : { ok: true, message: 'الخدمة تعمل. أرسل طلبات POST من داخل النظام.' };
+  }
   if (callback && /^[A-Za-z_$][0-9A-Za-z_$\.]*$/.test(callback)) {
     return ContentService.createTextOutput(callback + '(' + JSON.stringify(obj) + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
@@ -3225,7 +3268,7 @@ setInterval(__backgroundFreshnessSync,20000);
 function gasCall(action,payload){
   if(!GAS_URL)return Promise.reject('no-url');
   if(typeof fetch==='function'){
-    return fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,payload})}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()});
+    return fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,payload,key:GAS_ACCESS_KEY})}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()});
   }
   return Promise.reject('fetch-unavailable');
 }
@@ -3237,7 +3280,7 @@ function gasJsonpGet(){
     function cleanup(){clearTimeout(timeout);try{delete window[cb]}catch(e){window[cb]=undefined}script.remove()}
     window[cb]=data=>{cleanup();resolve(data)};
     script.onerror=()=>{cleanup();reject(new Error('تعذر تحميل بيانات جوجل شيت'))};
-    script.src=GAS_URL+(GAS_URL.includes('?')?'&':'?')+'action=getAll&callback='+encodeURIComponent(cb);
+    script.src=GAS_URL+(GAS_URL.includes('?')?'&':'?')+'action=getAll&callback='+encodeURIComponent(cb)+(GAS_ACCESS_KEY?'&key='+encodeURIComponent(GAS_ACCESS_KEY):'');
     document.head.appendChild(script);
   });
 }
@@ -3247,7 +3290,7 @@ function gasFormPost(action,payload){
     if(!iframe){iframe=document.createElement('iframe');iframe.id='__gasPostFrame';iframe.name='__gasPostFrame';iframe.style.display='none';document.body.appendChild(iframe)}
     const form=document.createElement('form');form.method='POST';form.action=GAS_URL;form.target='__gasPostFrame';form.style.display='none';
     const add=(name,value)=>{const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input)};
-    add('action',action);add('payload',JSON.stringify(payload||{}));document.body.appendChild(form);
+    add('action',action);add('payload',JSON.stringify(payload||{}));if(GAS_ACCESS_KEY)add('key',GAS_ACCESS_KEY);document.body.appendChild(form);
     let done=false;const finish=ok=>{if(done)return;done=true;setTimeout(()=>form.remove(),0);ok?resolve({ok:true}):reject(new Error('تعذر إرسال البيانات إلى جوجل شيت'))};
     iframe.onload=()=>finish(true);try{form.submit();setTimeout(()=>finish(true),2500)}catch(e){finish(false)}
   });
