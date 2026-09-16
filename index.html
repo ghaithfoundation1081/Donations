@@ -2044,8 +2044,12 @@ body{
    - SETUP_CODE: رمز سري يعرفه المدير فقط، يُستخدم مرة واحدة لإنشاء
      أول حساب مدير في النظام. غيّره لرمز خاص بك قبل التوزيع.
    ========================================================= */
-const DEFAULT_GAS_URL = ''; // ضع رابط /exec هنا إذا أردت أن يعمل الملف مباشرة على أي متصفح بدون ?gas=
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw0qtLapqoxIN1g1IyxxdvXn94frVhnz0Sryk9AIxdW18HnMCgG8S7adFDkhbKRUVw/exec'; // ضع رابط /exec هنا إذا أردت أن يعمل الملف مباشرة على أي متصفح بدون ?gas=
 const SETUP_CODE = 'ghaith@2022';
+/* يُضبط هذا العلم مؤقتًا (مرة واحدة) فور التحقق الصحيح من رمز الإعداد السري،
+   ليُستخدم كإذن مؤقت لإكمال إنشاء/استعادة حساب المدير الرئيسي عبر submitRegister،
+   ثم يُعاد ضبطه فور الاستخدام أو عند إغلاق النافذة — لا يمنح أي صلاحية دائمة. */
+let setupCodeVerified=false;
 
 /* browser-safe storage + cross-browser Google Sheets config */
 const MEMORY_STORAGE = {};
@@ -3164,6 +3168,7 @@ async function openInitialAdminSetup(){
   }catch(e){alert('تعذر فتح شاشة إعداد مدير النظام.');}
 }
 function returnToNormalLogin(){
+  setupCodeVerified=false;
   closeModal();
   document.getElementById('normalLoginArea')?.classList.remove('hidden');
   document.getElementById('activationArea')?.classList.add('hidden');
@@ -3361,6 +3366,7 @@ function verifySetupCode(){
   if(USERS.length>0 && !isSuperAdmin(currentUser)){alert('غير مصرح: يجب تسجيل الدخول بحساب المدير الرئيسي أولًا.');closeModal();return}
   const v=(document.getElementById('setupCodeInput').value||'').trim();
   if(v!==SETUP_CODE){alert('رمز الإعداد غير صحيح.');return}
+  setupCodeVerified=true;
   closeModal();openRegister(true);
 }
 
@@ -3449,7 +3455,7 @@ function toggleRegisterCategoryField(){
 async function submitRegister(locked){
   const isFirst=USERS.length===0;
   if(locked){
-    if(!isFirst && !isSuperAdmin(currentUser)){alert('غير مصرح: إنشاء حساب المدير الرئيسي متاح فقط أثناء التثبيت الأول أو بعد تسجيل الدخول بالمدير الرئيسي.');return;}
+    if(!isFirst && !isSuperAdmin(currentUser) && !setupCodeVerified){alert('غير مصرح: إنشاء حساب المدير الرئيسي متاح فقط أثناء التثبيت الأول أو بعد تسجيل الدخول بالمدير الرئيسي أو بعد التحقق من رمز الإعداد السري.');return;}
   }else if(!isSuperAdmin(currentUser)){
     alert('غير مصرح: إضافة الحسابات متاحة للمدير الرئيسي للنظام فقط.');return;
   }
@@ -3474,6 +3480,7 @@ async function submitRegister(locked){
     if(!secQuestion||!secAnswer){alert('يرجى إدخال سؤال الأمان وإجابته.');return}
     payload={id:uid(),fullName:name,phone,username,passwordHash:await hashPassword(pass),role,managerCategory,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:secQuestion,securityAnswer:secAnswer,activated:true};
     USERS.push(payload); await saveUsersReliable(); currentUser=payload; safeSet(sessionStorage,SESSION,payload.id);
+    setupCodeVerified=false;
     closeModal(); showApp(); alert('تم إنشاء حساب المدير الرئيسي للنظام بنجاح.'); return;
   }
   payload={id:uid(),fullName:name,phone,username,passwordHash:'',role,managerCategory,followScope,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:'',securityAnswer:'',activated:false,activationToken:uid()+uid(),phoneVerified:false};
