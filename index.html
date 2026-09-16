@@ -1596,7 +1596,7 @@ body{
     <div id="activationArea" class="hidden">
       <p class="small-note">قم بإنشاء كلمة المرور الخاصة بك لتفعيل الحساب لأول مرة.</p>
       <div class="field"><label>اسم المستخدم</label><input id="activationUser" readonly></div>
-      <div class="field"><label>كلمة المرور الجديدة</label><input id="activationPass" type="password" autocomplete="new-password"></div>
+      <div class="field"><label>كلمة المرور الجديدة</label><input id="activationPass" type="password" autocomplete="new-password" minlength="8" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
       <div class="field"><label>تأكيد كلمة المرور</label><input id="activationPass2" type="password" autocomplete="new-password"></div>
       <div class="field"><label>سؤال الأمان</label><input id="activationSecQ"></div>
       <div class="field"><label>إجابة سؤال الأمان</label><input id="activationSecA"></div>
@@ -2041,11 +2041,14 @@ body{
    إعدادات عامة — يرجى تعديل القيمتين التاليتين قبل توزيع الملف:
    - DEFAULT_GAS_URL: رابط تطبيق الويب لجوجل شيت (Code.gs) بعد نشره،
      بحيث يرتبط كل من يفتح هذه النسخة من الملف بنفس الشيت تلقائيًا.
-   - SETUP_CODE: رمز سري يعرفه المدير فقط، يُستخدم مرة واحدة لإنشاء
-     أول حساب مدير في النظام. غيّره لرمز خاص بك قبل التوزيع.
+   - SETUP_CODE_HASH: بصمة SHA-256 لرمز الإعداد السري (وليس الرمز نفسه — لا يُخزَّن
+     أي سر إداري كنص صريح في الملف). لتوليد بصمة رمز جديد قبل التوزيع، شغّل مرة واحدة
+     في Console المتصفح: crypto.subtle.digest('SHA-256', new TextEncoder().encode('رمزك_الجديد'))
+     ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
+     القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
 const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw0qtLapqoxIN1g1IyxxdvXn94frVhnz0Sryk9AIxdW18HnMCgG8S7adFDkhbKRUVw/exec'; // ضع رابط /exec هنا إذا أردت أن يعمل الملف مباشرة على أي متصفح بدون ?gas=
-const SETUP_CODE = 'ghaith@2022';
+const SETUP_CODE_HASH = '2068577e31aa7a760405a780ee6fd281df5196b39f0ef0dbf1ebf0f7614d8618';
 /* يُضبط هذا العلم مؤقتًا (مرة واحدة) فور التحقق الصحيح من رمز الإعداد السري،
    ليُستخدم كإذن مؤقت لإكمال إنشاء/استعادة حساب المدير الرئيسي عبر submitRegister،
    ثم يُعاد ضبطه فور الاستخدام أو عند إغلاق النافذة — لا يمنح أي صلاحية دائمة. */
@@ -2064,15 +2067,25 @@ const PORTAL_MODE=(getQueryParam('portal')||'user').toLowerCase();
    كون المستخدم مسجل دخول بالفعل كمدير رئيسي، وإلا تصبح شاشة الاسترجاع نفسها
    غير قابلة للوصول أصلًا لمن فقد وصوله (وهو بالضبط الغرض منها). */
 function isAdminPortal(){return PORTAL_MODE==='admin'}
+/* رابط مستخدم = أي رابط موزَّع على الموظفين/المديرين (?portal=user أو رابط تفعيل/
+   إعادة تعيين كلمة مرور). هذه الروابط مغلقة تمامًا: لا شاشة إعداد مدير، ولا خيارات
+   صيانة، ولا وصول لأي شيء غير نموذج تسجيل الدخول — حتى لو فشل الاتصال بالشيت
+   أو كانت بيانات المتصفح فارغة. (فتح ملف الـ HTML نفسه بدون أي باراميتر يظل
+   مسار الإعداد الأول للمدير الرئيسي كما هو.) */
+function isUserPortalLink(){
+  return String(getQueryParam('portal')||'').toLowerCase()==='user'
+      || getQueryParam('activate')==='1'
+      || getQueryParam('reset')==='1';
+}
 function makeActivationLink(u){
   if(!u||!u.username||!u.activationToken)return '';
   const base=window.location.href.split('?')[0];
-  return base+'?portal=user&activate=1&u='+encodeURIComponent(u.username)+'&token='+encodeURIComponent(u.activationToken)+(GAS_URL?'&gas='+encodeURIComponent(GAS_URL):'');
+  return base+'?portal=user&activate=1&u='+encodeURIComponent(u.username)+'&token='+encodeURIComponent(u.activationToken)+(GAS_URL?'&k='+encodeURIComponent(encodeGasParam(GAS_URL)):'');
 }
 function makePasswordResetLink(u){
   if(!u||!u.username||!u.resetToken)return '';
   const base=window.location.href.split('?')[0];
-  return base+'?portal=user&reset=1&u='+encodeURIComponent(u.username)+'&token='+encodeURIComponent(u.resetToken)+(GAS_URL?'&gas='+encodeURIComponent(GAS_URL):'');
+  return base+'?portal=user&reset=1&u='+encodeURIComponent(u.username)+'&token='+encodeURIComponent(u.resetToken)+(GAS_URL?'&k='+encodeURIComponent(encodeGasParam(GAS_URL)):'');
 }
 function prepareActivationScreen(){
   const activate=getQueryParam('activate')==='1';
@@ -2092,8 +2105,29 @@ function prepareActivationScreen(){
     normal?.classList.remove('hidden'); box?.classList.add('hidden');
     document.getElementById('loginSubtitle').textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
   }
-  if(!isAdminPortal())document.getElementById('loginMoreOptions')?.classList.add('hidden');
-  if(!isAdminPortal())document.getElementById('loginNormalLinks')?.classList.add('hidden');
+  /* على أي رابط غير بوابة المدير: نحذف عناصر الخيارات من شجرة الصفحة نهائيًا
+     (وليس مجرد إخفائها بـ class) حتى لا يمكن إظهارها بتعديل CSS أو من Inspector. */
+  if(!isAdminPortal()){
+    document.getElementById('loginMoreOptions')?.remove();
+    document.getElementById('loginNormalLinks')?.remove();
+  }
+}
+/* قفل شاشة الدخول مع رسالة واضحة للمستخدم، بدون إتاحة أي خيار آخر. */
+function showUserPortalLockdown(msg){
+  document.getElementById('normalLoginArea')?.classList.add('hidden');
+  document.getElementById('activationArea')?.classList.add('hidden');
+  document.getElementById('loginMoreOptions')?.remove();
+  document.getElementById('loginNormalLinks')?.remove();
+  let box=document.getElementById('userPortalLockdownNote');
+  if(!box){
+    box=document.createElement('div');
+    box.id='userPortalLockdownNote';
+    box.style.cssText='margin-top:14px;padding:14px;border:1px solid #F0C7C4;background:#FDEAEA;color:#8E2F2A;border-radius:12px;font-size:13px;line-height:1.9;text-align:center;font-weight:700';
+    document.getElementById('loginFormArea')?.appendChild(box);
+  }
+  box.textContent=msg||'تعذّر تحميل بيانات النظام. يرجى التواصل مع مدير النظام.';
+  const sub=document.getElementById('loginSubtitle');
+  if(sub)sub.textContent='الوصول متوقف مؤقتًا';
 }
 async function activateAccount(){
   const username=getQueryParam('u')||'', token=getQueryParam('token')||'';
@@ -2105,7 +2139,7 @@ async function activateAccount(){
   const pass2=document.getElementById('activationPass2').value;
   const q=document.getElementById('activationSecQ').value.trim();
   const a=document.getElementById('activationSecA').value.trim();
-  if(!pass||pass.length<4){alert('كلمة المرور يجب ألا تقل عن 4 خانات.');return}
+  if(!pass||!isStrongPassword(pass)){alert(PASSWORD_POLICY_MSG);return}
   if(pass!==pass2){alert('كلمتا المرور غير متطابقتين.');return}
   if(!q||!a){alert('يرجى إدخال سؤال الأمان وإجابته.');return}
   user.passwordHash=await hashPassword(pass);
@@ -2119,7 +2153,39 @@ async function activateAccount(){
   alert(reset?'تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.':'تم تفعيل الحساب بنجاح. يمكنك الآن تسجيل الدخول.');
 }
 
-function rememberGasFromUrl(){const fromUrl=getQueryParam('gas');if(fromUrl){GAS_URL=fromUrl.trim();safeSet(localStorage,GASKEY,GAS_URL)}}
+/* =========================================================
+   إخفاء رابط جوجل شيت عن روابط المستخدمين
+   ---------------------------------------------------------
+   كانت روابط التفعيل/إعادة التعيين تحمل الرابط الكامل للشيت كنص صريح
+   (&gas=https://script.google.com/.../exec) فيراه كل مستخدم في شريط العنوان
+   وفي رسالة الواتساب المرسلة له. الآن:
+   - الروابط الجديدة تحمل الربط في باراميتر مُرمَّز (k=) بدل الرابط الصريح.
+   - أي باراميتر ربط (gas أو k) يُستهلك فورًا عند فتح الصفحة ثم يُمسح من شريط
+     العنوان، فلا يبقى ظاهرًا ولا يُنسخ مع الرابط.
+   - الباراميتر القديم gas= ما زال مقبولًا حتى تعمل الروابط الموزَّعة سابقًا.
+   ملاحظة مهمة: الترميز يخفي الرابط عن الاستخدام العادي، لكنه ليس تشفيرًا —
+   الحماية النهائية للشيت يجب أن تكون من داخل Code.gs نفسه (راجع الملاحظات
+   المرفقة مع هذا التعديل).
+   ========================================================= */
+function encodeGasParam(u){try{return btoa(encodeURIComponent(String(u||''))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}catch(e){return ''}}
+function decodeGasParam(v){try{let x=String(v||'').replace(/-/g,'+').replace(/_/g,'/');while(x.length%4)x+='=';return decodeURIComponent(atob(x))}catch(e){return ''}}
+function stripGasParamsFromAddressBar(){
+  try{
+    const url=new URL(window.location.href);
+    if(!url.searchParams.has('gas')&&!url.searchParams.has('k'))return;
+    url.searchParams.delete('gas');url.searchParams.delete('k');
+    history.replaceState({},document.title,url.pathname+(url.search||'')+(url.hash||''));
+  }catch(e){}
+}
+function rememberGasFromUrl(){
+  const packed=getQueryParam('k');
+  const plain=getQueryParam('gas');
+  const fromUrl=(packed?decodeGasParam(packed):plain)||'';
+  if(fromUrl&&/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec/i.test(fromUrl.trim())){
+    GAS_URL=fromUrl.trim();safeSet(localStorage,GASKEY,GAS_URL);
+  }
+  stripGasParamsFromAddressBar();
+}
 
 /* ---------- Google Apps Script code (Code.gs) shown/copyable from the settings page ---------- */
 const GAS_CODE = `/*
@@ -2593,27 +2659,78 @@ function normName(s){
   .replace(/ؤ/g,'و').replace(/ئ/g,'ي')           // unify hamza-on-carrier
 }
 
-/* ---------- password security ---------- */
+/* ---------- password security (ERP-grade: salted PBKDF2, not a bare hash) ---------- */
+const PBKDF2_ITERATIONS=150000; // OWASP-recommended order of magnitude for PBKDF2-SHA256 (2023+)
+function bytesToHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join('')}
+function hexToBytes(hex){const clean=String(hex||'');const out=new Uint8Array(clean.length/2);for(let i=0;i<out.length;i++)out[i]=parseInt(clean.substr(i*2,2),16);return out}
+/* Cryptographically strong random token/id generator (uid() elsewhere stays Math.random-based
+   for non-security display ids; every security-sensitive value — activation/reset tokens,
+   password salts — MUST go through this). */
+function genSecureToken(byteLength){
+  if(!window.crypto?.getRandomValues)throw new Error('هذا المتصفح لا يدعم توليد قيم عشوائية آمنة. استخدم Chrome أو Edge حديثًا.');
+  const arr=new Uint8Array(byteLength);
+  crypto.getRandomValues(arr);
+  return bytesToHex(arr);
+}
+async function pbkdf2Hash(value,saltHex,iterations){
+  if(!window.crypto?.subtle)throw new Error('هذا المتصفح لا يدعم تشفير كلمات المرور الآمن. استخدم Chrome أو Edge حديثًا.');
+  const keyMaterial=await crypto.subtle.importKey('raw',new TextEncoder().encode(String(value||'')),'PBKDF2',false,['deriveBits']);
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:hexToBytes(saltHex),iterations,hash:'SHA-256'},keyMaterial,256);
+  return bytesToHex(new Uint8Array(bits));
+}
+async function sha256Hex(value){
+  if(!window.crypto?.subtle)throw new Error('هذا المتصفح لا يدعم تشفير كلمات المرور الآمن. استخدم Chrome أو Edge حديثًا.');
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(value||'')));
+  return bytesToHex(new Uint8Array(digest));
+}
+/* New format: pbkdf2$<iterations>$<saltHex>$<hashHex> — salted + iterated, resistant to
+   offline dictionary/rainbow-table attacks unlike a bare unsalted SHA-256 digest. */
 async function hashPassword(value){
-  const text=String(value||'');
-  if(window.crypto?.subtle){
-    const data=new TextEncoder().encode(text);
-    const digest=await crypto.subtle.digest('SHA-256',data);
-    return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const salt=genSecureToken(16);
+  const hash=await pbkdf2Hash(value,salt,PBKDF2_ITERATIONS);
+  return 'pbkdf2$'+PBKDF2_ITERATIONS+'$'+salt+'$'+hash;
+}
+async function verifyPasswordHash(storedHash,password){
+  const stored=String(storedHash||'');
+  const value=String(password||'');
+  if(stored.startsWith('pbkdf2$')){
+    const parts=stored.split('$');
+    if(parts.length!==4)return false;
+    const iterations=parseInt(parts[1],10)||PBKDF2_ITERATIONS;
+    const salt=parts[2], expected=parts[3];
+    try{
+      const computed=await pbkdf2Hash(value,salt,iterations);
+      return computed.toLowerCase()===expected.toLowerCase();
+    }catch(e){return false}
   }
-  throw new Error('هذا المتصفح لا يدعم تشفير كلمات المرور الآمن. استخدم Chrome أو Edge حديثًا.');
+  // Legacy bare-SHA-256 hash (older file versions) — verified once, then upgraded below.
+  if(/^[0-9a-f]{64}$/i.test(stored)){
+    try{
+      const legacy=await sha256Hex(value);
+      return legacy.toLowerCase()===stored.toLowerCase();
+    }catch(e){return false}
+  }
+  return false;
 }
 async function verifyPassword(user,password){
   if(!user)return false;
   const value=String(password||'');
   if(user.passwordHash){
-    try{
-      const actual=String(user.passwordHash).trim().toLowerCase();
-      const computed=(await hashPassword(value)).trim().toLowerCase();
-      if(actual===computed)return true;
-    }catch(e){}
+    const ok=await verifyPasswordHash(user.passwordHash,value);
+    if(ok){
+      // Transparently upgrade legacy (unsalted) hashes to salted PBKDF2 on next successful login.
+      if(!String(user.passwordHash).startsWith('pbkdf2$')){
+        try{
+          user.passwordHash=await hashPassword(value);
+          safeSet(localStorage,UKEY,JSON.stringify(USERS));
+          if(GAS_URL)await syncPushNow();
+        }catch(e){}
+      }
+      return true;
+    }
+    return false;
   }
-  // Legacy accounts created by older versions.
+  // Legacy plaintext accounts created by very old versions.
   if(typeof user.password==='string'){
     const ok=user.password===value;
     if(ok){
@@ -2638,6 +2755,38 @@ async function migrateLegacyPasswords(){
     }
   }
   if(changed){safeSet(localStorage,UKEY,JSON.stringify(USERS));if(GAS_URL)await syncPushNow();}
+}
+/* ---------- password strength policy (ERP-grade minimum) ---------- */
+const PASSWORD_POLICY_MSG='كلمة المرور يجب ألا تقل عن 8 خانات، وتحتوي على حرف ورقم على الأقل.';
+function isStrongPassword(pass){
+  const v=String(pass||'');
+  return v.length>=8 && /[A-Za-z\u0600-\u06FF]/.test(v) && /[0-9]/.test(v);
+}
+/* ---------- account lockout after repeated failed logins (brute-force mitigation) ---------- */
+const LOGIN_MAX_ATTEMPTS=5;
+const LOGIN_LOCK_MINUTES=15;
+function isAccountLocked(user){
+  return !!(user && user.lockedUntil && Number(user.lockedUntil)>Date.now());
+}
+function accountLockRemainingMinutes(user){
+  return Math.max(1,Math.ceil((Number(user.lockedUntil)-Date.now())/60000));
+}
+async function registerFailedLogin(user){
+  user.failedAttempts=(Number(user.failedAttempts)||0)+1;
+  if(user.failedAttempts>=LOGIN_MAX_ATTEMPTS){
+    user.lockedUntil=Date.now()+LOGIN_LOCK_MINUTES*60000;
+    user.failedAttempts=0;
+  }
+  safeSet(localStorage,UKEY,JSON.stringify(USERS));
+  if(GAS_URL)await syncPushNow();
+}
+async function clearFailedLogins(user){
+  if(user.failedAttempts||user.lockedUntil){
+    user.failedAttempts=0;
+    user.lockedUntil=0;
+    safeSet(localStorage,UKEY,JSON.stringify(USERS));
+    if(GAS_URL)await syncPushNow();
+  }
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function digitsOnly(s){return String(s||'').replace(/\D/g,'')}
@@ -2829,6 +2978,18 @@ const MOVEMENT_STATUS_CODES={'1':'ناجحة','2':'مرفوضة','3':'قيد ا�
 
 /* ---------- roles ---------- */
 function isSuperAdmin(u){return !!u&&u.role==='superadmin'}
+/* =========================================================
+   فصل المهام على طريقة أنظمة ERP — الوحدات السيادية
+   ---------------------------------------------------------
+   الوحدات المذكورة أدناه محجوزة حصريًا للمدير الرئيسي للنظام، ولا يمكن منحها
+   لأي مستخدم آخر مهما كانت الصلاحيات المخزَّنة في حسابه أو الموروثة من نسخة
+   قديمة من البيانات. المنع هنا على مستوى نواة الصلاحيات (canModule/getPermissions)
+   وليس مجرد إخفاء أزرار من الواجهة، فلا ينفع معه تعديل الصلاحيات ولا فتح
+   Developer Tools ولا استدعاء الدوال يدويًا من الـ Console.
+   ========================================================= */
+const SOVEREIGN_MODULES=['syncData','accounts','backup'];
+function isSovereignModule(k){return SOVEREIGN_MODULES.indexOf(String(k||''))>-1}
+function denySovereign(msg){alert(msg||'غير مصرح: هذا الإجراء متاح للمدير الرئيسي للنظام فقط.');return false}
 function isActiveUser(u){return !!u&&(u.active!==false)}
 function isManagerRole(u){return !!u&&(u.role==='manager'||u.role==='superadmin')}
 function isFinance(u){return !!u&&u.role==='finance'}
@@ -2902,12 +3063,17 @@ function getPermissions(u){
    const legacy=p.modules&&p.modules[m.key];
    modules[m.key]={...d.modules[m.key],...(legacy||{})};
  });
+ /* تصفير الوحدات السيادية لأي حساب غير المدير الرئيسي — حتى لو كانت مفعّلة في
+    بيانات قديمة محفوظة على الجهاز أو على الشيت. */
+ if(!isSuperAdmin(u))SOVEREIGN_MODULES.forEach(k=>{modules[k]={view:false,add:false,edit:false,delete:false}});
  return {...d,...p,modules};
 }
 function canPermission(key,u=currentUser){return isSuperAdmin(u)||!!getPermissions(u)[key]}
 function canDonationType(type,u=currentUser){if(isSuperAdmin(u))return true;const p=getPermissions(u);const m=p.modules&&p.modules.donationModule||{};return type==='company'?!!m.companyDonations:!!m.individualDonations}
 function canModule(moduleKey,action='view',u=currentUser){
  if(isSuperAdmin(u))return true;
+ /* الوحدات السيادية (مزامنة البيانات / إدارة الحسابات) مرفوضة دائمًا لغير المدير الرئيسي. */
+ if(isSovereignModule(moduleKey))return false;
  // حساب الإدارة المالية له وصول مستقل إلى شاشة المراجعة، مع بقاء أزرار التنفيذ خاضعة للصلاحيات.
  if(moduleKey==='financeReview' && isFinance(u)) return action==='view' || action==='edit' || action==='delete';
  const p=getPermissions(u); return !!(p.modules&&p.modules[moduleKey]&&p.modules[moduleKey][action]);
@@ -3014,6 +3180,14 @@ async function loadAll(){
   const hasExplicitPortal=!!getQueryParam('portal');
   const isActivationLink=getQueryParam('activate')==='1'||getQueryParam('reset')==='1';
   if(USERS.length===0){
+    /* لا توجد حسابات على هذا الجهاز. لو كنا داخل رابط مستخدم فهذا يعني غالبًا
+       فشل الاتصال بالشيت أو خطأ في الربط — نعرض رسالة واضحة ونقفل الشاشة،
+       ولا نفتح شاشة إعداد المدير الرئيسي إطلاقًا. */
+    if(isUserPortalLink()){
+      showLogin();
+      showUserPortalLockdown('تعذّر تحميل بيانات النظام من Google Sheets. لا يمكن تسجيل الدخول حاليًا. يرجى التأكد من الاتصال بالإنترنت وإعادة فتح الرابط، أو التواصل مع مدير النظام.');
+      return;
+    }
     showLogin();
     openRegister(true);
     return;
@@ -3137,14 +3311,16 @@ function setConnStatus(s){
   else{el.textContent='تعذر الاتصال بجوجل شيت (يعمل النظام محليًا حاليًا)';el.className='conn-badge off'}
 }
 function saveGasUrl(){
-  if(!isSuperAdmin(currentUser))return;
+  /* المدير الرئيسي فقط — مع السماح أثناء التثبيت الأول (لا يوجد مستخدم بعد)
+     وبشرط ألا نكون داخل رابط مستخدم. */
+  if(!isSuperAdmin(currentUser) && !(!isUserPortalLink() && (setupCodeVerified || USERS.length===0)))return;
   const v=document.getElementById('gasUrlInput').value.trim();
   GAS_URL=v;safeSet(localStorage,GASKEY,GAS_URL);
   setConnStatus(GAS_URL?'connecting':'off');
   if(GAS_URL)testConnection();
 }
 async function testConnection(){
-  if(!isSuperAdmin(currentUser))return;
+  if(!isSuperAdmin(currentUser) && !(!isUserPortalLink() && (setupCodeVerified || USERS.length===0)))return;
   if(!GAS_URL){alert('يرجى إدخال رابط تطبيق جوجل شيت أولًا.');return}
   const ok=await syncPull({preserveLocalIfRemoteEmpty:true});
   alert(ok?'تم الاتصال بنجاح، وتمت مزامنة البيانات.':'تعذر الاتصال. تأكد من صحة الرابط، ومن نشر تطبيق الويب بصلاحية "Anyone".');
@@ -3161,6 +3337,7 @@ async function manualSync(){
 
 /* ---------- local cache recovery ---------- */
 async function openInitialAdminSetup(){
+  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   /* شاشة الإعداد متاحة كمدخل بصري من ملف HTML نفسه، لكن لا تمنح صلاحيات
      إدارية لمجرد فتح الرابط؛ الإنشاء الفعلي مقيد داخل openRegister/submitRegister. */
   try{
@@ -3177,13 +3354,16 @@ function returnToNormalLogin(){
   closeModal();
   document.getElementById('normalLoginArea')?.classList.remove('hidden');
   document.getElementById('activationArea')?.classList.add('hidden');
-  /* لا نُظهر أي خيارات إعداد للمدير أو حذف بيانات مؤقتة للمستخدم العادي. */
+  /* لا نُظهر أي خيارات إعداد للمدير أو حذف بيانات مؤقتة للمستخدم العادي.
+     كانت هذه الدالة تعيد إظهار روابط (نسيت كلمة المرور / التخزين المؤقت / البيانات)
+     بلا شرط، فتلتف على الإخفاء الأصلي — الآن لا تظهر إلا في بوابة المدير. */
   document.getElementById('loginMoreOptions')?.classList.add('hidden');
-  document.getElementById('loginNormalLinks')?.classList.remove('hidden');
+  if(isAdminPortal())document.getElementById('loginNormalLinks')?.classList.remove('hidden');
   const title=document.getElementById('loginSubtitle');
   if(title)title.textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
 }
 function clearTemporarySystemData(){
+  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   if(!confirm('سيتم حذف البيانات المؤقتة والمخزنة محليًا في هذا المتصفح الخاصة بالنظام، مع عدم حذف البيانات من Google Sheets. إذا كان الربط محفوظًا فسيتم إعادة تحميل البيانات من الشيت بعد ذلك. هل تريد المتابعة؟'))return;
   try{
     const keepGas=safeGet(localStorage,GASKEY)||getQueryParam('gas')||DEFAULT_GAS_URL||'';
@@ -3192,12 +3372,13 @@ function clearTemporarySystemData(){
     if(keepGas)safeSet(localStorage,GASKEY,keepGas);
     alert('تم حذف البيانات المؤقتة من هذا المتصفح. سيتم إعادة فتح النظام.');
     const base=window.location.href.split('?')[0];
-    const q=new URLSearchParams(); if(keepGas)q.set('gas',keepGas);
+    const q=new URLSearchParams(); if(keepGas)q.set('k',encodeGasParam(keepGas));
     window.location.replace(base+(q.toString()?'?'+q.toString():''));
   }catch(e){alert('تعذر حذف البيانات المؤقتة بالكامل.');}
 }
 
 function clearSystemCacheAndReload(){
+  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   const gas=safeGet(localStorage,GASKEY)||getQueryParam('gas')||DEFAULT_GAS_URL||'';
   if(!confirm('سيتم مسح التخزين المحلي الخاص بالنظام والجلسة الحالية، ثم إعادة تحميل البيانات من Google Sheets إذا كان الربط محفوظًا. لن يتم حذف البيانات من Google Sheets. هل تريد المتابعة؟'))return;
   try{
@@ -3212,7 +3393,7 @@ function clearSystemCacheAndReload(){
   if(gas)safeSet(localStorage,GASKEY,gas);
   const base=window.location.href.split('?')[0];
   const q=new URLSearchParams();
-  if(gas)q.set('gas',gas);
+  if(gas)q.set('k',encodeGasParam(gas));
   if(PORTAL_MODE==='admin')q.set('portal','admin');
   window.location.replace(base+(q.toString()?'?'+q.toString():''));
 }
@@ -3296,6 +3477,13 @@ async function login(){
     return;
   }
 
+  // Brute-force mitigation: block login attempts while the account is temporarily locked,
+  // regardless of whether the password entered this time is correct.
+  if(isAccountLocked(found)){
+    alert('تم قفل هذا الحساب مؤقتًا بعد عدة محاولات دخول خاطئة. يرجى المحاولة مرة أخرى بعد '+accountLockRemainingMinutes(found)+' دقيقة، أو التواصل مع مدير النظام.');
+    return;
+  }
+
   let ok=false;
   try{
     ok=await verifyLegacyPassword(found,p);
@@ -3304,9 +3492,16 @@ async function login(){
   }
 
   if(!ok){
-    alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
+    try{await registerFailedLogin(found);}catch(e){}
+    if(isAccountLocked(found)){
+      alert('تم قفل هذا الحساب مؤقتًا بعد عدة محاولات دخول خاطئة. يرجى المحاولة مرة أخرى بعد '+accountLockRemainingMinutes(found)+' دقيقة، أو التواصل مع مدير النظام.');
+    }else{
+      alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
+    }
     return;
   }
+
+  await clearFailedLogins(found);
 
   if(userInput)userInput.value='';
   if(passInput)passInput.value='';
@@ -3325,6 +3520,18 @@ function finalizeLogin(user){
 }
 
 function logout(){safeRemove(sessionStorage,SESSION);currentUser=null;showLogin()}
+/* ---------- idle-session auto-logout (ERP-grade session hygiene) ---------- */
+const SESSION_IDLE_LIMIT_MS=20*60000; // 20 minutes of inactivity
+let lastActivityAt=Date.now();
+['click','keydown','mousemove','touchstart'].forEach(evt=>{
+  document.addEventListener(evt,()=>{lastActivityAt=Date.now();},{passive:true});
+});
+setInterval(()=>{
+  if(currentUser && Date.now()-lastActivityAt>SESSION_IDLE_LIMIT_MS){
+    logout();
+    alert('تم تسجيل خروجك تلقائيًا بسبب عدم النشاط لحماية الحساب. يرجى تسجيل الدخول مرة أخرى.');
+  }
+},60000);
 function showApp(){
   document.getElementById('loginScreen').classList.add('hidden');document.getElementById('app').classList.remove('hidden');
   document.getElementById('welcome').textContent='مرحبًا '+currentUser.fullName+' — '+userRoleLabel(currentUser);
@@ -3361,6 +3568,7 @@ function showApp(){
 
 /* ---------- first-time setup (hidden behind a secret code) ---------- */
 function openSetupCode(){
+  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   /* لا يوجد شرط "لازم تكون مسجل دخول بالفعل" هنا عمدًا: الغرض الأساسي من هذه
      الشاشة هو استرجاع الوصول بالضبط في الحالة اللي فيها المستخدم مش قادر
      يسجّل دخول. البوابة الأمنية الحقيقية هي معرفة SETUP_CODE في verifySetupCode. */
@@ -3369,9 +3577,22 @@ function openSetupCode(){
   <div class="field"><label>رمز الإعداد</label><input id="setupCodeInput" type="password" autocomplete="off"></div>
   <div class="modal-actions"><button class="btn-primary" onclick="verifySetupCode()">متابعة</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
 }
-function verifySetupCode(){
+let setupCodeFailCount=0, setupCodeLockedUntil=0;
+async function verifySetupCode(){
+  if(setupCodeLockedUntil>Date.now()){
+    alert('محاولات كثيرة خاطئة. يرجى الانتظار قليلًا ثم إعادة المحاولة.');
+    return;
+  }
   const v=(document.getElementById('setupCodeInput').value||'').trim();
-  if(v!==SETUP_CODE){alert('رمز الإعداد غير صحيح.');return}
+  let hash='';
+  try{hash=await sha256Hex(v);}catch(e){alert('تعذر التحقق من الرمز في هذا المتصفح.');return}
+  if(!v || hash!==SETUP_CODE_HASH){
+    setupCodeFailCount++;
+    if(setupCodeFailCount>=5){setupCodeLockedUntil=Date.now()+5*60000;setupCodeFailCount=0;}
+    alert('رمز الإعداد غير صحيح.');
+    return;
+  }
+  setupCodeFailCount=0;
   setupCodeVerified=true;
   closeModal();openRegister(true);
 }
@@ -3383,6 +3604,12 @@ function managerCategoryOptions(selected){
 function openRegister(forceSuper){
   const isFirst=USERS.length===0;
   const locked=forceSuper||isFirst;
+  /* حاجز صارم: شاشة إنشاء/استعادة المدير الرئيسي لا تُفتح أبدًا من رابط مستخدم،
+     ولا حتى عندما تكون قائمة المستخدمين فارغة بسبب فشل المزامنة مع الشيت. */
+  if(locked && isUserPortalLink() && !isSuperAdmin(currentUser) && !setupCodeVerified){
+    alert('غير مصرح: إعداد أو استعادة حساب المدير الرئيسي غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');
+    return;
+  }
   if(!locked && !isSuperAdmin(currentUser)){alert('إضافة الحسابات (موظفين أو مديرين) متاحة للمدير الرئيسي للنظام فقط.');return}
   if(!locked){
     // إضافة موظف/مستخدم جديد: تم إلغاء خطوة رمز تحقق SMS نهائيًا، وأصبحت كلمة مرور المدير الرئيسي
@@ -3403,7 +3630,7 @@ function openRegister(forceSuper){
   <div class="field"><label>رقم الهاتف</label><input id="r_phone" type="tel"></div>
   <div class="field"><label>اسم المستخدم</label><input id="r_username"></div>
   <div class="grid2">
-   <div class="field"><label>كلمة المرور</label><input id="r_pass" type="password"></div>
+   <div class="field"><label>كلمة المرور</label><input id="r_pass" type="password" minlength="8" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
    <div class="field"><label>تأكيد كلمة المرور</label><input id="r_pass2" type="password"></div>
   </div>
   <div class="field"><label>سؤال الأمان</label><input id="r_secq"></div>
@@ -3461,6 +3688,11 @@ function toggleRegisterCategoryField(){
 async function submitRegister(locked){
   const isFirst=USERS.length===0;
   if(locked){
+    /* ثغرة مغلقة: كان \"التثبيت الأول\" (USERS فارغة) يسمح بإنشاء مدير رئيسي بدون
+       أي رمز إعداد. لو فشلت المزامنة مع الشيت على جهاز مستخدم، كانت قائمة
+       المستخدمين تصبح فارغة ويستطيع أي شخص يفتح رابطه إنشاء حساب مدير رئيسي.
+       الآن مسار التثبيت الأول ممنوع نهائيًا من روابط المستخدمين. */
+    if(isUserPortalLink() && !isSuperAdmin(currentUser) && !setupCodeVerified){alert('غير مصرح: لا يمكن إنشاء حساب المدير الرئيسي من رابط المستخدم.');return;}
     if(!isFirst && !isSuperAdmin(currentUser) && !setupCodeVerified){alert('غير مصرح: إنشاء حساب المدير الرئيسي متاح فقط أثناء التثبيت الأول أو بعد تسجيل الدخول بالمدير الرئيسي أو بعد التحقق من رمز الإعداد السري.');return;}
   }else if(!isSuperAdmin(currentUser)){
     alert('غير مصرح: إضافة الحسابات متاحة للمدير الرئيسي للنظام فقط.');return;
@@ -3481,7 +3713,7 @@ async function submitRegister(locked){
   if(locked){
     const pass=document.getElementById('r_pass').value, pass2=document.getElementById('r_pass2').value;
     const secQuestion=document.getElementById('r_secq').value.trim(), secAnswer=document.getElementById('r_seca').value.trim();
-    if(!pass||pass.length<4){alert('يرجى إدخال كلمة مرور من 4 خانات على الأقل.');return}
+    if(!pass||!isStrongPassword(pass)){alert(PASSWORD_POLICY_MSG);return}
     if(pass!==pass2){alert('كلمة المرور وتأكيدها غير متطابقين.');return}
     if(!secQuestion||!secAnswer){alert('يرجى إدخال سؤال الأمان وإجابته.');return}
     payload={id:uid(),fullName:name,phone,username,passwordHash:await hashPassword(pass),role,managerCategory,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:secQuestion,securityAnswer:secAnswer,activated:true};
@@ -3489,7 +3721,7 @@ async function submitRegister(locked){
     setupCodeVerified=false;
     closeModal(); showApp(); alert('تم إنشاء حساب المدير الرئيسي للنظام بنجاح.'); return;
   }
-  payload={id:uid(),fullName:name,phone,username,passwordHash:'',role,managerCategory,followScope,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:'',securityAnswer:'',activated:false,activationToken:uid()+uid(),phoneVerified:false};
+  payload={id:uid(),fullName:name,phone,username,passwordHash:'',role,managerCategory,followScope,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:'',securityAnswer:'',activated:false,activationToken:genSecureToken(24),phoneVerified:false};
   requireSuperAdminConfirm('addAccount',payload,'إضافة حساب "'+name+'" ('+roleLabel(role)+')');
 }
 async function executeAddAccount(payload){
@@ -3506,6 +3738,7 @@ function copyActivationLink(id){
 
 /* ---------- forgot password (self-service: username, then answer the security question set by the system admin) ---------- */
 function openForgot(){
+  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   openModal(`<h3>نسيت كلمة المرور</h3>
   <p class="small-note">أدخل اسم المستخدم لعرض سؤال الأمان الخاص بحسابك.</p>
   <div class="field"><label>اسم المستخدم</label><input id="fg_username_in"></div>
@@ -3541,7 +3774,7 @@ function verifySecurityAnswer(){
   openModal(`<h3>تعيين كلمة مرور جديدة</h3>
   <p class="small-note">اسم المستخدم: <b>${escapeHtml(user.username)}</b></p>
   <div class="grid2">
-   <div class="field"><label>كلمة المرور الجديدة</label><input id="fg_pass" type="password"></div>
+   <div class="field"><label>كلمة المرور الجديدة</label><input id="fg_pass" type="password" minlength="8" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
    <div class="field"><label>تأكيد كلمة المرور</label><input id="fg_pass2" type="password"></div>
   </div>
   <div class="modal-actions"><button class="btn-primary" onclick="confirmReset()">تأكيد وتغيير كلمة المرور</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
@@ -3551,7 +3784,7 @@ async function confirmReset(){
   const user=USERS.find(u=>u.id===pendingReset.id);
   if(!user){alert('حدث خطأ، حاول مرة أخرى.');pendingReset=null;closeModal();return}
   const pass=document.getElementById('fg_pass').value, pass2=document.getElementById('fg_pass2').value;
-  if(!pass||pass.length<4){alert('يرجى إدخال كلمة مرور من 4 خانات على الأقل.');return}
+  if(!pass||!isStrongPassword(pass)){alert(PASSWORD_POLICY_MSG);return}
   if(pass!==pass2){alert('كلمة المرور وتأكيدها غير متطابقين.');return}
   user.passwordHash=await hashPassword(pass);delete user.password;
   await saveUsersReliable();pendingReset=null;closeModal();
@@ -3565,7 +3798,7 @@ function openChangePassword(){
   <p class="small-note">أدخل كلمة المرور الحالية، ثم كلمة المرور الجديدة مرتين للتأكيد.</p>
   <div class="field"><label>كلمة المرور الحالية</label><input id="cp_old" type="password" autocomplete="current-password"></div>
   <div class="grid2">
-   <div class="field"><label>كلمة المرور الجديدة</label><input id="cp_new" type="password" autocomplete="new-password"></div>
+   <div class="field"><label>كلمة المرور الجديدة</label><input id="cp_new" type="password" autocomplete="new-password" minlength="8" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
    <div class="field"><label>تأكيد كلمة المرور الجديدة</label><input id="cp_new2" type="password" autocomplete="new-password"></div>
   </div>
   <div class="modal-actions"><button class="btn-primary" onclick="submitChangePassword()">حفظ كلمة المرور</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
@@ -3577,7 +3810,7 @@ async function submitChangePassword(){
   const newPass2=document.getElementById('cp_new2').value;
   if(!oldPass){alert('يرجى إدخال كلمة المرور الحالية.');return}
   if(!(await verifyPassword(currentUser,oldPass))){alert('كلمة المرور الحالية غير صحيحة.');return}
-  if(!newPass||newPass.length<4){alert('كلمة المرور الجديدة يجب ألا تقل عن 4 خانات.');return}
+  if(!newPass||!isStrongPassword(newPass)){alert(PASSWORD_POLICY_MSG);return}
   if(newPass===oldPass){alert('يرجى اختيار كلمة مرور جديدة مختلفة عن الحالية.');return}
   if(newPass!==newPass2){alert('كلمتا المرور الجديدتان غير متطابقتين.');return}
   currentUser.passwordHash=await hashPassword(newPass);
@@ -3640,6 +3873,8 @@ function renderHomeDashboard(){
 
 function setView(v){
   if(!currentUser)return;
+  /* حاجز إضافي: لا يمكن فتح شاشة وحدة سيادية بالاستدعاء المباشر لغير المدير الرئيسي. */
+  if(isSovereignModule(v)&&!isSuperAdmin(currentUser)){denySovereign('غير مصرح: هذه الشاشة متاحة للمدير الرئيسي للنظام فقط.');v='home';}
   if(v==='newdonors'||v==='monthlydonors') v='donors';
   if(!canModule(v,'view',currentUser)){
     const fallback=PERMISSION_MODULES.find(m=>canModule(m.key,'view',currentUser));
@@ -3733,6 +3968,10 @@ function openUserPermissions(id){
  const moduleRows=PERMISSION_MODULES.map(m=>{
    const mp=p.modules&&p.modules[m.key]||{};
    const allChecked=['view','add','edit','delete'].every(k=>mp[k]);
+   /* وحدة سيادية: تُعرض مقفلة ولا يمكن منحها لأي حساب. */
+   if(isSovereignModule(m.key)){
+     return `<tr style="opacity:.62"><td><b>${escapeHtml(m.label)}</b><br><span class="small-note">🔒 للمدير الرئيسي فقط</span></td><td colspan="5" class="small-note">هذه الوحدة محجوزة لحساب المدير الرئيسي للنظام ولا يمكن منحها لأي مستخدم آخر.</td></tr>`;
+   }
    return `<tr><td><b>${escapeHtml(m.label)}</b></td>${[['view','عرض'],['add','إضافة'],['edit','تعديل'],['delete','حذف']].map(([k,l])=>`<td><label class="user-chip" style="display:inline-flex;justify-content:center"><input type="checkbox" data-module="${m.key}" data-action="${k}" ${mp[k]?'checked':''} onchange="syncModuleRowAllCheckbox('${m.key}')"> ${l}</label></td>`).join('')}<td><label class="user-chip" style="display:inline-flex;justify-content:center"><input type="checkbox" data-module-all="${m.key}" ${allChecked?'checked':''} onchange="toggleModuleRowPermissions('${m.key}',this.checked)"> تحديد الكل</label></td></tr>`;
  }).join('');
  openModal(`<h3>تعديل الصلاحيات — ${escapeHtml(u.fullName)}</h3>
@@ -3814,8 +4053,8 @@ async function executeEditUsername(payload){
   const old=u.username;
   u.username=nu;
   // Changing a username invalidates old activation/reset links so an old URL cannot target the renamed account.
-  if(u.activationToken)u.activationToken=uid()+uid();
-  if(u.resetToken)u.resetToken=uid()+uid();
+  if(u.activationToken)u.activationToken=genSecureToken(24);
+  if(u.resetToken)u.resetToken=genSecureToken(24);
   await saveUsersReliable();
   if(currentUser.id===u.id)currentUser=u;
   closeModal();
@@ -3826,7 +4065,7 @@ async function executeEditUsername(payload){
 function resetUserPassword(id){
   if(!isSuperAdmin(currentUser))return;
   const u=USERS.find(x=>x.id===id);if(!u||u.role==='superadmin')return;
-  const token=uid()+uid();
+  const token=genSecureToken(24);
   requireSuperAdminConfirm('resetPassword',{id,resetToken:token},'إصدار رابط آمن لتعيين كلمة مرور جديدة لـ "'+u.fullName+'"');
 }
 async function executeResetPassword(payload){
@@ -3961,6 +4200,11 @@ async function executeFactoryReset(){
 
 /* ---------- backup / restore ---------- */
 function exportBackup(){
+  /* النسخة الاحتياطية تحتوي على كل الحسابات — تنزيلها للمدير الرئيسي فقط. */
+  if(!isSuperAdmin(currentUser)){denySovereign('غير مصرح: تنزيل النسخة الاحتياطية متاح للمدير الرئيسي للنظام فقط.');return}
+  /* ملاحظة: النسخة تحتفظ ببصمات كلمات المرور وأسئلة الأمان لأن الاستعادة بدونها
+     تُنتج حسابات لا يمكن الدخول بها — ولهذا بالتحديد صار تنزيلها واستعادتها
+     حكرًا على المدير الرئيسي، ويجب حفظ الملف في مكان آمن. */
   const payload={exportedAt:new Date().toISOString(),companyConfig,companies,users:USERS.map(u=>{const x={...u};delete x.password;return x}),donors,projects,channels,intentions,managerCategories};
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
   const a=document.createElement('a');
@@ -3970,6 +4214,9 @@ function exportBackup(){
 }
 function restoreBackup(file){
   if(!file)return;
+  /* الاستعادة تستبدل كل الحسابات — وبالتالي هي مسار تصعيد صلاحيات كامل.
+     مسموحة للمدير الرئيسي فقط. */
+  if(!isSuperAdmin(currentUser)){denySovereign('غير مصرح: استعادة النسخة الاحتياطية متاحة للمدير الرئيسي للنظام فقط.');return}
   if(!confirm('سيتم استبدال كل البيانات الحالية (الحسابات والمتبرعين والمشاريع والقنوات) بمحتوى الملف المستورد. هل تريد المتابعة؟'))return;
   const r=new FileReader();
   r.onload=async ev=>{
@@ -6185,8 +6432,10 @@ function openChannelDetails(name){
 
 /* ---------- Google Sheets sync view ---------- */
 function renderSyncDataView(){
-  const canEdit=canModule('syncData','edit',currentUser);
   const isSuper=isSuperAdmin(currentUser);
+  /* رابط الشيت وأدوات المزامنة للمدير الرئيسي فقط — لا يُكتب الرابط في الـ DOM
+     لأي حساب آخر، حتى لا يظهر عبر Inspector أو نسخ محتوى الصفحة. */
+  const canEdit=isSuper&&canModule('syncData','edit',currentUser);
   const input=document.getElementById('syncGasUrlInput');
   const note=document.getElementById('syncGasUrlHiddenNote');
   if(input){
@@ -6194,7 +6443,7 @@ function renderSyncDataView(){
       input.type='url';input.value=GAS_URL||'';input.readOnly=false;
       input.classList.remove('hidden');note?.classList.add('hidden');if(note)note.style.display='none';
     }else{
-      input.type='password';input.value=GAS_URL?'••••••••••••••••••••':'';input.readOnly=true;
+      input.type='password';input.value='';input.readOnly=true;input.disabled=true;
       input.classList.add('hidden');if(note){note.style.display='';}
     }
   }
@@ -7743,6 +7992,7 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
 
 
 async function chromeLoginRecovery(){
+  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   try{safeRemove(sessionStorage,SESSION)}catch(e){}
   restoreLocalUsersIfMissing();
   try{
