@@ -2058,7 +2058,12 @@ function safeSet(store,key,value){try{store.setItem(key,value)}catch(e){MEMORY_S
 function safeRemove(store,key){try{store.removeItem(key)}catch(e){delete MEMORY_STORAGE[key]}}
 function getQueryParam(name){try{return new URLSearchParams(window.location.search).get(name)||''}catch(e){const m=String(window.location.search||'').match(new RegExp('[?&]'+name+'=([^&]*)'));return m?decodeURIComponent(m[1]):''}}
 const PORTAL_MODE=(getQueryParam('portal')||'user').toLowerCase();
-function isAdminPortal(){return PORTAL_MODE==='admin' && isSuperAdmin(currentUser)}
+/* ملحوظة: isAdminPortal() تتحكم فقط في إظهار الروابط المخفية بشاشة الدخول
+   (وليست تصريحًا فعليًا بأي صلاحية) — البوابة الأمنية الحقيقية تظل SETUP_CODE
+   داخل verifySetupCode. لازم تعتمد فقط على ?portal=admin في الرابط، وليس على
+   كون المستخدم مسجل دخول بالفعل كمدير رئيسي، وإلا تصبح شاشة الاسترجاع نفسها
+   غير قابلة للوصول أصلًا لمن فقد وصوله (وهو بالضبط الغرض منها). */
+function isAdminPortal(){return PORTAL_MODE==='admin'}
 function makeActivationLink(u){
   if(!u||!u.username||!u.activationToken)return '';
   const base=window.location.href.split('?')[0];
@@ -3356,14 +3361,15 @@ function showApp(){
 
 /* ---------- first-time setup (hidden behind a secret code) ---------- */
 function openSetupCode(){
-  if(USERS.length>0 && !isSuperAdmin(currentUser)){alert('إنشاء أو استعادة حساب المدير الرئيسي متاح فقط بعد تسجيل الدخول بالمدير الرئيسي.');return}
+  /* لا يوجد شرط "لازم تكون مسجل دخول بالفعل" هنا عمدًا: الغرض الأساسي من هذه
+     الشاشة هو استرجاع الوصول بالضبط في الحالة اللي فيها المستخدم مش قادر
+     يسجّل دخول. البوابة الأمنية الحقيقية هي معرفة SETUP_CODE في verifySetupCode. */
   openModal(`<h3>إنشاء / استعادة حساب المدير الرئيسي للنظام</h3>
   <p class="small-note">استخدم هذا الخيار عند بدء النظام لأول مرة، أو إذا فقدت الوصول إلى حساب المدير الرئيسي بعد ربط Google Sheets. أدخل رمز الإعداد السري.</p>
   <div class="field"><label>رمز الإعداد</label><input id="setupCodeInput" type="password" autocomplete="off"></div>
   <div class="modal-actions"><button class="btn-primary" onclick="verifySetupCode()">متابعة</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
 }
 function verifySetupCode(){
-  if(USERS.length>0 && !isSuperAdmin(currentUser)){alert('غير مصرح: يجب تسجيل الدخول بحساب المدير الرئيسي أولًا.');closeModal();return}
   const v=(document.getElementById('setupCodeInput').value||'').trim();
   if(v!==SETUP_CODE){alert('رمز الإعداد غير صحيح.');return}
   setupCodeVerified=true;
