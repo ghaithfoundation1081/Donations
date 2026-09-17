@@ -854,6 +854,8 @@ body{overflow:hidden!important;}
 #activationArea .field{margin-bottom:12px}
 </style>
 <style>
+/* Sync performance: background requests never block the workspace. */
+#globalSyncSpinner{will-change:opacity;}
 /* === DONATION MODULE: New Donation + Donation Records === */
 .donation-module-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 .donation-module-tab{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 18px;font-weight:800;color:var(--muted);cursor:pointer}
@@ -3270,27 +3272,34 @@ function __syncIndicatorHide(){
    المحلية وتفقد التعديل — وهذا هو سبب اختفاء التكويد الجديد من تلقاء نفسه سابقًا. */
 let __localDirty=false;
 
-/* ---------- تحديث دوري في الخلفية ----------
-   المتصفح كان قبل كده لا يتحدث إلا عند فتح الصفحة لأول مرة، فلو ظل مفتوحًا لفترة
-   طويلة تصبح بياناته قديمة دون أن يشعر المستخدم. تم تقليل الفاصل الزمني من 20
-   ثانية إلى 5 ثوانٍ ليكون أقرب للمزامنة الفورية بين كل أجهزة/مستخدمي النظام،
-   بالإضافة إلى تشغيله فور عودة المستخدم للصفحة (تبديل التبويب أو التركيز على
-   النافذة) حتى يرى أي تكويد أضافه مستخدم آخر مباشرة دون انتظار. يتوقف تلقائيًا
-   أثناء وجود نافذة منبثقة مفتوحة حتى لا يقاطع المستخدم أثناء إدخال بيانات. */
+/* ---------- مزامنة خلفية غير معيقة ----------
+   لا يوجد Pull كل 5 ثوانٍ؛ هذا كان يفتح طلبًا متكررًا إلى Google Sheets ويعرض
+   طبقة "جارٍ تحديث البيانات..." فوق النظام. المزامنة الخلفية الآن صامتة، ولا تعمل
+   إلا عند الحاجة/العودة للنافذة، وبفاصل حماية زمني، ولا تعيد الرسم إذا لم تتغير
+   البيانات. */
 let __bgSyncInFlight=false;
-async function __backgroundFreshnessSync(){
+let __lastBgSyncAt=0;
+const __BG_SYNC_MIN_INTERVAL=60000; // دقيقة واحدة كحد أدنى بين عمليات السحب الخلفية
+
+async function __backgroundFreshnessSync(force=false){
   if(__bgSyncInFlight||!GAS_URL||!currentUser)return;
-  if(document.getElementById('overlay'))return; /* لا تقاطع نافذة مفتوحة */
+  if(document.getElementById('overlay'))return;
+  const now=Date.now();
+  if(!force && now-__lastBgSyncAt<__BG_SYNC_MIN_INTERVAL)return;
+  __lastBgSyncAt=now;
   __bgSyncInFlight=true;
-  try{await syncPull({preserveLocalIfRemoteEmpty:true});
-    if(typeof render==='function')try{render()}catch(e){}
-    if(currentView==='financeReview'&&typeof renderFinanceReview==='function')try{renderFinanceReview()}catch(e){}
+  try{
+    const changed=await syncPull({preserveLocalIfRemoteEmpty:true, silent:true});
+    if(changed){
+      if(typeof render==='function')try{render()}catch(e){}
+      if(currentView==='financeReview'&&typeof renderFinanceReview==='function')try{renderFinanceReview()}catch(e){}
+    }
   }catch(e){}
-  __bgSyncInFlight=false;
+  finally{__bgSyncInFlight=false;}
 }
-setInterval(__backgroundFreshnessSync,5000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)__backgroundFreshnessSync()});
-window.addEventListener('focus',__backgroundFreshnessSync);
+/* فحص خفيف عند العودة للنافذة بدل polling مستمر. */
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)__backgroundFreshnessSync(false)});
+window.addEventListener('focus',()=>__backgroundFreshnessSync(false));
 
 /* ---------- Google Sheets sync ---------- */
 function gasCall(action,payload){
@@ -3326,38 +3335,37 @@ function gasFormPost(action,payload){
 async function syncPull(options){
   if(!GAS_URL)return false;
   options=options||{};
-  // حماية جوهرية ضد اختفاء التعديلات الجديدة: لو فيه تعديل محلي (تكويد جديد مثلًا)
-  // لم يُرفع بعد للخادم، لازم نرفعه أولًا قبل أي سحب، وإلا فالسحب هيرجّع النسخة
-  // القديمة من الخادم ويمسح التعديل المحلي بمجرد استبدال المصفوفات بالكامل.
+  const silent=!!options.silent;
+
+  /* لا تسحب نسخة الخادم أثناء وجود تعديل محلي غير مرفوع. */
   if(__localDirty && !options.forceOverwriteLocal){
     clearTimeout(pushTimer);
-    const pushedFirst=await syncPushNow();
-    if(!pushedFirst){
-      // تعذّر رفع التعديل المحلي (لا يوجد اتصال مثلًا): نتوقف عن السحب فورًا
-      // حتى لا تُفقد بيانات لم تُحفظ على الخادم بعد.
-      return false;
-    }
+    const pushedFirst=await syncPushNow({silent});
+    if(!pushedFirst)return false;
   }
-  __syncIndicatorShow('جارٍ تحديث البيانات...');
+
+  if(!silent)__syncIndicatorShow('جارٍ تحديث البيانات...');
   try{
-    setConnStatus('connecting');let data;
+    setConnStatus('connecting');
+    let data;
     try{data=await gasCall('getAll')}catch(e){data=await gasJsonpGet()}
     if(!data||data.error)throw new Error(data&&data.error||'فشل الاتصال');
 
-    // حماية مهمة: لا تسمح لنسخة Google Sheets الفارغة بمسح بيانات الجهاز.
-    // هذه الحماية مفعّلة دائمًا افتراضيًا، إلا إذا طلب المستخدم صراحةً استبدال بيانات
-    // الجهاز ببيانات الشيت عبر options.forceOverwriteLocal (زر "استيراد بيانات الشيت إلى النظام").
     if(!hasRemoteData(data) && hasLocalData() && !options.forceOverwriteLocal){
       if(options.preserveLocalIfRemoteEmpty){
-        const pushed=await syncPushNow();
-        if(!pushed) throw new Error('بيانات Google Sheets فارغة ولم نتمكن من رفع النسخة الموجودة على الجهاز.');
+        const pushed=await syncPushNow({silent});
+        if(!pushed)throw new Error('بيانات Google Sheets فارغة ولم نتمكن من رفع النسخة الموجودة على الجهاز.');
         setConnStatus('on');
-        return true;
+        return false;
       }
-      // لا يوجد طلب صريح باستبدال بيانات الجهاز: نتوقف فورًا بدون لمس بيانات الجهاز لحمايتها.
       setConnStatus('off');
       return false;
     }
+
+    /* توقيع بسيط للبيانات قبل الاستبدال لمنع إعادة الرسم عند عدم وجود تغيير. */
+    const beforeSignature=JSON.stringify({
+      users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig
+    });
 
     USERS=Array.isArray(data.users)?data.users:USERS;
     donors=Array.isArray(data.donors)?data.donors:donors;
@@ -3373,31 +3381,104 @@ async function syncPull(options){
     intentions=Array.isArray(data.intentions)&&data.intentions.length?data.intentions:intentions;
     managerCategories=Array.isArray(data.managerCategories)&&data.managerCategories.length?data.managerCategories:managerCategories;
     ensureSuperAdmin();
-    safeSet(localStorage,UKEY,JSON.stringify(USERS));safeSet(localStorage,DKEY,JSON.stringify(donors));safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));safeSet(localStorage,PKEY,JSON.stringify(projects));safeSet(localStorage,CKEY,JSON.stringify(channels));safeSet(localStorage,IKEY,JSON.stringify(intentions));safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));
-    lastSyncAt=new Date().toISOString();safeSet(localStorage,SYNCKEY,lastSyncAt);setConnStatus('on');return true;
-  }catch(e){setConnStatus('off');return false}
-  finally{__syncIndicatorHide()}
+
+    const afterSignature=JSON.stringify({
+      users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig
+    });
+    const changed=beforeSignature!==afterSignature;
+
+    if(changed){
+      safeSet(localStorage,UKEY,JSON.stringify(USERS));
+      safeSet(localStorage,DKEY,JSON.stringify(donors));
+      safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));
+      safeSet(localStorage,PKEY,JSON.stringify(projects));
+      safeSet(localStorage,CKEY,JSON.stringify(channels));
+      safeSet(localStorage,IKEY,JSON.stringify(intentions));
+      safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));
+      safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));
+    }
+
+    lastSyncAt=new Date().toISOString();
+    safeSet(localStorage,SYNCKEY,lastSyncAt);
+    setConnStatus('on');
+    return changed;
+  }catch(e){
+    setConnStatus('off');
+    return false;
+  }finally{
+    if(!silent)__syncIndicatorHide();
+  }
 }
+
 let pushTimer=null;
+let __pushInFlight=false;
+let __pushQueued=false;
+let __localRevision=0;
+
 function syncPushDebounced(){
   __localDirty=true;
+  __localRevision++;
   if(!GAS_URL)return;
   clearTimeout(pushTimer);
-  pushTimer=setTimeout(syncPushNow,300);
+  /* ننتظر 1.5 ثانية بعد آخر تعديل بدل إطلاق طلب لكل نقرة/تعديل. */
+  pushTimer=setTimeout(()=>syncPushNow({silent:true}),1500);
 }
-async function syncPushNow(){
+
+async function syncPushNow(options){
+  options=options||{};
   if(!GAS_URL)return false;
+
   clearTimeout(pushTimer);
-  __syncIndicatorShow('جارٍ حفظ التعديلات...');
+
+  /* لا نبدأ طلب حفظ ثانٍ بالتوازي مع الأول. */
+  if(__pushInFlight){
+    __pushQueued=true;
+    return true;
+  }
+
+  __pushInFlight=true;
+  const revisionAtStart=__localRevision;
+  const payload={
+    users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig
+  };
+
+  if(!options.silent)__syncIndicatorShow('جارٍ حفظ التعديلات...');
   try{
-    setConnStatus('connecting');let res;
-    try{res=await gasCall('saveAll',{users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig})}catch(e){res=await gasFormPost('saveAll',{users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig})}
+    setConnStatus('connecting');
+    let res;
+    try{
+      res=await gasCall('saveAll',payload);
+    }catch(e){
+      res=await gasFormPost('saveAll',payload);
+    }
     if(!res||res.error)throw new Error(res&&res.error||'فشل الحفظ');
-    __localDirty=false;
-    lastSyncAt=new Date().toISOString();safeSet(localStorage,SYNCKEY,lastSyncAt);setConnStatus('on');return true;
-  }catch(e){setConnStatus('off');return false}
-  finally{__syncIndicatorHide()}
+
+    /* لو حدث تعديل أثناء الطلب، لا نمسح علامة dirty ونفقد التعديل الجديد. */
+    if(__localRevision===revisionAtStart){
+      __localDirty=false;
+      lastSyncAt=new Date().toISOString();
+      safeSet(localStorage,SYNCKEY,lastSyncAt);
+    }else{
+      __localDirty=true;
+      clearTimeout(pushTimer);
+      pushTimer=setTimeout(()=>syncPushNow({silent:true}),1500);
+    }
+    setConnStatus('on');
+    return true;
+  }catch(e){
+    setConnStatus('off');
+    return false;
+  }finally{
+    __pushInFlight=false;
+    if(!options.silent)__syncIndicatorHide();
+    if(__pushQueued){
+      __pushQueued=false;
+      clearTimeout(pushTimer);
+      pushTimer=setTimeout(()=>syncPushNow({silent:true}),300);
+    }
+  }
 }
+
 function setConnStatus(s){
   const el=document.getElementById('connBadge');if(!el)return;
   if(!GAS_URL){el.textContent='غير مرتبط بجوجل شيت';el.className='conn-badge off';return}
@@ -6526,7 +6607,7 @@ function saveSyncGasUrl(){
 async function testSyncConnection(){
   if(!canModule('syncData','edit',currentUser))return;
   if(!GAS_URL){alert('يرجى إدخال رابط Google Sheets أولًا.');return}
-  updateSyncViewBadge('connecting');const ok=await syncPull({preserveLocalIfRemoteEmpty:true});updateSyncViewBadge(ok?'on':'off');
+  updateSyncViewBadge('connecting');const ok=await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});updateSyncViewBadge(ok?'on':'off');
   alert(ok?'تم الاتصال بنجاح، وتمت مزامنة البيانات.':'تعذر الاتصال. تأكد من صحة الرابط ومن نشر تطبيق الويب بصلاحية "Anyone".');
   if(ok)setView('syncData');
 }
@@ -6558,7 +6639,7 @@ async function downloadSheetDataToSystem(){
     updateSyncViewBadge(lastSyncAt?'on':'connecting');
     if(!confirm('تنبيه هام: الشيت المربوط فارغ حاليًا ولا يحتوي على أي بيانات. لو تابعت، سيتم مسح كل بيانات النظام الموجودة على هذا الجهاز نهائيًا بدون أي بديل، ولن يمكن استرجاعها. هل أنت متأكد فعلًا من المتابعة؟'))return;
   }
-  const ok=await syncPull({forceOverwriteLocal:true});
+  const ok=await syncPull({forceOverwriteLocal:true,silent:false});
   updateSyncViewBadge(ok?'on':'off');
   alert(ok?'تم استيراد بيانات الشيت إلى النظام بنجاح ✓':'تعذر الاتصال بالشيت.');
   if(ok)setView('syncData');
