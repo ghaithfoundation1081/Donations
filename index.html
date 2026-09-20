@@ -1595,7 +1595,7 @@ body{
       <div class="login-links" id="loginNormalLinks">
         <a onclick="openForgot()">نسيت كلمة المرور؟</a>
         <a id="loginResyncLink" class="hidden" onclick="clearSystemCacheAndReload()">إعادة مزامنة بيانات الدخول</a>
-        <a id="loginChromeRecoveryLink" class="hidden" onclick="chromeLoginRecovery()">إصلاح الدخول للمتصفح</a>
+        <a id="loginChromeRecoveryLink" class="hidden" onclick="requestChromeLoginRecovery()">إصلاح الدخول للمتصفح</a>
       </div>
     </div>
     <div id="activationArea" class="hidden">
@@ -1990,10 +1990,11 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 
 <div id="syncDataView" class="hidden">
   <div class="manager-box">
-    <b>مزامنة البيانات مع Google Sheets:</b> هذه النسخة غير مرتبطة حاليًا بأي Google Sheets. يمكنك إضافة رابط تطبيق الويب لاحقًا إذا أردت تفعيل المزامنة بين الأجهزة. لا يظهر كود الربط أو أدوات نسخه وتنزيله إلا للمدير الرئيسي للنظام.
+    <b>مزامنة Google Sheets:</b> المزامنة مفعّلة. يظل رابط الربط فارغًا افتراضيًا ويمكن للمدير الرئيسي إدخاله يدويًا وحفظه.
   </div>
   <div class="settings-section">
     <h4>رابط Google Sheets</h4>
+     <p class="small-note" style="color:var(--green);font-weight:700">الحفظ والمزامنة مصممان بحيث لا يؤدي Refresh أو فتح النظام من مستخدم آخر إلى حذف حركة مؤكدة. البيانات المعلّقة بالمزامنة تبقى محفوظة حتى نجاح الرفع.</p>
     <p class="small-note">الصق رابط تطبيق الويب المنشور من Google Apps Script، ويجب أن ينتهي عادةً بـ <b>/exec</b>.</p>
     <div id="syncConnBadge" class="conn-badge off">غير مرتبط بجوجل شيت</div>
     <div class="field" style="margin-top:10px">
@@ -2054,7 +2055,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbx9bCzuN2FgaXXdi4TycbXMGGF9YcPj9xoO97D250W1nQNXOcwkA1o3BmPuT7_nhPa9/exec'; // لا يوجد رابط Google Sheets مضمّن في هذه النسخة. يمكن ربطه لاحقًا يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbx9bCzuN2FgaXXdi4TycbXMGGF9YcPj9xoO97D250W1nQNXOcwkA1o3BmPuT7_nhPa9/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2076,9 +2077,134 @@ let setupCodeVerified=false;
 
 /* browser-safe storage + cross-browser Google Sheets config */
 const MEMORY_STORAGE = {};
-function safeGet(store,key){try{return store.getItem(key)}catch(e){return Object.prototype.hasOwnProperty.call(MEMORY_STORAGE,key)?MEMORY_STORAGE[key]:null}}
-function safeSet(store,key,value){try{store.setItem(key,value)}catch(e){MEMORY_STORAGE[key]=String(value)}}
-function safeRemove(store,key){try{store.removeItem(key)}catch(e){delete MEMORY_STORAGE[key]}}
+/* =========================================================
+   طبقة الحفظ الدائم للحركات والبيانات (Durable storage)
+   ---------------------------------------------------------
+   المشكلة السابقة: عند امتلاء localStorage (أو تعطّله) كان safeSet يحفظ في ذاكرة
+   الصفحة فقط دون أي تنبيه، فتبدو الحركة محفوظة ثم تختفي عند الريفريش.
+   الآن: كل مفاتيح البيانات تُحفظ في مكانين معًا —
+     1) localStorage (سريع ومتزامن)     2) IndexedDB (نسخة دائمة احتياطية بمساحة أكبر بكثير)
+   وعند فتح الصفحة تُقارَن النسختان وتُعتمد الأحدث، فلا تضيع أي حركة حتى لو فشل
+   أحد المخزنين. وإذا فشل الحفظ الأساسي يظهر تنبيه واضح بدل الصمت.
+   ========================================================= */
+const __DUR_KEYS=['donors_users_v3','donors_donors_v3','donors_companies_v1','donors_company_config_v1','donors_projects_v3','donors_channels_v1','donors_intentions_v1','donors_manager_categories_v1','donors_channel_codes_v1','donors_intention_codes_v1'];
+const __DUR_DB='ghaith_erp_durable_v1', __DUR_STORE='kv', __DUR_META='__durable_meta:';
+let __durDb=null, __durTimer=null, __durWarned=false;
+const __durQueue={};
+function __durKey(store,key){try{return store===localStorage&&__DUR_KEYS.indexOf(key)>-1}catch(e){return false}}
+function __durFp(str){let h=0x811c9dc5;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,0x01000193)}return (h>>>0).toString(16)+':'+str.length}
+function __durMeta(key){try{const m=String(localStorage.getItem(__DUR_META+key)||'').split('|');return m.length===2?{ts:Number(m[0])||0,fp:m[1]}:null}catch(e){return null}}
+function __durOpen(){return new Promise(function(res){try{
+  if(!window.indexedDB){res(null);return}
+  const r=indexedDB.open(__DUR_DB,1);
+  r.onupgradeneeded=function(){try{r.result.createObjectStore(__DUR_STORE,{keyPath:'key'})}catch(e){}};
+  r.onsuccess=function(){res(r.result)};
+  r.onerror=function(){res(null)};
+  r.onblocked=function(){res(null)};
+}catch(e){res(null)}})}
+function __durFlush(){
+  __durTimer=null;
+  const db=__durDb;if(!db)return;
+  const keys=Object.keys(__durQueue);if(!keys.length)return;
+  try{
+    const tx=db.transaction(__DUR_STORE,'readwrite'),st=tx.objectStore(__DUR_STORE);
+    keys.forEach(function(k){const q=__durQueue[k];delete __durQueue[k];if(q.del)st.delete(k);else st.put({key:k,v:q.v,ts:q.ts})});
+  }catch(e){}
+}
+function __durSchedule(){if(!__durTimer)__durTimer=setTimeout(__durFlush,30)}
+function __durOnLocalFail(){
+  if(__durWarned)return;__durWarned=true;
+  const msg=__durDb
+    ?'تنبيه: مساحة التخزين الأساسية في المتصفح ممتلئة أو غير متاحة. تم حفظ بياناتك في التخزين الاحتياطي الدائم للمتصفح ولن تضيع، لكن يُنصح بتنزيل نسخة احتياطية الآن من قسم "النسخ الاحتياطي".'
+    :'تحذير هام: تعذّر الحفظ الدائم في هذا المتصفح (المساحة ممتلئة، أو التخزين معطّل، أو نافذة تصفح خاص). أي بيانات جديدة ستضيع عند إغلاق الصفحة أو عمل ريفريش! نزّل نسخة احتياطية فورًا من قسم "النسخ الاحتياطي" وافتح النظام في نافذة متصفح عادية.';
+  setTimeout(function(){try{alert(msg)}catch(e){}},0);
+}
+function safeGet(store,key){
+  try{
+    if(__durKey(store,key)&&Object.prototype.hasOwnProperty.call(MEMORY_STORAGE,key))return MEMORY_STORAGE[key];
+    return store.getItem(key);
+  }catch(e){return Object.prototype.hasOwnProperty.call(MEMORY_STORAGE,key)?MEMORY_STORAGE[key]:null}
+}
+function safeSet(store,key,value){
+  value=String(value);
+  const dur=__durKey(store,key),ts=Date.now();
+  try{
+    store.setItem(key,value);
+    if(dur){
+      delete MEMORY_STORAGE[key];
+      try{store.setItem(__DUR_META+key,ts+'|'+__durFp(value))}catch(e){}
+    }
+  }catch(e){
+    MEMORY_STORAGE[key]=value;
+    if(dur)__durOnLocalFail();
+  }
+  if(dur){__durQueue[key]={v:value,ts:ts};__durSchedule()}
+}
+function safeRemove(store,key){
+  try{store.removeItem(key)}catch(e){delete MEMORY_STORAGE[key]}
+  if(__durKey(store,key)){
+    delete MEMORY_STORAGE[key];
+    try{store.removeItem(__DUR_META+key)}catch(e){}
+    __durQueue[key]={del:true,ts:Date.now()};__durSchedule();
+  }
+}
+/* مسح كامل للنسخة الاحتياطية الدائمة — يُستخدم فقط عند "إعادة ضبط المصنع" المقصودة. */
+function __durWipeAll(){
+  return new Promise(function(res){
+    let done=false;const fin=function(){if(!done){done=true;res()}};
+    setTimeout(fin,2000);
+    try{
+      Object.keys(__durQueue).forEach(function(k){delete __durQueue[k]});
+      __DUR_KEYS.forEach(function(k){try{localStorage.removeItem(__DUR_META+k)}catch(e){}delete MEMORY_STORAGE[k]});
+      const go=function(db){
+        if(!db){fin();return}
+        try{const tx=db.transaction(__DUR_STORE,'readwrite');tx.objectStore(__DUR_STORE).clear();tx.oncomplete=fin;tx.onerror=fin;tx.onabort=fin}catch(e){fin()}
+      };
+      if(__durDb)go(__durDb);else __durOpen().then(go);
+    }catch(e){fin()}
+  });
+}
+/* عند فتح الصفحة: نقارن localStorage مع IndexedDB ونستعيد الأحدث قبل تحميل النظام.
+   القاعدة: تُعتمد نسخة IndexedDB فقط إذا كانت نسخة localStorage هي بالضبط آخر ما كتبه هذا النظام
+   (أي قديمة بسبب فشل كتابة) ونسخة IndexedDB أحدث منها، أو إذا اختفت نسخة localStorage. */
+const __durableReady=(async function(){
+  try{
+    const db=await __durOpen();if(!db)return;
+    const rows=await new Promise(function(res){try{const r=db.transaction(__DUR_STORE,'readonly').objectStore(__DUR_STORE).getAll();r.onsuccess=function(){res(r.result||[])};r.onerror=function(){res([])}}catch(e){res([])}});
+    const seen={};
+    rows.forEach(function(row){
+      if(!row||typeof row.key!=='string'||typeof row.v!=='string'||__DUR_KEYS.indexOf(row.key)<0)return;
+      seen[row.key]=1;
+      if(__durQueue[row.key])return;
+      let lv=null;try{lv=localStorage.getItem(row.key)}catch(e){}
+      const rts=Number(row.ts)||0;
+      if(lv===row.v){if(!__durMeta(row.key)){try{localStorage.setItem(__DUR_META+row.key,rts+'|'+__durFp(lv))}catch(e){}}return}
+      let idbWins=false;
+      if(lv===null)idbWins=true;
+      else{const m=__durMeta(row.key);idbWins=!!(m&&m.fp===__durFp(lv)&&rts>m.ts)}
+      if(idbWins){
+        try{localStorage.setItem(row.key,row.v);localStorage.setItem(__DUR_META+row.key,rts+'|'+__durFp(row.v));delete MEMORY_STORAGE[row.key]}
+        catch(e){MEMORY_STORAGE[row.key]=row.v}
+      }else{
+        const m=__durMeta(row.key);
+        __durQueue[row.key]={v:lv,ts:m?m.ts:Date.now()};
+      }
+    });
+    __DUR_KEYS.forEach(function(k){
+      if(seen[k]||__durQueue[k])return;
+      let lv=null;try{lv=localStorage.getItem(k)}catch(e){}
+      if(lv===null)return;
+      const ts=Date.now();
+      try{localStorage.setItem(__DUR_META+k,ts+'|'+__durFp(lv))}catch(e){}
+      __durQueue[k]={v:lv,ts:ts};
+    });
+    __durDb=db;
+    __durFlush();
+    try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){})}catch(e){}
+  }catch(e){}
+})();
+document.addEventListener('visibilitychange',function(){if(document.hidden)__durFlush()});
+window.addEventListener('pagehide',function(){__durFlush()});
 function getQueryParam(name){try{return new URLSearchParams(window.location.search).get(name)||''}catch(e){const m=String(window.location.search||'').match(new RegExp('[?&]'+name+'=([^&]*)'));return m?decodeURIComponent(m[1]):''}}
 const PORTAL_MODE=(getQueryParam('portal')||'user').toLowerCase();
 /* ملحوظة: isAdminPortal() تتحكم فقط في إظهار الروابط المخفية بشاشة الدخول
@@ -2208,12 +2334,7 @@ function stripGasParamsFromAddressBar(){
   }catch(e){}
 }
 function rememberGasFromUrl(){
-  const packed=getQueryParam('k');
-  const plain=getQueryParam('gas');
-  const fromUrl=(packed?decodeGasParam(packed):plain)||'';
-  if(fromUrl&&/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec/i.test(fromUrl.trim())){
-    GAS_URL=fromUrl.trim();safeSet(localStorage,GASKEY,GAS_URL);
-  }
+  /* معطّل: لا يُقبل أي رابط ربط خارجي. نمسح الباراميتر من شريط العنوان فقط. */
   stripGasParamsFromAddressBar();
 }
 
@@ -2317,10 +2438,10 @@ function doPost(e) {
     } else if (action === 'completePasswordReset') {
       return jsonOut(completePasswordReset_(payload));
     } else if (action === 'saveAll') {
-      writeAll(payload);
-      writeDonationsLog(payload.donors || []);
-      writeCompanyDonationsLog(payload.companies || []);
-      return jsonOut({ ok: true });
+      var saved=writeAll(payload);
+      writeDonationsLog(saved.donors || []);
+      writeCompanyDonationsLog(saved.companies || []);
+      return jsonOut({ ok: true, data: saved });
     } else if (action === 'logEvent') {
       // تسجيل فوري لحدث واحد (إضافة/تعديل/حذف/اعتماد/رفض) كسطر دائم لا يُحذف ولا
       // يُعاد كتابته تلقائيًا أبدًا، ولا ينتظر دورة المزامنة الكاملة المؤجلة.
@@ -2527,30 +2648,114 @@ function protectEntityList(oldList, newList) {
   return newList;
 }
 
+function cloneJson_(obj) {
+  return JSON.parse(JSON.stringify(obj == null ? null : obj));
+}
+function indexById_(list) {
+  var m = {};
+  (Array.isArray(list) ? list : []).forEach(function(x) {
+    if (x && x.id != null) m[String(x.id)] = x;
+  });
+  return m;
+}
+function mergeHistoryByHid_(remoteHistory, incomingHistory) {
+  var m = {};
+  (Array.isArray(remoteHistory) ? remoteHistory : []).forEach(function(h) {
+    if (h && h.hid != null) m[String(h.hid)] = cloneJson_(h);
+  });
+  (Array.isArray(incomingHistory) ? incomingHistory : []).forEach(function(h) {
+    if (h && h.hid != null) m[String(h.hid)] = cloneJson_(h);
+  });
+  return Object.keys(m).map(function(k){ return m[k]; });
+}
+function mergeEntityListForConflict_(remoteList, incomingList, deletedIds, mergeHistory) {
+  var r = indexById_(remoteList);
+  var inc = indexById_(incomingList);
+  var deleted = {};
+  (Array.isArray(deletedIds) ? deletedIds : []).forEach(function(id){ deleted[String(id)] = true; });
+  var out = [];
+  Object.keys(r).forEach(function(id) {
+    if (deleted[id]) return;
+    var rv = r[id], iv = inc[id];
+    if (!iv) out.push(cloneJson_(rv));
+    else {
+      var merged = cloneJson_(iv);
+      if (mergeHistory) merged.history = mergeHistoryByHid_(rv.history || [], iv.history || []);
+      out.push(merged);
+    }
+  });
+  Object.keys(inc).forEach(function(id) {
+    if (deleted[id] || r[id]) return;
+    out.push(cloneJson_(inc[id]));
+  });
+  return out;
+}
+function mergeSimpleArrayForConflict_(remoteList, incomingList) {
+  var seen = {}, out = [];
+  (Array.isArray(remoteList) ? remoteList : []).concat(Array.isArray(incomingList) ? incomingList : []).forEach(function(x) {
+    var k = String(x);
+    if (!seen[k]) { seen[k] = true; out.push(x); }
+  });
+  return out;
+}
+function mergeServerSnapshot_(old, incoming) {
+  old = old || {};
+  incoming = incoming || {};
+  var baseUpdatedAt = String(incoming.__baseServerUpdatedAt || '');
+  var oldUpdatedAt = String(old.updatedAt || '');
+  var sameBase = !oldUpdatedAt || (!!baseUpdatedAt && baseUpdatedAt === oldUpdatedAt);
+  if (sameBase) {
+    return {
+      users: incoming.users || [],
+      donors: incoming.donors || [],
+      projects: incoming.projects || [],
+      channels: incoming.channels || [],
+      intentions: incoming.intentions || [],
+      managerCategories: incoming.managerCategories || [],
+      companies: incoming.companies || [],
+      companyConfig: incoming.companyConfig || null,
+      donationResetVersion: incoming.donationResetVersion || ''
+    };
+  }
+  var deleted = incoming.__deleted || {};
+  return {
+    users: mergeEntityListForConflict_(old.users, incoming.users, deleted.users || [], false),
+    donors: mergeEntityListForConflict_(old.donors, incoming.donors, deleted.donors || [], true),
+    companies: mergeEntityListForConflict_(old.companies, incoming.companies, deleted.companies || [], true),
+    projects: mergeEntityListForConflict_(old.projects, incoming.projects, deleted.projects || [], false),
+    channels: mergeSimpleArrayForConflict_(old.channels, incoming.channels),
+    intentions: mergeSimpleArrayForConflict_(old.intentions, incoming.intentions),
+    managerCategories: mergeSimpleArrayForConflict_(old.managerCategories, incoming.managerCategories),
+    companyConfig: incoming.companyConfig || old.companyConfig || null,
+    donationResetVersion: incoming.donationResetVersion || old.donationResetVersion || ''
+  };
+}
 function writeAll(payload) {
-  payload = applyFinanceProtection(payload || {});
+  payload = payload || {};
+  var old = readAll();
+  if (!old || old.error) old = {};
+  var merged = mergeServerSnapshot_(old, applyFinanceProtection(payload));
   var sh = getSheet(SHEET_DATA);
   var data = {
-    users: payload.users || [],
-    donors: payload.donors || [],
-    projects: payload.projects || [],
-    channels: payload.channels || [],
-    intentions: payload.intentions || [],
-    managerCategories: payload.managerCategories || [],
-    companies: payload.companies || [],
-    companyConfig: payload.companyConfig || null,
-    donationResetVersion: payload.donationResetVersion || '',
+    users: merged.users || [],
+    donors: merged.donors || [],
+    projects: merged.projects || [],
+    channels: merged.channels || [],
+    intentions: merged.intentions || [],
+    managerCategories: merged.managerCategories || [],
+    companies: merged.companies || [],
+    companyConfig: merged.companyConfig || null,
+    donationResetVersion: merged.donationResetVersion || '',
     updatedAt: new Date().toISOString()
   };
   var json = JSON.stringify(data);
   var chunks = [];
-  for (var i = 0; i < json.length; i += CHUNK_SIZE) {
-    chunks.push([json.substring(i, i + CHUNK_SIZE)]);
-  }
+  for (var i = 0; i < json.length; i += CHUNK_SIZE) chunks.push([json.substring(i, i + CHUNK_SIZE)]);
   if (!chunks.length) chunks = [['']];
   sh.clearContents();
   sh.getRange(1, 1, chunks.length, 1).setValues(chunks);
   writeMirrorSheets(data);
+  return data;
 }
 
 /*
@@ -2772,14 +2977,14 @@ function jsonOut(obj) {
 }
 `;
 
-const UKEY='donors_users_v3', DKEY='donors_donors_v3', COMPANYKEY='donors_companies_v1', COMPANYCONFIGKEY='donors_company_config_v1', PKEY='donors_projects_v3', CKEY='donors_channels_v1', IKEY='donors_intentions_v1', MCKEY='donors_manager_categories_v1', SESSION='donors_session_v3', GASKEY='donors_gas_url_v1', SYNCKEY='donors_last_sync_v1', CHCODEKEY='donors_channel_codes_v1', INCODEKEY='donors_intention_codes_v1';
+const UKEY='donors_users_v3', DKEY='donors_donors_v3', COMPANYKEY='donors_companies_v1', COMPANYCONFIGKEY='donors_company_config_v1', PKEY='donors_projects_v3', CKEY='donors_channels_v1', IKEY='donors_intentions_v1', MCKEY='donors_manager_categories_v1', SESSION='donors_session_v3', GASKEY='donors_gas_url_v1', SYNCKEY='donors_last_sync_v1', CHCODEKEY='donors_channel_codes_v1', INCODEKEY='donors_intention_codes_v1', PENDING_SYNC_KEY='donors_pending_sync_v2', BASE_SYNC_KEY='donors_base_sync_v2';
 const DONATION_RESET_VERSION='2026-09-20-v4'; let __pendingDonationReset=false;
 
 let USERS=[], donors=[], companies=[], projects=[], channels=[], intentions=[], managerCategories=[], companyConfig=null, currentUser=null, managerEmployee='all', companyManagerEmployee='all', currentFilter='all', companyFilter='all', searchTerm='', companySearchTerm='', currentView='donors', companySubView='list', pendingReset=null;
 let projFrom='',projTo='',donFrom='',donTo='',chanFrom='',chanTo='';
 let donorsCustomRange=false, donorsFrom='', donorsTo='';
-/* هذه النسخة تُسلَّم بدون أي ربط محفوظ مسبقًا. نمسح رابط الربط المحلي عند بدء النسخة،
-   ونمنع تمرير رابط قديم عبر ?gas أو ?k، مع الإبقاء على إمكانية الربط اليدوي لاحقًا. */
+/* هذه النسخة بلا أي ربط خارجي. نمسح أي رابط ربط قديم محفوظ بالمتصفح عند كل تشغيل،
+   ونتجاهل أي رابط يُمرَّر عبر ?gas أو ?k، وشاشة المزامنة متاحة للمدير الرئيسي فقط (canModule). */
 safeRemove(localStorage,GASKEY);
 safeRemove(sessionStorage,GASKEY);
 let GAS_URL=DEFAULT_GAS_URL;
@@ -3211,6 +3416,8 @@ function getPermissions(u){
 function canPermission(key,u=currentUser){return isSuperAdmin(u)||!!getPermissions(u)[key]}
 function canDonationType(type,u=currentUser){if(isSuperAdmin(u))return true;const p=getPermissions(u);const m=p.modules&&p.modules.donationModule||{};return type==='company'?!!m.companyDonations:!!m.individualDonations}
 function canModule(moduleKey,action='view',u=currentUser){
+ /* شاشة المزامنة متاحة للمدير الرئيسي فقط؛ باقي المستخدمين لا يرون/ينفذون إعداد الربط. */
+ if(moduleKey==='syncData')return isSuperAdmin(u);
  if(isSuperAdmin(u))return true;
  /* الوحدات السيادية (مزامنة البيانات / إدارة الحسابات) مرفوضة دائمًا لغير المدير الرئيسي. */
  if(isSovereignModule(moduleKey))return false;
@@ -3296,11 +3503,10 @@ async function loadAll(){
   try{donors=JSON.parse(safeGet(localStorage,DKEY)||'[]');donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}))}catch(e){donors=[]}
   try{companies=JSON.parse(safeGet(localStorage,COMPANYKEY)||'[]');companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}))}catch(e){companies=[]}
   try{companyConfig=normalizeCompanyConfig(JSON.parse(safeGet(localStorage,COMPANYCONFIGKEY)||'null'))}catch(e){companyConfig=normalizeCompanyConfig(null)}
+  /* تم إلغاء "إعادة ضبط التبرعات التلقائية" نهائيًا: كانت تمسح كل حركات التبرع للأفراد والشركات
+     عند فتح النسخة لأول مرة على أي متصفح. الآن لا يُحذف شيء تلقائيًا أبدًا؛ نسجّل رقم النسخة فقط. */
   if(safeGet(localStorage,'donors_donation_reset_version')!==DONATION_RESET_VERSION){
-    donors.forEach(d=>{d.history=(d.history||[]).filter(h=>h&&h.type!=='donation')});
-    companies.forEach(c=>{c.history=(c.history||[]).filter(h=>h&&h.type!=='donation')});
     safeSet(localStorage,'donors_donation_reset_version',DONATION_RESET_VERSION);
-    safeSet(localStorage,DKEY,JSON.stringify(donors));safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));
   }
   normalizeDonationWorkflow();
   try{projects=normalizeProjects(JSON.parse(safeGet(localStorage,PKEY)||'[]'))}catch(e){projects=[]}
@@ -3308,11 +3514,14 @@ async function loadAll(){
   try{intentions=JSON.parse(safeGet(localStorage,IKEY)||'null')||INTENTION_TYPES.slice()}catch(e){intentions=INTENTION_TYPES.slice()}
   ensureProjectCodes();ensureChannelCodes();ensureIntentionCodes();
   try{managerCategories=JSON.parse(safeGet(localStorage,MCKEY)||'null')||MANAGER_CATEGORIES_DEFAULT.slice()}catch(e){managerCategories=MANAGER_CATEGORIES_DEFAULT.slice()}
+  const hadPendingSnapshot=__restorePendingSnapshot();
   if(GAS_URL){
+    if(hadPendingSnapshot){__localDirty=true;await syncPushNow({silent:true});}
     const sub=document.getElementById('loginSubtitle');
     if(sub)sub.textContent='جارِ مزامنة البيانات مع جوجل شيت...';
     const localHadData=hasLocalData();
     const pulled=await syncPull({preserveLocalIfRemoteEmpty:true});
+    try{const authoritative=await gasCall('getAll');if(authoritative&&!authoritative.error)__setBaseSnapshot(authoritative);}catch(e){}
     if(!pulled && localHadData) setConnStatus('off');
     if(sub)sub.textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
   }
@@ -3508,11 +3717,7 @@ async function syncPull(options){
     companyConfig=normalizeCompanyConfig(data.companyConfig||companyConfig);
     companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
     donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));
-    if(String(data.donationResetVersion||'')!==DONATION_RESET_VERSION){
-      donors.forEach(d=>{d.history=(d.history||[]).filter(h=>h&&h.type!=='donation')});
-      companies.forEach(c=>{c.history=(c.history||[]).filter(h=>h&&h.type!=='donation')});
-      __pendingDonationReset=true;
-    }
+    /* ملغى: لا يُمسح أي حركة تبرع بسبب اختلاف رقم نسخة الإعادة. */
     normalizeDonationWorkflow();
     projects=Array.isArray(data.projects)?normalizeProjects(data.projects):projects;
     channels=Array.isArray(data.channels)&&data.channels.length?data.channels:channels;
@@ -3558,71 +3763,164 @@ let __pushInFlight=false;
 let __pushQueued=false;
 let __localRevision=0;
 
+function __currentSyncState(){
+  return {users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig,
+    donationResetVersion:DONATION_RESET_VERSION};
+}
+function __safeClone(v){try{return JSON.parse(JSON.stringify(v))}catch(e){return v}}
+function __getBaseSnapshot(){
+  try{return JSON.parse(safeGet(localStorage,BASE_SYNC_KEY)||'null')||null}catch(e){return null}
+}
+function __setBaseSnapshot(data){
+  if(!data)return;
+  safeSet(localStorage,BASE_SYNC_KEY,JSON.stringify({
+    updatedAt:data.updatedAt||'',users:data.users||[],donors:data.donors||[],
+    companies:data.companies||[],projects:data.projects||[],channels:data.channels||[],
+    intentions:data.intentions||[],managerCategories:data.managerCategories||[],
+    companyConfig:data.companyConfig||null,donationResetVersion:data.donationResetVersion||''
+  }));
+}
+function __deletedIdsAgainstBase(){
+  const base=__getBaseSnapshot()||{}, cur=__currentSyncState(), out={};
+  const findDeleted=(bk,ck)=>{
+    const b=Array.isArray(base[bk])?base[bk]:[], c=Array.isArray(cur[ck||bk])?cur[ck||bk]:[];
+    const ids=new Set(c.filter(x=>x&&x.id!=null).map(x=>String(x.id)));
+    return b.filter(x=>x&&x.id!=null&&!ids.has(String(x.id))).map(x=>String(x.id));
+  };
+  out.users=findDeleted('users');out.donors=findDeleted('donors');
+  out.companies=findDeleted('companies');out.projects=findDeleted('projects');
+  return out;
+}
+function __makeDurablePayload(){
+  const base=__getBaseSnapshot()||{};
+  return {...__safeClone(__currentSyncState()),
+    __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),
+    __queuedAt:new Date().toISOString()};
+}
+function __queueDurableSnapshot(){
+  /* بدون ربط خارجي لا حاجة للقطة معلّقة. كانت تُكتب مع كل حفظ فتضاعف حجم التخزين حتى يمتلئ،
+     ثم تبقى نسخة قديمة منها فتُستعاد عند الريفريش فوق البيانات الحديثة وتختفي الحركات الجديدة. */
+  if(!GAS_URL)return;
+  try{safeSet(localStorage,PENDING_SYNC_KEY,JSON.stringify(__makeDurablePayload()))}catch(e){}
+}
+function __clearDurableSnapshotIfCurrent(){
+  try{safeRemove(localStorage,PENDING_SYNC_KEY)}catch(e){}
+}
+/* دمج بالإضافة فقط (لا حذف): يضيف من اللقطة القديمة أي عميل/شركة/حركة (hid) غير موجودة حاليًا. */
+function __unionEntities(cur,snap,fix){
+  cur=Array.isArray(cur)?cur:[];snap=Array.isArray(snap)?snap:[];
+  let changed=false;const byId={};
+  cur.forEach(function(x){if(x&&x.id!==undefined)byId[String(x.id)]=x});
+  snap.forEach(function(sn){
+    if(!sn||typeof sn!=='object'||sn.id===undefined)return;
+    const c=byId[String(sn.id)];
+    if(!c){const add=fix?fix(sn):sn;cur.push(add);byId[String(sn.id)]=add;changed=true;return}
+    if(Array.isArray(sn.history)){
+      c.history=Array.isArray(c.history)?c.history:[];
+      const have={};c.history.forEach(function(h){if(h&&h.hid)have[h.hid]=1});
+      sn.history.forEach(function(h){if(h&&h.hid&&!have[h.hid]){c.history.push(h);have[h.hid]=1;changed=true}});
+    }
+  });
+  return {list:cur,changed:changed};
+}
+function __restorePendingSnapshot(){
+  let p=null;
+  try{p=JSON.parse(safeGet(localStorage,PENDING_SYNC_KEY)||'null')}catch(e){}
+  if(!p)return false;
+  if(!GAS_URL){
+    /* لا يوجد ربط خارجي: لا نستبدل الحالة الحالية بلقطة قديمة أبدًا. ندمج فقط ما قد يكون ناقصًا
+       (دون حذف أي شيء) ثم نزيل اللقطة نهائيًا. */
+    try{
+      const u=__unionEntities(USERS,p.users);USERS=u.list;
+      const d=__unionEntities(donors,p.donors,function(x){return {...x,history:Array.isArray(x.history)?x.history:[]}});donors=d.list;
+      const c=__unionEntities(companies,p.companies,function(x){return {...x,contacts:Array.isArray(x.contacts)?x.contacts:[],history:Array.isArray(x.history)?x.history:[],tags:Array.isArray(x.tags)?x.tags:[],tasks:Array.isArray(x.tasks)?x.tasks:[]}});companies=c.list;
+      if(u.changed)safeSet(localStorage,UKEY,JSON.stringify(USERS));
+      if(d.changed)safeSet(localStorage,DKEY,JSON.stringify(donors));
+      if(c.changed)safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));
+    }catch(e){}
+    safeRemove(localStorage,PENDING_SYNC_KEY);
+    return false;
+  }
+  try{
+    if(Array.isArray(p.users))USERS=p.users;
+    if(Array.isArray(p.donors))donors=p.donors;
+    if(Array.isArray(p.companies))companies=p.companies;
+    if(Array.isArray(p.projects))projects=p.projects;
+    if(Array.isArray(p.channels))channels=p.channels;
+    if(Array.isArray(p.intentions))intentions=p.intentions;
+    if(Array.isArray(p.managerCategories))managerCategories=p.managerCategories;
+    if(p.companyConfig!==undefined)companyConfig=normalizeCompanyConfig(p.companyConfig);
+    safeSet(localStorage,UKEY,JSON.stringify(USERS));safeSet(localStorage,DKEY,JSON.stringify(donors));
+    safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));safeSet(localStorage,PKEY,JSON.stringify(projects));
+    safeSet(localStorage,CKEY,JSON.stringify(channels));safeSet(localStorage,IKEY,JSON.stringify(intentions));
+    safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));
+    return true;
+  }catch(e){return false}
+}
 function syncPushDebounced(){
-  __localDirty=true;
-  __localRevision++;
+  __localDirty=true;__localRevision++;
+  __queueDurableSnapshot();
   if(!GAS_URL)return;
   clearTimeout(pushTimer);
-  /* ننتظر 1.5 ثانية بعد آخر تعديل بدل إطلاق طلب لكل نقرة/تعديل. */
-  pushTimer=setTimeout(()=>syncPushNow({silent:true}),1500);
+  pushTimer=setTimeout(()=>syncPushNow({silent:true}),400);
 }
-
 async function syncPushNow(options){
   options=options||{};
   if(!GAS_URL)return false;
-
   clearTimeout(pushTimer);
-
-  /* لا نبدأ طلب حفظ ثانٍ بالتوازي مع الأول. */
-  if(__pushInFlight){
-    __pushQueued=true;
-    return true;
-  }
-
+  if(__pushInFlight){__pushQueued=true;__queueDurableSnapshot();return true;}
   __pushInFlight=true;
   const revisionAtStart=__localRevision;
-  const payload={
-    users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig,
-    donationResetVersion:DONATION_RESET_VERSION,
-    __allowDonationReset:__pendingDonationReset===true
-  };
-
+  const pendingAtStart=safeGet(localStorage,PENDING_SYNC_KEY)||'';
+  const base=__getBaseSnapshot()||{};
+  const payload={...__safeClone(__currentSyncState()),
+    __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),
+    donationResetVersion:DONATION_RESET_VERSION,__allowDonationReset:__pendingDonationReset===true};
   if(!options.silent)__syncIndicatorShow('جارٍ حفظ التعديلات...');
   try{
     setConnStatus('connecting');
     let res;
-    try{
-      res=await gasCall('saveAll',payload);
-    }catch(e){
-      res=await gasFormPost('saveAll',payload);
-    }
+    try{res=await gasCall('saveAll',payload)}catch(e){res=await gasFormPost('saveAll',payload)}
     if(!res||res.error)throw new Error(res&&res.error||'فشل الحفظ');
-
-    /* لو حدث تعديل أثناء الطلب، لا نمسح علامة dirty ونفقد التعديل الجديد. */
-    if(__localRevision===revisionAtStart){
-      __localDirty=false;
-      lastSyncAt=new Date().toISOString();
-      safeSet(localStorage,SYNCKEY,lastSyncAt);
-    }else{
-      __localDirty=true;
-      clearTimeout(pushTimer);
-      pushTimer=setTimeout(()=>syncPushNow({silent:true}),1500);
+    if(res.data){
+      __setBaseSnapshot(res.data);
+      USERS=Array.isArray(res.data.users)?res.data.users:USERS;
+      donors=Array.isArray(res.data.donors)?res.data.donors:donors;
+      companies=Array.isArray(res.data.companies)?res.data.companies:companies;
+      projects=Array.isArray(res.data.projects)?res.data.projects:projects;
+      channels=Array.isArray(res.data.channels)?res.data.channels:channels;
+      intentions=Array.isArray(res.data.intentions)?res.data.intentions:intentions;
+      managerCategories=Array.isArray(res.data.managerCategories)?res.data.managerCategories:managerCategories;
+      companyConfig=normalizeCompanyConfig(res.data.companyConfig||companyConfig);
+      safeSet(localStorage,UKEY,JSON.stringify(USERS));safeSet(localStorage,DKEY,JSON.stringify(donors));
+      safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));safeSet(localStorage,PKEY,JSON.stringify(projects));
+      safeSet(localStorage,CKEY,JSON.stringify(channels));safeSet(localStorage,IKEY,JSON.stringify(intentions));
+      safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));
     }
-    setConnStatus('on');
-    return true;
+    if(__localRevision===revisionAtStart && (safeGet(localStorage,PENDING_SYNC_KEY)||'')===pendingAtStart){
+      __localDirty=false;__clearDurableSnapshotIfCurrent();
+      lastSyncAt=new Date().toISOString();safeSet(localStorage,SYNCKEY,lastSyncAt);
+    }else{
+      __localDirty=true;__queueDurableSnapshot();
+      clearTimeout(pushTimer);pushTimer=setTimeout(()=>syncPushNow({silent:true}),400);
+    }
+    setConnStatus('on');return true;
   }catch(e){
-    setConnStatus('off');
-    return false;
+    __queueDurableSnapshot();setConnStatus('off');return false;
   }finally{
     __pushInFlight=false;
     if(!options.silent)__syncIndicatorHide();
-    if(__pushQueued){
-      __pushQueued=false;
-      clearTimeout(pushTimer);
-      pushTimer=setTimeout(()=>syncPushNow({silent:true}),300);
-    }
+    if(__pushQueued){__pushQueued=false;clearTimeout(pushTimer);pushTimer=setTimeout(()=>syncPushNow({silent:true}),100);}
   }
 }
+window.addEventListener('pagehide',()=>{
+  try{
+    if(GAS_URL && safeGet(localStorage,PENDING_SYNC_KEY) && navigator.sendBeacon){
+      const body=JSON.stringify({action:'saveAll',payload:__makeDurablePayload(),key:GAS_ACCESS_KEY});
+      navigator.sendBeacon(GAS_URL,new Blob([body],{type:'text/plain;charset=utf-8'}));
+    }
+  }catch(e){}
+});
 
 function setConnStatus(s){
   const el=document.getElementById('connBadge');if(!el)return;
@@ -3659,6 +3957,7 @@ async function openInitialAdminSetup(){
 }
 function returnToNormalLogin(){
   setupCodeVerified=false;
+  setupActionAfterVerify='';
   closeModal();
   document.getElementById('normalLoginArea')?.classList.remove('hidden');
   document.getElementById('activationArea')?.classList.add('hidden');
@@ -3671,40 +3970,21 @@ function returnToNormalLogin(){
   const title=document.getElementById('loginSubtitle');
   if(title)title.textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
 }
+/* حُوّل هذان الإجراءان إلى إجراءين آمنين: لا يحذفان أي بيانات أو حركات من المتصفح.
+   (كانا يمسحان الحسابات والمتبرعين والحركات ويعتمدان على استعادتها من Google Sheets،
+   ولا يوجد ربط في هذه النسخة، فكان الحذف نهائيًا.) الآن يُنهيان الجلسة الحالية فقط. */
+let setupActionAfterVerify='';
 function clearTemporarySystemData(){
   if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
-  if(!confirm('سيتم حذف البيانات المؤقتة والمخزنة محليًا في هذا المتصفح الخاصة بالنظام، مع عدم حذف البيانات من Google Sheets. إذا كان الربط محفوظًا فسيتم إعادة تحميل البيانات من الشيت بعد ذلك. هل تريد المتابعة؟'))return;
-  try{
-    const keepGas='';
-    [UKEY,DKEY,COMPANYKEY,COMPANYCONFIGKEY,PKEY,CKEY,IKEY,MCKEY,SESSION,SYNCKEY].forEach(k=>{safeRemove(localStorage,k);safeRemove(sessionStorage,k)});
-    Object.keys(MEMORY_STORAGE).forEach(k=>delete MEMORY_STORAGE[k]);
-    if(keepGas)safeSet(localStorage,GASKEY,keepGas);
-    alert('تم حذف البيانات المؤقتة من هذا المتصفح. سيتم إعادة فتح النظام.');
-    const base=window.location.href.split('?')[0];
-    const q=new URLSearchParams(); if(keepGas)q.set('k',encodeGasParam(keepGas));
-    window.location.replace(base+(q.toString()?'?'+q.toString():''));
-  }catch(e){alert('تعذر حذف البيانات المؤقتة بالكامل.');}
+  /* لا نسمح بإعادة مزامنة بيانات الدخول بدون رمز الإعداد، ولا نمسح أي بيانات. */
+  setupActionAfterVerify='resyncLogin';
+  openSetupCode();
 }
-
-function clearSystemCacheAndReload(){
+function clearSystemCacheAndReload(){clearTemporarySystemData()}
+function requestChromeLoginRecovery(){
   if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
-  const gas='';
-  if(!confirm('سيتم مسح التخزين المحلي الخاص بالنظام والجلسة الحالية، ثم إعادة تحميل البيانات من Google Sheets إذا كان الربط محفوظًا. لن يتم حذف البيانات من Google Sheets. هل تريد المتابعة؟'))return;
-  try{
-    const keys=[];
-    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('donors_')===0)keys.push(k)}
-    keys.forEach(k=>safeRemove(localStorage,k));
-  }catch(e){}
-  try{
-    for(let i=sessionStorage.length-1;i>=0;i--){const k=sessionStorage.key(i);if(k&&k.indexOf('donors_')===0)safeRemove(sessionStorage,k)}
-  }catch(e){}
-  Object.keys(MEMORY_STORAGE).forEach(k=>delete MEMORY_STORAGE[k]);
-  if(gas)safeSet(localStorage,GASKEY,gas);
-  const base=window.location.href.split('?')[0];
-  const q=new URLSearchParams();
-  if(gas)q.set('k',encodeGasParam(gas));
-  if(PORTAL_MODE==='admin')q.set('portal','admin');
-  window.location.replace(base+(q.toString()?'?'+q.toString():''));
+  setupActionAfterVerify='browserRecovery';
+  openSetupCode();
 }
 
 /* ---------- login screen ---------- */
@@ -3885,7 +4165,50 @@ async function verifySetupCode(){
   }
   setupCodeFailCount=0;
   setupCodeVerified=true;
-  closeModal();openRegister(true);
+  const action=setupActionAfterVerify;
+  setupActionAfterVerify='';
+  closeModal();
+
+  if(action==='resyncLogin'){
+    await resyncLoginData();
+    return;
+  }
+  if(action==='browserRecovery'){
+    await chromeLoginRecovery();
+    return;
+  }
+  openRegister(true);
+}
+
+async function resyncLoginData(){
+  if(!isAdminPortal())return;
+  try{safeRemove(sessionStorage,SESSION)}catch(e){}
+  currentUser=null;
+  restoreLocalUsersIfMissing();
+  if(!GAS_URL){
+    setupCodeVerified=false;
+    showLogin();
+    alert('تمت إعادة تهيئة بيانات الدخول المحلية. لا يوجد رابط Google Sheets حاليًا؛ أدخل الرابط يدويًا من إعدادات المزامنة إذا أردت مزامنة الحسابات بين المتصفحات.');
+    return;
+  }
+  try{
+    const ok=await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});
+    restoreLocalUsersIfMissing();
+    if(!USERS.length){
+      setupCodeVerified=false;
+      showLogin();
+      alert('تعذر تحميل حسابات النظام من Google Sheets. لم يتم حذف أي بيانات. تأكد من رابط /exec ثم أعد المحاولة.');
+      return;
+    }
+    safeSet(localStorage,UKEY,JSON.stringify(USERS));
+    setupCodeVerified=false;
+    showLogin();
+    alert(ok?'تمت إعادة مزامنة بيانات الدخول بنجاح دون حذف أي بيانات.':'تمت إعادة تهيئة بيانات الدخول مع الحفاظ على البيانات الموجودة. يمكنك تسجيل الدخول الآن.');
+  }catch(e){
+    setupCodeVerified=false;
+    showLogin();
+    alert('تعذر إعادة مزامنة بيانات الدخول. لم يتم حذف أي بيانات.');
+  }
 }
 
 /* ---------- account registration: adding accounts is restricted to the super admin ---------- */
@@ -3991,15 +4314,40 @@ async function submitRegister(locked){
   if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('يرجى إدخال إيميل صحيح.');return}
   if(!department){alert('يرجى إدخال الإدارة.');return}
   if(!username){alert('يرجى اختيار اسم مستخدم.');return}
-  if(USERS.some(u=>String(u.username||'').toLowerCase()===username.toLowerCase())){alert('اسم المستخدم هذا مستخدم بالفعل.');return}
-  if(USERS.some(u=>String(u.email||'').toLowerCase()===email)){alert('هذا الإيميل مستخدم بالفعل.');return}
+  /* في إنشاء المدير الرئيسي لأول مرة/الاستعادة بعد فصل Google Sheets، قد تكون هناك
+     بيانات دخول قديمة محفوظة محليًا من نسخة سابقة. لا نعتبرها حسابًا جديدًا يمنع
+     الإعداد؛ بعد التحقق من رمز الإعداد نعيد تهيئة نفس الحساب إذا تطابق اسم المستخدم
+     والإيميل، مع الحفاظ على معرف الحساب، ولا نحذف أي بيانات تشغيلية. أما إضافة حساب
+     عادي فتظل محمية بمنع التكرار المعتاد. */
+  const sameUsernameUser=USERS.find(u=>String(u.username||'').trim().toLowerCase()===username.toLowerCase());
+  const sameEmailUser=USERS.find(u=>String(u.email||'').trim().toLowerCase()===email);
+  if(!locked && sameUsernameUser){alert('اسم المستخدم هذا مستخدم بالفعل.');return}
+  if(!locked && sameEmailUser){alert('هذا الإيميل مستخدم بالفعل.');return}
+  if(locked && sameUsernameUser && sameEmailUser && sameUsernameUser.id!==sameEmailUser.id){
+    alert('اسم المستخدم والإيميل مستخدمان لحسابين مختلفين. استخدم بيانات جديدة أو استعد الحسابات الموجودة.');return;
+  }
   let payload;
   if(locked){
     const pass=document.getElementById('r_pass').value, pass2=document.getElementById('r_pass2').value;
     if(!pass||!isStrongPassword(pass)){alert(PASSWORD_POLICY_MSG);return}
     if(pass!==pass2){alert('كلمة المرور وتأكيدها غير متطابقين.');return}
-    payload={id:uid(),fullName:name,phone,email,department,username,passwordHash:await hashPassword(pass),role,managerCategory,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:'',securityAnswer:'',activated:true};
-    USERS.push(payload); await saveUsersReliable(); currentUser=payload; safeSet(sessionStorage,SESSION,payload.id);
+    const passwordHash=await hashPassword(pass);
+    /* إذا كان هناك حساب محلي قديم بنفس اسم المستخدم/الإيميل، نعيد تهيئته بدل إنشاء
+       سجل ثانٍ. هذا يعالج بقايا حسابات النسخ السابقة بعد إلغاء رابط Google Sheets. */
+    if(sameUsernameUser || sameEmailUser){
+      payload=sameUsernameUser||sameEmailUser;
+      payload.fullName=name; payload.phone=phone; payload.email=email; payload.department=department;
+      payload.username=username; payload.passwordHash=passwordHash; payload.role='superadmin';
+      payload.managerCategory=''; payload.active=true; payload.permissions=defaultPermissionsFor({role:'superadmin'});
+      payload.securityQuestion=''; payload.securityAnswer=''; payload.activated=true;
+      delete payload.password; delete payload.activationToken; delete payload.resetToken;
+      USERS=USERS.filter(u=>u===payload || (u.id!==payload.id && u.id!==sameUsernameUser?.id && u.id!==sameEmailUser?.id));
+    }else{
+      payload={id:uid(),fullName:name,phone,email,department,username,passwordHash,role:'superadmin',managerCategory:'',active:true,permissions:defaultPermissionsFor({role:'superadmin'}),securityQuestion:'',securityAnswer:'',activated:true};
+      USERS.push(payload);
+    }
+    safeSet(localStorage,UKEY,JSON.stringify(USERS));
+    await saveUsersReliable(); currentUser=payload; safeSet(sessionStorage,SESSION,payload.id);
     setupCodeVerified=false;
     closeModal(); showApp(); alert('تم إنشاء حساب المدير الرئيسي للنظام بنجاح. يمكنك الآن ربط Google Sheets متى شئت من شاشة "مزامنة البيانات" — الخطوة اختيارية وليست شرطًا لاستخدام النظام.'); return;
   }
@@ -4486,6 +4834,7 @@ async function executeFactoryReset(){
       safeRemove(sessionStorage,k);
     });
     try{sessionStorage.clear()}catch(e){}
+    try{await __durWipeAll()}catch(e){}
 
     alert('تمت إعادة ضبط المصنع بنجاح. سيبدأ النظام الآن كأنه جديد.');
     window.location.reload();
@@ -6765,10 +7114,26 @@ function updateSyncViewBadge(state){
 }
 function saveSyncGasUrl(){
   if(!canModule('syncData','edit',currentUser))return;
-  const input=document.getElementById('syncGasUrlInput');const v=(input?.value||'').trim();
-  if(v&&!/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(?:[?#].*)?$/i.test(v)){alert('يرجى إدخال رابط Google Apps Script صحيح وينتهي بـ /exec.');return}
-  GAS_URL=v;safeSet(localStorage,GASKEY,GAS_URL);setConnStatus(GAS_URL?'connecting':'off');updateSyncViewBadge(GAS_URL?'connecting':'off');
-  if(GAS_URL)testSyncConnection();
+  const input=document.getElementById('syncGasUrlInput');
+  const v=(input?.value||'').trim();
+  if(!v){
+    GAS_URL='';
+    safeRemove(localStorage,GASKEY);
+    setConnStatus('off');
+    updateSyncViewBadge('off');
+    if(input) input.value='';
+    alert('تم ترك رابط Google Sheets فارغًا. يمكنك إدخاله يدويًا لاحقًا.');
+    return;
+  }
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec(?:[?#].*)?$/i.test(v)){
+    alert('يرجى إدخال رابط Google Apps Script صحيح وينتهي بـ /exec.');
+    return;
+  }
+  GAS_URL=v;
+  safeSet(localStorage,GASKEY,GAS_URL);
+  setConnStatus('connecting');
+  updateSyncViewBadge('connecting');
+  testSyncConnection();
 }
 async function testSyncConnection(){
   if(!canModule('syncData','edit',currentUser))return;
@@ -6964,8 +7329,36 @@ function exportExcel(){
 document.getElementById('searchBox').addEventListener('input',e=>{searchTerm=e.target.value;render()});
 document.getElementById('companySearch')?.addEventListener('input',e=>{companySearchTerm=e.target.value;renderCompanies()});
 document.getElementById('moduleDonationSearch')?.addEventListener('input',e=>{moduleDonationSearchTerm=e.target.value;renderModuleDonationRecords()});
+/* ---------- تحديث التبويبات المتعددة ----------
+   إذا فُتح النظام في أكثر من تبويب بنفس المتصفح وسجّل مستخدم حركة في تبويب،
+   يستلمها التبويب الآخر فورًا؛ حتى لا يعيد الحفظ من نسخته القديمة فيمسح الحركة الجديدة. */
+let __extPending={},__extTimer=null;
+function __reloadKeyFromStorage(key){
+  try{
+    const raw=safeGet(localStorage,key);if(raw===null)return false;
+    const v=JSON.parse(raw);
+    if(key===DKEY){donors=(Array.isArray(v)?v:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));return true}
+    if(key===COMPANYKEY){companies=(Array.isArray(v)?v:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));return true}
+    if(key===PKEY){projects=normalizeProjects(v);return true}
+    if(key===UKEY&&Array.isArray(v)&&v.length){USERS=v;if(currentUser){const me=USERS.find(u=>u.id===currentUser.id);if(me)currentUser=me}return true}
+  }catch(e){}
+  return false;
+}
+function __applyExternalChanges(){
+  if(document.getElementById('overlay')){clearTimeout(__extTimer);__extTimer=setTimeout(__applyExternalChanges,2000);return}
+  const keys=Object.keys(__extPending);__extPending={};
+  let any=false;keys.forEach(function(k){if(__reloadKeyFromStorage(k))any=true});
+  if(any&&currentUser){try{setView(currentView)}catch(e){}}
+}
+window.addEventListener('storage',function(e){
+  try{
+    if(!e.key||e.storageArea!==localStorage)return;
+    if([DKEY,COMPANYKEY,PKEY,UKEY].indexOf(e.key)<0)return;
+    __extPending[e.key]=1;clearTimeout(__extTimer);__extTimer=setTimeout(__applyExternalChanges,300);
+  }catch(err){}
+});
 setupViewAccordions();
-loadAll();
+__durableReady.catch(function(){}).then(function(){return loadAll()});
 
 
 function openCompanyRecord(id){
@@ -8080,13 +8473,21 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
 async function chromeLoginRecovery(){
   if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   try{safeRemove(sessionStorage,SESSION)}catch(e){}
+  currentUser=null;
   restoreLocalUsersIfMissing();
   try{
-    if(GAS_URL)await syncPull({preserveLocalIfRemoteEmpty:true});
+    if(GAS_URL){
+      await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});
+      restoreLocalUsersIfMissing();
+    }
   }catch(e){}
-  restoreLocalUsersIfMissing();
+  setupCodeVerified=false;
   showLogin();
-  alert('تمت إعادة تهيئة تسجيل الدخول بدون حذف أي بيانات. جرّب الدخول الآن.');
+  if(USERS.length){
+    alert('تم إصلاح حالة تسجيل الدخول في المتصفح دون حذف الحسابات أو الحركات. يمكنك تسجيل الدخول الآن.');
+  }else{
+    alert('لم يتم العثور على حسابات دخول في هذا المتصفح. لم يتم حذف أي بيانات. إذا كان النظام مرتبطًا بجوجل شيت فتأكد من رابط /exec ثم استخدم «إعادة مزامنة بيانات الدخول».');
+  }
 }
 
 
@@ -8200,15 +8601,16 @@ async function verifySensitiveSetupCode(title,description){
  });
 }
 window.clearSystemCacheAndReload=async function(){
- if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
- if(!await verifySensitiveSetupCode('إعادة مزامنة بيانات الدخول','لا يمكن تنفيذ إعادة مزامنة بيانات الدخول إلا بعد التحقق من رمز إعداد النظام. سيتم مسح بيانات الدخول المحلية والجلسة من هذا المتصفح فقط، مع الاحتفاظ ببيانات النظام ورابط Google Sheets، ثم إعادة تحميل بيانات الدخول من المصدر المتزامن.'))return;
- try{safeRemove(localStorage,UKEY);safeRemove(sessionStorage,SESSION);currentUser=null;otpContext=null;Object.keys(MEMORY_STORAGE).forEach(k=>delete MEMORY_STORAGE[k]);window.location.reload()}catch(e){alert('تعذر إعادة مزامنة بيانات الدخول بالكامل.')}
+  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
+  try{safeRemove(sessionStorage,SESSION);currentUser=null;otpContext=null;window.location.reload()}catch(e){alert('تعذر إعادة تهيئة الجلسة.')}
 };
 window.chromeLoginRecovery=async function(){
- if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
- if(!await verifySensitiveSetupCode('إصلاح الدخول للمتصفح','هذا إجراء استرداد كامل وحساس. بعد التحقق سيتم حذف كل بيانات النظام المحلية المخزنة في هذا المتصفح (الحسابات، المتبرعون، الشركات، المشاريع، القنوات، الإعدادات والجلسة) وإعادة تحميلها من Google Sheets إذا كان الربط متاحًا.'))return;
- if(!confirm('تأكيد نهائي: سيتم حذف كل بيانات النظام المحلية المخزنة في هذا المتصفح، ولن يمكن التراجع عن هذا الحذف المحلي. سيتم الاحتفاظ ببيانات Google Sheets فقط، ثم محاولة إعادة تحميلها. هل تريد المتابعة؟'))return;
- try{const gas='';[UKEY,DKEY,COMPANYKEY,COMPANYCONFIGKEY,PKEY,CKEY,IKEY,MCKEY,SESSION,SYNCKEY].forEach(k=>{safeRemove(localStorage,k);safeRemove(sessionStorage,k)});Object.keys(MEMORY_STORAGE).forEach(k=>delete MEMORY_STORAGE[k]);if(gas)safeSet(localStorage,GASKEY,gas);currentUser=null;otpContext=null;__localDirty=false;alert('تم حذف بيانات النظام المحلية من هذا المتصفح. سيتم إعادة فتح النظام وإعادة تحميل البيانات من Google Sheets إذا كان الربط متاحًا.');window.location.reload()}catch(e){alert('تعذر تنفيذ إصلاح الدخول بالكامل.')}
+  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
+  try{safeRemove(sessionStorage,SESSION)}catch(e){}
+  currentUser=null;otpContext=null;
+  restoreLocalUsersIfMissing();
+  showLogin();
+  alert('تمت إعادة تهيئة تسجيل الدخول بدون حذف أي بيانات. جرّب الدخول الآن.');
 };
 window.confirmOtp=async function(){
  if(!otpContext)return;const entered=(document.getElementById('otpInput')?.value||'').trim();if(!entered){alert('يرجى إدخال رمز التحقق.');return}if(!otpValid(otpContext)){alert('انتهت صلاحية رمز التحقق. اضغط "إعادة إرسال الرمز".');return}if(entered!==otpContext.code){alert('رمز التحقق غير صحيح.');return}
