@@ -1603,8 +1603,6 @@ body{
       <div class="field"><label>اسم المستخدم</label><input id="activationUser" readonly></div>
       <div class="field"><label>كلمة المرور الجديدة</label><input id="activationPass" type="password" autocomplete="new-password" minlength="8" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
       <div class="field"><label>تأكيد كلمة المرور</label><input id="activationPass2" type="password" autocomplete="new-password"></div>
-      <div class="field"><label>سؤال الأمان</label><input id="activationSecQ"></div>
-      <div class="field"><label>إجابة سؤال الأمان</label><input id="activationSecA"></div>
       <button class="btn-primary" style="width:100%" onclick="activateAccount()">تفعيل الحساب</button>
     </div>
     <!-- خيارات المدير (استعادة الحساب، السياسة) مخفية عن المستخدمين العاديين،
@@ -1992,7 +1990,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 
 <div id="syncDataView" class="hidden">
   <div class="manager-box">
-    <b>مزامنة البيانات مع Google Sheets:</b> أضف رابط تطبيق الويب المنشور الخاص بملف Google Sheets ليتم حفظ البيانات ومزامنتها بين الأجهزة. لا يظهر كود الربط أو أدوات نسخه وتنزيله إلا للمدير الرئيسي للنظام.
+    <b>مزامنة البيانات مع Google Sheets:</b> هذه النسخة غير مرتبطة حاليًا بأي Google Sheets. يمكنك إضافة رابط تطبيق الويب لاحقًا إذا أردت تفعيل المزامنة بين الأجهزة. لا يظهر كود الربط أو أدوات نسخه وتنزيله إلا للمدير الرئيسي للنظام.
   </div>
   <div class="settings-section">
     <h4>رابط Google Sheets</h4>
@@ -2056,7 +2054,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwTtNXqgTOtnQduBxPVfuic2oM64Hhug8-eqtA2ma11SvTB89DpMG1DQEaVWENWaBCTNw/exec'; // ضع رابط /exec هنا إذا أردت أن يعمل الملف مباشرة على أي متصفح بدون ?gas=
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbx9bCzuN2FgaXXdi4TycbXMGGF9YcPj9xoO97D250W1nQNXOcwkA1o3BmPuT7_nhPa9/exec'; // لا يوجد رابط Google Sheets مضمّن في هذه النسخة. يمكن ربطه لاحقًا يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2159,10 +2157,11 @@ function showUserPortalLockdown(msg){
     box.style.cssText='margin-top:14px;padding:14px;border:1px solid #F0C7C4;background:#FDEAEA;color:#8E2F2A;border-radius:12px;font-size:13px;line-height:1.9;text-align:center;font-weight:700';
     document.getElementById('loginFormArea')?.appendChild(box);
   }
-  box.textContent=msg||'تعذّر تحميل بيانات النظام. يرجى التواصل مع مدير النظام.';
+  box.innerHTML='<div>'+escapeHtml(msg||'تعذّر تحميل بيانات النظام. يرجى التواصل مع مدير النظام.')+'</div><div style="margin-top:10px;text-align:center"><button class="btn-primary btn-small" type="button" onclick="retrySystemBootstrap()">إعادة المحاولة</button></div>';
   const sub=document.getElementById('loginSubtitle');
   if(sub)sub.textContent='الوصول متوقف مؤقتًا';
 }
+async function retrySystemBootstrap(){try{await loadAll()}catch(e){showUserPortalLockdown('تعذّر الاتصال ببيانات النظام من Google Sheets. تأكد من الاتصال والرابط ثم أعد المحاولة.')}}
 async function activateAccount(){
   const username=getQueryParam('u')||'', token=getQueryParam('token')||'';
   const activate=getQueryParam('activate')==='1', reset=getQueryParam('reset')==='1';
@@ -2171,14 +2170,11 @@ async function activateAccount(){
   if(!user){alert('رابط التفعيل/تعيين كلمة المرور غير صالح أو تم استخدامه من قبل.');return}
   const pass=document.getElementById('activationPass').value;
   const pass2=document.getElementById('activationPass2').value;
-  const q=document.getElementById('activationSecQ').value.trim();
-  const a=document.getElementById('activationSecA').value.trim();
   if(!pass||!isStrongPassword(pass)){alert(PASSWORD_POLICY_MSG);return}
   if(pass!==pass2){alert('كلمتا المرور غير متطابقتين.');return}
-  if(!q||!a){alert('يرجى إدخال سؤال الأمان وإجابته.');return}
   user.passwordHash=await hashPassword(pass);
   delete user.password;
-  user.securityQuestion=q; user.securityAnswer=a;
+  user.securityQuestion=''; user.securityAnswer='';
   if(activate){user.activated=true;user.activationToken='';}
   if(reset){user.resetToken='';}
   await saveUsersReliable();
@@ -2314,6 +2310,12 @@ function doPost(e) {
     }
     if (action === 'getAll') {
       return jsonOut(readAll());
+    } else if (action === 'requestResetOtp') {
+      return jsonOut(requestResetOtp_(payload));
+    } else if (action === 'verifyResetOtp') {
+      return jsonOut(verifyResetOtp_(payload));
+    } else if (action === 'completePasswordReset') {
+      return jsonOut(completePasswordReset_(payload));
     } else if (action === 'saveAll') {
       writeAll(payload);
       writeDonationsLog(payload.donors || []);
@@ -2349,6 +2351,98 @@ function doGet(e) {
   return jsonOut(obj);
 }
 
+function normalizeResetText_(v) {
+  return String(v || '').trim().toLowerCase();
+}
+function resetDigest_(v) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(v || ''), Utilities.Charset.UTF_8);
+  return bytes.map(function(b){ var n=b<0?b+256:b; return ('0'+n.toString(16)).slice(-2); }).join('');
+}
+function newResetOtp_() {
+  var seed = Utilities.getUuid() + '|' + new Date().getTime() + '|' + Utilities.getUuid();
+  var hex = resetDigest_(seed).slice(0, 12);
+  var num = parseInt(hex, 16) % 900000 + 100000;
+  return String(num);
+}
+function newResetToken_() {
+  return Utilities.getUuid().replace(/-/g,'') + Utilities.getUuid().replace(/-/g,'');
+}
+function findResetUser_(data, username, email) {
+  var users = Array.isArray(data.users) ? data.users : [];
+  var un = normalizeResetText_(username), em = normalizeResetText_(email);
+  for (var i=0;i<users.length;i++) {
+    var u=users[i]||{};
+    if(normalizeResetText_(u.username)===un && normalizeResetText_(u.email)===em) return {user:u,index:i};
+  }
+  return null;
+}
+function requestResetOtp_(payload) {
+  payload=payload||{};
+  var data=readAll();
+  if(data && data.error) return {error:'تعذر قراءة بيانات الحساب.'};
+  var found=findResetUser_(data,payload.username,payload.email);
+  // لا نكشف وجود الحساب أو عدمه للواجهة.
+  if(!found) return {ok:true};
+  var email=String(found.user.email||'').trim();
+  if(!email) return {ok:true};
+  var otp=newResetOtp_();
+  found.user.resetOtpHash=resetDigest_(otp);
+  found.user.resetOtpExpiresAt=new Date(Date.now()+10*60*1000).toISOString();
+  found.user.resetOtpAttempts=0;
+  found.user.resetOtpToken='';
+  found.user.resetOtpTokenExpiresAt='';
+  data.users=data.users||[];
+  data.users[found.index]=found.user;
+  writeAll(data);
+  MailApp.sendEmail({to:email,subject:'كود استعادة كلمة المرور — مؤسسة غيث',htmlBody:'<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9"><h2>استعادة كلمة المرور</h2><p>تم طلب استعادة كلمة المرور لحساب المستخدم <b>'+escapeHtmlForMail_(found.user.username)+'</b>.</p><p style="font-size:28px;font-weight:800;letter-spacing:6px;text-align:center">'+otp+'</p><p>الكود صالح لمدة 10 دقائق ويُستخدم مرة واحدة فقط.</p><p style="color:#777">إذا لم تطلب استعادة كلمة المرور، تجاهل هذه الرسالة.</p></div>'});
+  return {ok:true};
+}
+function verifyResetOtp_(payload) {
+  payload=payload||{};
+  var data=readAll();
+  if(data && data.error) return {error:'تعذر قراءة بيانات الحساب.'};
+  var found=findResetUser_(data,payload.username,payload.email);
+  if(!found) return {error:'بيانات التحقق غير صحيحة.'};
+  var u=found.user;
+  var expires=Date.parse(String(u.resetOtpExpiresAt||''));
+  if(!u.resetOtpHash || !expires || Date.now()>expires) return {error:'انتهت صلاحية كود التحقق.'};
+  var attempts=Number(u.resetOtpAttempts||0);
+  if(attempts>=5) return {error:'تم تجاوز عدد محاولات التحقق. اطلب كودًا جديدًا.'};
+  if(resetDigest_(String(payload.otp||''))!==String(u.resetOtpHash)){
+    u.resetOtpAttempts=attempts+1;
+    data.users[found.index]=u; writeAll(data);
+    return {error:'كود التحقق غير صحيح.'};
+  }
+  var token=newResetToken_();
+  u.resetOtpToken=token;
+  u.resetOtpTokenExpiresAt=new Date(Date.now()+10*60*1000).toISOString();
+  u.resetOtpHash=''; u.resetOtpExpiresAt=''; u.resetOtpAttempts=0;
+  data.users[found.index]=u; writeAll(data);
+  return {ok:true,resetToken:token};
+}
+function completePasswordReset_(payload) {
+  payload=payload||{};
+  var data=readAll();
+  if(data && data.error) return {error:'تعذر قراءة بيانات الحساب.'};
+  var found=findResetUser_(data,payload.username,payload.email);
+  if(!found) return {error:'بيانات الاستعادة غير صحيحة.'};
+  var u=found.user;
+  var expires=Date.parse(String(u.resetOtpTokenExpiresAt||''));
+  if(!u.resetOtpToken || String(payload.resetToken||'')!==String(u.resetOtpToken) || !expires || Date.now()>expires) return {error:'انتهت صلاحية رمز الاستعادة.'};
+  var ph=String(payload.passwordHash||'');
+  if(!/^pbkdf2\\$\\d+\\$[0-9a-f]+\\$[0-9a-f]+$/i.test(ph)) return {error:'صيغة كلمة المرور غير صالحة.'};
+  u.passwordHash=ph;
+  delete u.password;
+  u.securityQuestion=''; u.securityAnswer='';
+  u.resetOtpToken=''; u.resetOtpTokenExpiresAt='';
+  data.users[found.index]=u;
+  writeAll(data);
+  return {ok:true};
+}
+function escapeHtmlForMail_(v) {
+  return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function getSheet(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(name);
@@ -2382,6 +2476,7 @@ function readAll() {
 // بياناتها الأساسية. تُقارن البيانات الجديدة الواردة بالبيانات المخزَّنة فعليًا في
 // الشيت حاليًا (وليس بما يظنه المتصفح المرسِل)، فتكون الشيت نفسها هي "الحكم الأخير".
 function applyFinanceProtection(payload) {
+  if (payload && payload.__allowDonationReset === true) return payload;
   var old = readAll();
   if (!old || old.error) return payload; // لا توجد بيانات سابقة موثوقة لمقارنتها: لا داعي للحماية
   payload.donors = protectEntityList(old.donors || [], payload.donors || []);
@@ -2444,6 +2539,7 @@ function writeAll(payload) {
     managerCategories: payload.managerCategories || [],
     companies: payload.companies || [],
     companyConfig: payload.companyConfig || null,
+    donationResetVersion: payload.donationResetVersion || '',
     updatedAt: new Date().toISOString()
   };
   var json = JSON.stringify(data);
@@ -2612,7 +2708,7 @@ function writeDonationsLog(donorsList) {
   });
   sh.getRange(1, 1, rows.length, header.length).setValues(rows);
   if (rows.length > 1) {
-    sh.getRange(1, 1, rows.length, header.length).setWrap(true);
+    sh.getRange(1, 1, rows.length, header.length).setWrap(false);
     sh.setFrozenRows(1);
     sh.getRange(1, 1, 1, header.length).setFontWeight('bold');
     sh.autoResizeColumns(1, header.length);
@@ -2635,7 +2731,7 @@ function writeCompanyDonationsLog(companiesList) {
     });
   });
   sh.getRange(1, 1, rows.length, header.length).setValues(rows);
-  if (rows.length > 1) { sh.getRange(1, 1, rows.length, header.length).setWrap(true); sh.setFrozenRows(1); sh.getRange(1,1,1,header.length).setFontWeight('bold'); sh.autoResizeColumns(1,header.length); }
+  if (rows.length > 1) { sh.getRange(1, 1, rows.length, header.length).setWrap(false); sh.setFrozenRows(1); sh.getRange(1,1,1,header.length).setFontWeight('bold'); sh.autoResizeColumns(1,header.length); }
 }
 
 // سجل أحداث فوري ودائم: كل استدعاء يضيف سطرًا واحدًا بأسلوب "إلحاق" (append) فقط،
@@ -2677,11 +2773,17 @@ function jsonOut(obj) {
 `;
 
 const UKEY='donors_users_v3', DKEY='donors_donors_v3', COMPANYKEY='donors_companies_v1', COMPANYCONFIGKEY='donors_company_config_v1', PKEY='donors_projects_v3', CKEY='donors_channels_v1', IKEY='donors_intentions_v1', MCKEY='donors_manager_categories_v1', SESSION='donors_session_v3', GASKEY='donors_gas_url_v1', SYNCKEY='donors_last_sync_v1', CHCODEKEY='donors_channel_codes_v1', INCODEKEY='donors_intention_codes_v1';
+const DONATION_RESET_VERSION='2026-09-20-v4'; let __pendingDonationReset=false;
 
 let USERS=[], donors=[], companies=[], projects=[], channels=[], intentions=[], managerCategories=[], companyConfig=null, currentUser=null, managerEmployee='all', companyManagerEmployee='all', currentFilter='all', companyFilter='all', searchTerm='', companySearchTerm='', currentView='donors', companySubView='list', pendingReset=null;
 let projFrom='',projTo='',donFrom='',donTo='',chanFrom='',chanTo='';
 let donorsCustomRange=false, donorsFrom='', donorsTo='';
-let GAS_URL=safeGet(localStorage,GASKEY)||DEFAULT_GAS_URL; rememberGasFromUrl();
+/* هذه النسخة تُسلَّم بدون أي ربط محفوظ مسبقًا. نمسح رابط الربط المحلي عند بدء النسخة،
+   ونمنع تمرير رابط قديم عبر ?gas أو ?k، مع الإبقاء على إمكانية الربط اليدوي لاحقًا. */
+safeRemove(localStorage,GASKEY);
+safeRemove(sessionStorage,GASKEY);
+let GAS_URL=DEFAULT_GAS_URL;
+stripGasParamsFromAddressBar();
 let lastSyncAt=safeGet(localStorage,SYNCKEY)||'';
 
 const DONATION_METHODS=['انستاباي بنك أهلي','انستاباي بنك مصر','فيزا بنك أهلي','فيزا بنك مصر','فودافون كاش','تبرع نقدي'];
@@ -2856,7 +2958,6 @@ function renderOtpModal(){
   openModal(`<h3>${title}</h3>
   <p class="small-note">${sub}</p>
   <div class="field"><label>رقم الهاتف</label><input value="${escapeHtml(otpContext.phone)}" disabled style="direction:ltr;text-align:center"></div>
-  <div class="small-note" style="text-align:center;background:var(--primary-light);border-radius:10px;padding:10px 0;margin:6px 0 14px">رمز تجريبي (بيئة العرض — سيُرسل فعليًا عبر SMS): <b style="font-size:20px;letter-spacing:5px;color:var(--primary-dark)">${escapeHtml(otpContext.code)}</b></div>
   <div class="field"><label>أدخل رمز التحقق المكوّن من 6 أرقام</label><input id="otpInput" maxlength="6" inputmode="numeric" style="direction:ltr;text-align:center;letter-spacing:8px;font-size:20px"></div>
   ${isLogin?`<label class="user-chip" style="display:inline-flex;align-items:center;margin-bottom:10px"><input type="checkbox" id="otpTrustDevice" checked style="margin-inline-end:6px">تذكّر هذا الجهاز لمدة 30 يومًا (تخطي هذه الخطوة لاحقًا)</label>`:''}
   <div class="modal-actions"><button class="btn-primary" onclick="confirmOtp()">تأكيد الرمز</button><button class="btn-outline" onclick="resendOtp()">إعادة إرسال الرمز</button><button class="btn-outline" onclick="cancelOtp()">إلغاء</button></div>`);
@@ -3195,6 +3296,12 @@ async function loadAll(){
   try{donors=JSON.parse(safeGet(localStorage,DKEY)||'[]');donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}))}catch(e){donors=[]}
   try{companies=JSON.parse(safeGet(localStorage,COMPANYKEY)||'[]');companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}))}catch(e){companies=[]}
   try{companyConfig=normalizeCompanyConfig(JSON.parse(safeGet(localStorage,COMPANYCONFIGKEY)||'null'))}catch(e){companyConfig=normalizeCompanyConfig(null)}
+  if(safeGet(localStorage,'donors_donation_reset_version')!==DONATION_RESET_VERSION){
+    donors.forEach(d=>{d.history=(d.history||[]).filter(h=>h&&h.type!=='donation')});
+    companies.forEach(c=>{c.history=(c.history||[]).filter(h=>h&&h.type!=='donation')});
+    safeSet(localStorage,'donors_donation_reset_version',DONATION_RESET_VERSION);
+    safeSet(localStorage,DKEY,JSON.stringify(donors));safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));
+  }
   normalizeDonationWorkflow();
   try{projects=normalizeProjects(JSON.parse(safeGet(localStorage,PKEY)||'[]'))}catch(e){projects=[]}
   try{channels=JSON.parse(safeGet(localStorage,CKEY)||'null')||DONATION_METHODS.slice();channels=Array.isArray(channels)?channels.filter(c=>c!==null&&c!==undefined&&String(c).trim()!==''):DONATION_METHODS.slice()}catch(e){channels=DONATION_METHODS.slice()}
@@ -3228,16 +3335,13 @@ async function loadAll(){
       return;
     }
     showLogin();
-    openRegister(true);
+    openSetupCode();
     return;
   }
   /* فتح ملف HTML نفسه (بدون portal/user/admin أو رابط تفعيل) يبدأ من شاشة إعداد المدير الرئيسي.
      أما روابط المستخدمين ?portal=user فتذهب مباشرة إلى تسجيل الدخول العادي. */
   if(!hasExplicitPortal&&!isActivationLink){
     showLogin();
-    if(USERS.length===0){
-      openRegister(true);
-    }
     return;
   }
   showLogin();
@@ -3333,17 +3437,45 @@ function gasFormPost(action,payload){
     iframe.onload=()=>finish(true);try{form.submit();setTimeout(()=>finish(true),2500)}catch(e){finish(false)}
   });
 }
+function mergeEntityHistories(remoteList, localList){
+  const r=Array.isArray(remoteList)?remoteList:[], l=Array.isArray(localList)?localList:[];
+  const map=new Map();
+  r.forEach(x=>{if(x&&x.id!=null)map.set(String(x.id),JSON.parse(JSON.stringify(x)))});
+  l.forEach(x=>{
+    if(!x||x.id==null)return;
+    const key=String(x.id), existing=map.get(key);
+    if(!existing){map.set(key,JSON.parse(JSON.stringify(x)));return}
+    const hist=new Map();
+    (Array.isArray(existing.history)?existing.history:[]).forEach(h=>{if(h&&h.hid)hist.set(String(h.hid),h)});
+    (Array.isArray(x.history)?x.history:[]).forEach(h=>{if(h&&h.hid)hist.set(String(h.hid),h)});
+    const merged={...existing,...x};
+    merged.history=[...hist.values()];
+    map.set(key,merged);
+  });
+  return [...map.values()];
+}
+function mergeCollaborativeData(remote){
+  const data=remote||{};
+  return {
+    ...data,
+    users:mergeEntityHistories(data.users,USERS),
+    donors:mergeEntityHistories(data.donors,donors),
+    companies:mergeEntityHistories(data.companies,companies),
+    projects:Array.from(new Map([...(Array.isArray(data.projects)?data.projects:[]),...(Array.isArray(projects)?projects:[])].filter(x=>x&&x.id!=null).map(x=>[String(x.id),x])).values()),
+    channels:[...new Set([...(Array.isArray(data.channels)?data.channels:[]),...(Array.isArray(channels)?channels:[])].map(String).filter(Boolean))],
+    intentions:[...new Set([...(Array.isArray(data.intentions)?data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).filter(Boolean))],
+    managerCategories:[...new Set([...(Array.isArray(data.managerCategories)?data.managerCategories:[]),...(Array.isArray(managerCategories)?managerCategories:[])].map(String).filter(Boolean))],
+    companyConfig:data.companyConfig||companyConfig
+  };
+}
+
 async function syncPull(options){
   if(!GAS_URL)return false;
   options=options||{};
   const silent=!!options.silent;
 
-  /* لا تسحب نسخة الخادم أثناء وجود تعديل محلي غير مرفوع. */
-  if(__localDirty && !options.forceOverwriteLocal){
-    clearTimeout(pushTimer);
-    const pushedFirst=await syncPushNow({silent});
-    if(!pushedFirst)return false;
-  }
+  /* عند وجود تعديل محلي، لا نستبدل النسخة المحلية بنسخة قديمة من الشيت.
+     نسحب أولًا ثم ندمج الحركات بالـ hid، وبعدها نرفع النسخة المدمجة. */
 
   if(!silent)__syncIndicatorShow('جارٍ تحديث البيانات...');
   try{
@@ -3352,6 +3484,7 @@ async function syncPull(options){
     try{data=await gasCall('getAll')}catch(e){data=await gasJsonpGet()}
     if(!data||data.error)throw new Error(data&&data.error||'فشل الاتصال');
 
+    if(__localDirty && !options.forceOverwriteLocal){data=mergeCollaborativeData(data);}
     if(!hasRemoteData(data) && hasLocalData() && !options.forceOverwriteLocal){
       if(options.preserveLocalIfRemoteEmpty){
         const pushed=await syncPushNow({silent});
@@ -3375,6 +3508,11 @@ async function syncPull(options){
     companyConfig=normalizeCompanyConfig(data.companyConfig||companyConfig);
     companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
     donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));
+    if(String(data.donationResetVersion||'')!==DONATION_RESET_VERSION){
+      donors.forEach(d=>{d.history=(d.history||[]).filter(h=>h&&h.type!=='donation')});
+      companies.forEach(c=>{c.history=(c.history||[]).filter(h=>h&&h.type!=='donation')});
+      __pendingDonationReset=true;
+    }
     normalizeDonationWorkflow();
     projects=Array.isArray(data.projects)?normalizeProjects(data.projects):projects;
     channels=Array.isArray(data.channels)&&data.channels.length?data.channels:channels;
@@ -3401,6 +3539,10 @@ async function syncPull(options){
 
     lastSyncAt=new Date().toISOString();
     safeSet(localStorage,SYNCKEY,lastSyncAt);
+    if(__pendingDonationReset){
+      const resetSaved=await syncPushNow({silent:true});
+      if(resetSaved){__pendingDonationReset=false;}
+    }
     setConnStatus('on');
     return changed;
   }catch(e){
@@ -3440,7 +3582,9 @@ async function syncPushNow(options){
   __pushInFlight=true;
   const revisionAtStart=__localRevision;
   const payload={
-    users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig
+    users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig,
+    donationResetVersion:DONATION_RESET_VERSION,
+    __allowDonationReset:__pendingDonationReset===true
   };
 
   if(!options.silent)__syncIndicatorShow('جارٍ حفظ التعديلات...');
@@ -3531,7 +3675,7 @@ function clearTemporarySystemData(){
   if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   if(!confirm('سيتم حذف البيانات المؤقتة والمخزنة محليًا في هذا المتصفح الخاصة بالنظام، مع عدم حذف البيانات من Google Sheets. إذا كان الربط محفوظًا فسيتم إعادة تحميل البيانات من الشيت بعد ذلك. هل تريد المتابعة؟'))return;
   try{
-    const keepGas=safeGet(localStorage,GASKEY)||getQueryParam('gas')||DEFAULT_GAS_URL||'';
+    const keepGas='';
     [UKEY,DKEY,COMPANYKEY,COMPANYCONFIGKEY,PKEY,CKEY,IKEY,MCKEY,SESSION,SYNCKEY].forEach(k=>{safeRemove(localStorage,k);safeRemove(sessionStorage,k)});
     Object.keys(MEMORY_STORAGE).forEach(k=>delete MEMORY_STORAGE[k]);
     if(keepGas)safeSet(localStorage,GASKEY,keepGas);
@@ -3544,7 +3688,7 @@ function clearTemporarySystemData(){
 
 function clearSystemCacheAndReload(){
   if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
-  const gas=safeGet(localStorage,GASKEY)||getQueryParam('gas')||DEFAULT_GAS_URL||'';
+  const gas='';
   if(!confirm('سيتم مسح التخزين المحلي الخاص بالنظام والجلسة الحالية، ثم إعادة تحميل البيانات من Google Sheets إذا كان الربط محفوظًا. لن يتم حذف البيانات من Google Sheets. هل تريد المتابعة؟'))return;
   try{
     const keys=[];
@@ -3657,12 +3801,8 @@ async function login(){
   if(userInput)userInput.value='';
   if(passInput)passInput.value='';
 
-  // خطوة التحقق الثانية (نفس دورة الدخول المعتمدة في باي موب): رمز SMS يُرسل لرقم الهاتف المسجَّل بعد التأكد من كلمة المرور.
-  if(isDeviceTrusted(found.id) || !digitsOnly(found.phone)){
-    finalizeLogin(found);
-    return;
-  }
-  startOtpVerification('login',found.phone,found);
+  // تم إلغاء كود/نافذة الأمان التجريبية من تسجيل الدخول حتى يعمل الحساب على أي جهاز.
+  finalizeLogin(found);
 }
 function finalizeLogin(user){
   currentUser=user;
@@ -3757,8 +3897,8 @@ function openRegister(forceSuper){
   const locked=forceSuper||isFirst;
   /* حاجز صارم: شاشة إنشاء/استعادة المدير الرئيسي لا تُفتح أبدًا من رابط مستخدم،
      ولا حتى عندما تكون قائمة المستخدمين فارغة بسبب فشل المزامنة مع الشيت. */
-  if(locked && isUserPortalLink() && !isSuperAdmin(currentUser) && !setupCodeVerified){
-    alert('غير مصرح: إعداد أو استعادة حساب المدير الرئيسي غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');
+  if(locked && !setupCodeVerified){
+    alert('إعداد أو استعادة حساب المدير الرئيسي لا يتم إلا بعد إدخال رمز الإعداد السري.');
     return;
   }
   if(!locked && !isSuperAdmin(currentUser)){alert('إضافة الحسابات (موظفين أو مديرين) متاحة للمدير الرئيسي للنظام فقط.');return}
@@ -3777,15 +3917,19 @@ function openRegister(forceSuper){
    </div>
   </div>
   <div class="field hidden" id="r_categoryField"><label>فئة المدير</label><select id="r_category">${managerCategoryOptions('')}</select></div>
-  <div class="field"><label>الاسم الثلاثي</label><input id="r_name"></div>
-  <div class="field"><label>رقم الهاتف</label><input id="r_phone" type="tel"></div>
-  <div class="field"><label>اسم المستخدم</label><input id="r_username"></div>
+  <div class="field"><label>الاسم</label><input id="r_name"></div>
+  <div class="grid2">
+   <div class="field"><label>رقم الهاتف</label><input id="r_phone" type="tel"></div>
+   <div class="field"><label>الإيميل</label><input id="r_email" type="email" autocomplete="email"></div>
+  </div>
+  <div class="grid2">
+   <div class="field"><label>الإدارة</label><input id="r_department" placeholder="مثال: إدارة تنمية الموارد المالية"></div>
+   <div class="field"><label>اسم المستخدم</label><input id="r_username"></div>
+  </div>
   <div class="grid2">
    <div class="field"><label>كلمة المرور</label><input id="r_pass" type="password" minlength="8" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
    <div class="field"><label>تأكيد كلمة المرور</label><input id="r_pass2" type="password"></div>
   </div>
-  <div class="field"><label>سؤال الأمان</label><input id="r_secq"></div>
-  <div class="field"><label>إجابة سؤال الأمان</label><input id="r_seca"></div>
   <p class="small-note" style="margin-top:2px">هذه هي بيانات حسابك الشخصي كمدير رئيسي للنظام فقط. ربط Google Sheets خطوة منفصلة واختيارية يمكنك عملها بعد الدخول، من شاشة "مزامنة البيانات" — النظام يعمل محليًا في هذا المتصفح بدون ربط، وتقدر تربطه في أي وقت لاحق.</p>
   <div class="modal-actions"><button class="btn-primary" onclick="submitRegister(true)">إنشاء الحساب</button><button class="btn-outline" onclick="returnToNormalLogin()">الدخول بحساب موجود</button></div>`)
 }
@@ -3800,11 +3944,17 @@ function openRegisterDetails(prefill){
    </div>
   </div>
   <div class="field hidden" id="r_categoryField"><label>فئة المدير</label><select id="r_category">${managerCategoryOptions('')}</select></div>
-  <div class="field"><label>الاسم الثلاثي</label><input id="r_name"></div>
-  <div class="field"><label>رقم الهاتف</label><input id="r_phone" type="tel" value="${escapeHtml(phone)}" placeholder="مثال: 01xxxxxxxxx" style="direction:ltr"></div>
-  <div class="field"><label>اسم المستخدم</label><input id="r_username"></div>
+  <div class="field"><label>الاسم</label><input id="r_name"></div>
+  <div class="grid2">
+   <div class="field"><label>رقم الهاتف</label><input id="r_phone" type="tel" value="${escapeHtml(phone)}" placeholder="مثال: 01xxxxxxxxx" style="direction:ltr"></div>
+   <div class="field"><label>الإيميل</label><input id="r_email" type="email" autocomplete="email"></div>
+  </div>
+  <div class="grid2">
+   <div class="field"><label>الإدارة</label><input id="r_department" placeholder="مثال: إدارة تنمية الموارد المالية"></div>
+   <div class="field"><label>اسم المستخدم</label><input id="r_username"></div>
+  </div>
   <div class="settings-section" style="margin-top:8px"><b style="display:block;margin-bottom:8px;color:var(--primary-dark)">مجال المتابعة</b><div class="small-note" style="margin-bottom:8px">حدد نوع الجهات التي سيتابعها هذا الحساب. هذا الإعداد مستقل عن صلاحيات التسجيل ويمكن تعديل الصلاحيات لاحقًا بشكل منفصل.</div><div style="display:flex;gap:14px;flex-wrap:wrap"><label class="user-chip"><input type="radio" name="r_followScope" value="individuals" checked> يتابع الأفراد فقط</label><label class="user-chip"><input type="radio" name="r_followScope" value="companies"> يتابع الشركات فقط</label><label class="user-chip"><input type="radio" name="r_followScope" value="both"> يتابع الأفراد والشركات</label></div></div>
-  <div class="settings-section"><h4>تفعيل المستخدم</h4><p class="small-note">لن يضع مدير النظام كلمة مرور المستخدم. بعد إضافة الحساب سيتم إنشاء رابط تفعيل خاص ترسله للمستخدم ليحدد كلمة المرور وسؤال الأمان بنفسه — وسيُطلب من المستخدم عند كل تسجيل دخول لاحق إدخال رمز تحقق SMS يُرسل إلى هذا الرقم.</p></div>
+  <div class="settings-section"><h4>تفعيل المستخدم</h4><p class="small-note">لن يضع مدير النظام كلمة مرور المستخدم. بعد إضافة الحساب سيتم إنشاء رابط تفعيل خاص ترسله للمستخدم ليحدد كلمة المرور بنفسه. استعادة كلمة المرور لاحقًا تتم بإرسال كود تحقق إلى الإيميل المسجل للحساب.</p></div>
   <div class="modal-actions"><button class="btn-primary" onclick="submitRegister(false)">إضافة الحساب</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
   toggleRegisterCategoryField();
   setTimeout(()=>document.getElementById('r_name')?.focus(),50);
@@ -3822,8 +3972,7 @@ async function submitRegister(locked){
        أي رمز إعداد. لو فشلت المزامنة مع الشيت على جهاز مستخدم، كانت قائمة
        المستخدمين تصبح فارغة ويستطيع أي شخص يفتح رابطه إنشاء حساب مدير رئيسي.
        الآن مسار التثبيت الأول ممنوع نهائيًا من روابط المستخدمين. */
-    if(isUserPortalLink() && !isSuperAdmin(currentUser) && !setupCodeVerified){alert('غير مصرح: لا يمكن إنشاء حساب المدير الرئيسي من رابط المستخدم.');return;}
-    if(!isFirst && !isSuperAdmin(currentUser) && !setupCodeVerified){alert('غير مصرح: إنشاء حساب المدير الرئيسي متاح فقط أثناء التثبيت الأول أو بعد تسجيل الدخول بالمدير الرئيسي أو بعد التحقق من رمز الإعداد السري.');return;}
+    if(!setupCodeVerified){alert('غير مصرح: لا يمكن إنشاء حساب المدير الرئيسي إلا بعد التحقق من رمز الإعداد السري.');return;}
   }else if(!isSuperAdmin(currentUser)){
     alert('غير مصرح: إضافة الحسابات متاحة للمدير الرئيسي للنظام فقط.');return;
   }
@@ -3834,24 +3983,27 @@ async function submitRegister(locked){
   const followScope=locked?'both':(document.querySelector('input[name="r_followScope"]:checked')?.value||'both');
   const name=document.getElementById('r_name').value.trim();
   const phone=digitsOnly(document.getElementById('r_phone').value);
+  const email=(document.getElementById('r_email')?.value||'').trim().toLowerCase();
+  const department=(document.getElementById('r_department')?.value||'').trim();
   const username=document.getElementById('r_username').value.trim();
-  if(name.split(/\s+/).filter(Boolean).length<3){alert('يرجى إدخال الاسم الثلاثي كاملًا.');return}
+  if(!name){alert('يرجى إدخال الاسم.');return}
   if(phone.length<10){alert('يرجى إدخال رقم هاتف صحيح.');return}
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('يرجى إدخال إيميل صحيح.');return}
+  if(!department){alert('يرجى إدخال الإدارة.');return}
   if(!username){alert('يرجى اختيار اسم مستخدم.');return}
-  if(USERS.some(u=>u.username===username)){alert('اسم المستخدم هذا مستخدم بالفعل.');return}
+  if(USERS.some(u=>String(u.username||'').toLowerCase()===username.toLowerCase())){alert('اسم المستخدم هذا مستخدم بالفعل.');return}
+  if(USERS.some(u=>String(u.email||'').toLowerCase()===email)){alert('هذا الإيميل مستخدم بالفعل.');return}
   let payload;
   if(locked){
     const pass=document.getElementById('r_pass').value, pass2=document.getElementById('r_pass2').value;
-    const secQuestion=document.getElementById('r_secq').value.trim(), secAnswer=document.getElementById('r_seca').value.trim();
     if(!pass||!isStrongPassword(pass)){alert(PASSWORD_POLICY_MSG);return}
     if(pass!==pass2){alert('كلمة المرور وتأكيدها غير متطابقين.');return}
-    if(!secQuestion||!secAnswer){alert('يرجى إدخال سؤال الأمان وإجابته.');return}
-    payload={id:uid(),fullName:name,phone,username,passwordHash:await hashPassword(pass),role,managerCategory,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:secQuestion,securityAnswer:secAnswer,activated:true};
+    payload={id:uid(),fullName:name,phone,email,department,username,passwordHash:await hashPassword(pass),role,managerCategory,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:'',securityAnswer:'',activated:true};
     USERS.push(payload); await saveUsersReliable(); currentUser=payload; safeSet(sessionStorage,SESSION,payload.id);
     setupCodeVerified=false;
     closeModal(); showApp(); alert('تم إنشاء حساب المدير الرئيسي للنظام بنجاح. يمكنك الآن ربط Google Sheets متى شئت من شاشة "مزامنة البيانات" — الخطوة اختيارية وليست شرطًا لاستخدام النظام.'); return;
   }
-  payload={id:uid(),fullName:name,phone,username,passwordHash:'',role,managerCategory,followScope,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:'',securityAnswer:'',activated:false,activationToken:genSecureToken(24),phoneVerified:false};
+  payload={id:uid(),fullName:name,phone,email,department,username,passwordHash:'',role,managerCategory,followScope,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:'',securityAnswer:'',activated:false,activationToken:genSecureToken(24),phoneVerified:false};
   requireSuperAdminConfirm('addAccount',payload,'إضافة حساب "'+name+'" ('+roleLabel(role)+')');
 }
 async function executeAddAccount(payload){
@@ -3866,62 +4018,75 @@ function copyActivationLink(id){
   else prompt('انسخ الرابط:',link);
 }
 
-/* ---------- forgot password (self-service: username, then answer the security question set by the system admin) ---------- */
+/* ---------- forgot password: email OTP recovery ---------- */
 function openForgot(){
-  /* متاح من كل من بوابة المدير ورابط المستخدم العادي: هذا هو خيار "نسيت كلمة
-     المرور" الوحيد المتاح لموظفي/مديري/الإدارة المالية على شاشتهم المبسّطة.
-     حساب المدير الرئيسي نفسه مستثنى ولا يمكن استرجاعه من هنا — انظر
-     findAccountForReset أدناه. */
+  pendingReset=null;
   openModal(`<h3>نسيت كلمة المرور</h3>
-  <p class="small-note">أدخل اسم المستخدم لعرض سؤال الأمان الخاص بحسابك.</p>
-  <div class="field"><label>اسم المستخدم</label><input id="fg_username_in"></div>
-  <div class="modal-actions"><button class="btn-primary" onclick="findAccountForReset()">التالي</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
-}
-function findAccountForReset(){
-  const username=document.getElementById('fg_username_in').value.trim();
-  const user=USERS.find(u=>u.username===username);
-  if(!user){alert('لا يوجد حساب بهذا الاسم.');return}
-  // حساب المدير الرئيسي لا تتم إدارته من شاشة المستخدمين العاديين.
-  if(user.role==='superadmin'){
-    alert('استعادة حساب المدير الرئيسي تتم من خلال خيار الاستعادة المخصص للمدير، وليست من شاشة المستخدمين العاديين.');
-    return;
-  }
-  if(!user.securityQuestion){
-    alert('لا يوجد سؤال أمان مسجَّل لهذا الحساب. يرجى مراجعة مدير النظام لإعادة تعيين كلمة المرور.');
-    return;
-  }
-  pendingReset={id:user.id};
-  closeModal();
-  openModal(`<h3>سؤال الأمان</h3>
-  <p class="small-note">اسم المستخدم: <b>${escapeHtml(user.username)}</b></p>
-  <div class="field"><label>${escapeHtml(user.securityQuestion)}</label><input id="fg_answer"></div>
-  <div class="modal-actions"><button class="btn-primary" onclick="verifySecurityAnswer()">التالي</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
-}
-function verifySecurityAnswer(){
-  if(!pendingReset){closeModal();return}
-  const user=USERS.find(u=>u.id===pendingReset.id);
-  if(!user){pendingReset=null;closeModal();return}
-  const answer=document.getElementById('fg_answer').value.trim();
-  if(!answer||normName(answer)!==normName(user.securityAnswer||'')){alert('إجابة سؤال الأمان غير صحيحة.');return}
-  closeModal();
-  openModal(`<h3>تعيين كلمة مرور جديدة</h3>
-  <p class="small-note">اسم المستخدم: <b>${escapeHtml(user.username)}</b></p>
+  <p class="small-note">أدخل اسم المستخدم والإيميل المسجلين في حسابك. سيتم إرسال كود تحقق إلى الإيميل المسجل.</p>
   <div class="grid2">
-   <div class="field"><label>كلمة المرور الجديدة</label><input id="fg_pass" type="password" minlength="8" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
-   <div class="field"><label>تأكيد كلمة المرور</label><input id="fg_pass2" type="password"></div>
+   <div class="field"><label>اسم المستخدم</label><input id="fg_username_in" autocomplete="username"></div>
+   <div class="field"><label>الإيميل المسجل</label><input id="fg_email_in" type="email" autocomplete="email"></div>
   </div>
-  <div class="modal-actions"><button class="btn-primary" onclick="confirmReset()">تأكيد وتغيير كلمة المرور</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
+  <div class="modal-actions"><button class="btn-primary" onclick="requestResetOtp()">إرسال كود التحقق</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
+}
+async function requestResetOtp(){
+  const username=(document.getElementById('fg_username_in')?.value||'').trim();
+  const email=(document.getElementById('fg_email_in')?.value||'').trim().toLowerCase();
+  if(!username||!email){alert('يرجى إدخال اسم المستخدم والإيميل.');return}
+  if(!GAS_URL){alert('استعادة كلمة المرور بالكود تحتاج أن يكون النظام مرتبطًا بـ Google Sheets.');return}
+  try{
+    __syncIndicatorShow('جارٍ إرسال كود التحقق إلى الإيميل...');
+    let res;
+    try{res=await gasCall('requestResetOtp',{username,email});}catch(e){res=await gasFormPost('requestResetOtp',{username,email});}
+    if(!res||res.error)throw new Error(res&&res.error||'تعذر إرسال الكود');
+    pendingReset={username,email};
+    closeModal();
+    openModal(`<h3>كود التحقق</h3>
+    <p class="small-note">إذا كانت بيانات الحساب مطابقة، تم إرسال كود تحقق من 6 أرقام إلى الإيميل المسجل. الكود صالح لمدة 10 دقائق.</p>
+    <div class="field"><label>كود التحقق</label><input id="fg_otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••"></div>
+    <div class="modal-actions"><button class="btn-primary" onclick="verifyResetOtp()">تحقق</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
+  }catch(e){alert('تعذر إرسال كود التحقق حاليًا. تأكد من ربط Google Sheets وإعداد صلاحية إرسال البريد في Apps Script.');}
+  finally{__syncIndicatorHide();}
+}
+async function verifyResetOtp(){
+  if(!pendingReset){closeModal();return}
+  const otp=(document.getElementById('fg_otp')?.value||'').replace(/\D/g,'');
+  if(!/^\d{6}$/.test(otp)){alert('أدخل كود التحقق المكون من 6 أرقام.');return}
+  try{
+    __syncIndicatorShow('جارٍ التحقق من الكود...');
+    let res;
+    try{res=await gasCall('verifyResetOtp',{username:pendingReset.username,email:pendingReset.email,otp});}catch(e){res=await gasFormPost('verifyResetOtp',{username:pendingReset.username,email:pendingReset.email,otp});}
+    if(!res||res.error)throw new Error(res&&res.error||'الكود غير صحيح');
+    pendingReset.resetToken=res.resetToken||'';
+    if(!pendingReset.resetToken)throw new Error('تعذر إنشاء رمز إعادة التعيين');
+    closeModal();
+    openModal(`<h3>تعيين كلمة مرور جديدة</h3>
+    <p class="small-note">تم التحقق من الكود بنجاح. أدخل كلمة المرور الجديدة.</p>
+    <div class="grid2">
+     <div class="field"><label>كلمة المرور الجديدة</label><input id="fg_pass" type="password" minlength="8" autocomplete="new-password" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
+     <div class="field"><label>تأكيد كلمة المرور</label><input id="fg_pass2" type="password" autocomplete="new-password"></div>
+    </div>
+    <div class="modal-actions"><button class="btn-primary" onclick="confirmReset()">تأكيد وتغيير كلمة المرور</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
+  }catch(e){alert('كود التحقق غير صحيح أو منتهي الصلاحية. يمكنك طلب كود جديد.');}
+  finally{__syncIndicatorHide();}
 }
 async function confirmReset(){
-  if(!pendingReset){closeModal();return}
-  const user=USERS.find(u=>u.id===pendingReset.id);
-  if(!user){alert('حدث خطأ، حاول مرة أخرى.');pendingReset=null;closeModal();return}
-  const pass=document.getElementById('fg_pass').value, pass2=document.getElementById('fg_pass2').value;
+  if(!pendingReset?.resetToken){closeModal();return}
+  const pass=document.getElementById('fg_pass')?.value||'', pass2=document.getElementById('fg_pass2')?.value||'';
   if(!pass||!isStrongPassword(pass)){alert(PASSWORD_POLICY_MSG);return}
   if(pass!==pass2){alert('كلمة المرور وتأكيدها غير متطابقين.');return}
-  user.passwordHash=await hashPassword(pass);delete user.password;
-  await saveUsersReliable();pendingReset=null;closeModal();
-  alert('تم تحديث كلمة المرور بنجاح. اسم المستخدم الخاص بك هو: '+user.username+'\nيمكنك الآن تسجيل الدخول.')
+  try{
+    const passwordHash=await hashPassword(pass);
+    __syncIndicatorShow('جارٍ حفظ كلمة المرور الجديدة...');
+    let res;
+    const payload={username:pendingReset.username,email:pendingReset.email,resetToken:pendingReset.resetToken,passwordHash};
+    try{res=await gasCall('completePasswordReset',payload);}catch(e){res=await gasFormPost('completePasswordReset',payload);}
+    if(!res||res.error)throw new Error(res&&res.error||'تعذر تحديث كلمة المرور');
+    pendingReset=null;closeModal();
+    await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});
+    alert('تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.');
+  }catch(e){alert('تعذر تغيير كلمة المرور. قد يكون رمز الاستعادة انتهت صلاحيته؛ اطلب كودًا جديدًا.');}
+  finally{__syncIndicatorHide();}
 }
 
 /* ---------- change password (self-service, available to every logged-in user) ---------- */
@@ -4081,7 +4246,7 @@ function renderAccountsList(){
  box.innerHTML=USERS.map(u=>{
   const self=u.id===currentUser.id, canDelete=u.role!=='superadmin', active=isActiveUser(u);
   return `<div class="hist-item" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-   <div><b>${escapeHtml(u.fullName)}</b> <span class="small-note">(${escapeHtml(userRoleLabel(u))} — ${escapeHtml(u.username)} — ${escapeHtml(u.phone)})${self?' — حسابك الحالي':''}</span>
+   <div><b>${escapeHtml(u.fullName)}</b> <span class="small-note">(${escapeHtml(userRoleLabel(u))} — ${escapeHtml(u.username)} — ${escapeHtml(u.email||'بدون إيميل')} — ${escapeHtml(u.department||'بدون إدارة')} — ${escapeHtml(u.phone||'')})${self?' — حسابك الحالي':''}</span>
    <span class="badge ${active?'green':'red'}">${active?'نشط':'غير نشط'}</span><span class="badge gold">متابعة: ${escapeHtml(followScopeLabel(u))}</span></div>
    <div style="display:flex;gap:6px;flex-wrap:wrap">
     ${canDelete?`${u.activated===false?`<button class="btn-primary btn-small" onclick="copyActivationLink('${u.id}')">نسخ رابط التفعيل</button>`:''}<button class="btn-outline btn-small" onclick="editUserUsername('${u.id}')">تعديل اسم المستخدم</button><button class="btn-outline btn-small" onclick="resetUserPassword('${u.id}')">إرسال رابط تعيين كلمة المرور</button><button class="btn-outline btn-small" onclick="openUserPermissions('${u.id}')">تعديل الصلاحيات</button>`:''}
@@ -4172,7 +4337,6 @@ async function submitEditUsername(id){
   const norm=normalizeLoginUsername(nu);
   const duplicate=USERS.some(x=>x.id!==id && normalizeLoginUsername(x.username)===norm);
   if(duplicate){alert('اسم المستخدم هذا مستخدم بالفعل. اختر اسمًا آخر.');return}
-  if(nu.length<3){alert('اسم المستخدم يجب ألا يقل عن 3 أحرف أو أرقام.');return}
   requireSuperAdminConfirm('editUsername',{id,newUsername:nu},'تعديل اسم المستخدم للحساب "'+(u.fullName||u.username||'المستخدم')+'"');
 }
 async function executeEditUsername(payload){
@@ -5289,7 +5453,8 @@ function openModal(content){
  const o=document.createElement('div');o.className='overlay';o.id='overlay';o.innerHTML=`<div class="modal">${content}</div>`;
  o.addEventListener('mousedown',e=>{if(e.target===o)closeModal()});document.body.appendChild(o)
 }
-function closeModal(){document.getElementById('overlay')?.remove()}
+function closeModal(){const o=document.getElementById('overlay');if(o)o.remove()}
+document.addEventListener('click',e=>{const b=e.target?.closest?.('#overlay .modal-actions button.btn-primary,#overlay .modal-actions button.btn-gold,#overlay .modal-actions button.btn-danger');if(!b||b.dataset.clickLocked==='1')return;b.dataset.clickLocked='1';setTimeout(()=>{if(b.isConnected)b.dataset.clickLocked='0'},900)},true);
 
 /* ---------- privacy, data protection & IP rights policy ---------- */
 function openPolicy(){
@@ -5303,7 +5468,7 @@ function openPolicy(){
   <ul>
    <li>لا يتم مشاركة بيانات المتبرعين مع أي جهة خارج المؤسسة دون سند قانوني أو موافقة صريحة.</li>
    <li>يقتصر الاطلاع على بيانات متبرع معيّن على الموظف المسؤول عنه والمديرين والمدير الرئيسي للنظام فقط.</li>
-   <li>بيانات حسابات المستخدمين (الاسم، الهاتف، اسم الدخول) تُستخدم حصريًا لأغراض تسجيل الدخول واستعادة الحساب، ولا تُستخدم لأي غرض آخر. يقوم مدير النظام بتعيين كلمة المرور وسؤال الأمان الخاصَّين بكل حساب عند إنشائه.</li>
+   <li>بيانات حسابات المستخدمين (الاسم، الهاتف، اسم الدخول) تُستخدم حصريًا لأغراض تسجيل الدخول واستعادة الحساب، ولا تُستخدم لأي غرض آخر. يقوم النظام بحماية الحسابات، واستعادة كلمة المرور تتم عبر كود تحقق يُرسل إلى الإيميل المسجل للحساب.</li>
   </ul>
 
   <h4>ثانيًا: حماية البيانات</h4>
@@ -5539,8 +5704,8 @@ function companyCard(c){
     </div>
   </div>`;
 }
-function setCompanySubView(v){companySubView=v==='report'?'report':'list';document.getElementById('companyListPanel')?.classList.toggle('hidden',companySubView!=='list');document.getElementById('companyReportPanel')?.classList.toggle('hidden',companySubView!=='report');document.getElementById('companySubListBtn')?.classList.toggle('active',companySubView==='list');document.getElementById('companySubReportBtn')?.classList.toggle('active',companySubView==='report');document.getElementById('companySubConfigBtn')?.classList.remove('active');if(companySubView==='report')renderCompanyGeneralReport();}
-function renderCompanies(){renderCompanyManagerTabs();renderCompanyKpis();renderCompanyFilters();const list=companyFilteredList();document.getElementById('companiesListArea').innerHTML=list.length?list.map(companyCard).join(''):'<div class="empty">لا توجد شركات مطابقة للبحث أو الفلاتر الحالية. أضف أول شركة لبدء CRM الشركات.</div>';if(companySubView==='report')renderCompanyGeneralReport();}
+function legacy_setCompanySubView(v){companySubView=v==='report'?'report':'list';document.getElementById('companyListPanel')?.classList.toggle('hidden',companySubView!=='list');document.getElementById('companyReportPanel')?.classList.toggle('hidden',companySubView!=='report');document.getElementById('companySubListBtn')?.classList.toggle('active',companySubView==='list');document.getElementById('companySubReportBtn')?.classList.toggle('active',companySubView==='report');document.getElementById('companySubConfigBtn')?.classList.remove('active');if(companySubView==='report')renderCompanyGeneralReport();}
+function legacy_renderCompanies(){renderCompanyManagerTabs();renderCompanyKpis();renderCompanyFilters();const list=companyFilteredList();document.getElementById('companiesListArea').innerHTML=list.length?list.map(companyCard).join(''):'<div class="empty">لا توجد شركات مطابقة للبحث أو الفلاتر الحالية. أضف أول شركة لبدء CRM الشركات.</div>';if(companySubView==='report')renderCompanyGeneralReport();}
 function companySelectOptions(arr,selected=''){return arr.map(x=>`<option value="${escapeHtml(x)}" ${x===selected?'selected':''}>${escapeHtml(x)}</option>`).join('')}
 /* =========================================================
    COMPANIES CRM PRO — partnership management layer
@@ -5579,7 +5744,7 @@ function companyCan(action,id){return canModule('companies',action,currentUser)}
 function companySelectOptionsPro(arr,selected=''){return (Array.isArray(arr)?arr:[]).map(x=>`<option value="${escapeHtml(x)}" ${String(x)===String(selected)?'selected':''}>${escapeHtml(x)}</option>`).join('')}
 function companyMultiOptions(arr,selected){const set=new Set(Array.isArray(selected)?selected:[]);return (arr||[]).map(x=>`<label style="display:inline-flex;align-items:center;gap:5px;margin:4px 8px 4px 0;font-size:12px"><input type="checkbox" class="companyMulti" value="${escapeHtml(x)}" ${set.has(x)?'checked':''}>${escapeHtml(x)}</label>`).join('')}
 function companyCheckedValues(cls){return [...document.querySelectorAll('.'+cls+':checked')].map(x=>x.value)}
-function openCompanyForm(id=''){
+function legacy_openCompanyForm(id=''){
   if(!companyCan(id?'edit':'add',id)){alert('ليس لديك صلاحية هذا الإجراء على الشركات.');return}
   const c=id?companyNormalize(companies.find(x=>x.id===id)):null;if(id&&!c)return;
   const mgr=isManagerRole(currentUser);
@@ -5609,7 +5774,7 @@ function openCompanyForm(id=''){
     <div class="modal-actions"><button class="btn-primary" onclick="saveCompany('${id}')">${c?'حفظ التعديلات':'إضافة الشركة'}</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
   }catch(e){console.error(e);alert('تعذر فتح نموذج الشركة. تم إصلاح الحماية من أخطاء النموذج، حاول مرة أخرى.');}
 }
-function saveCompany(id=''){
+function legacy_saveCompany(id=''){
   const isEdit=!!id;if(!companyCan(isEdit?'edit':'add',id))return;
   const el=x=>document.getElementById(x);const name=el('cf_name')?.value.trim()||'';if(!name){alert('يرجى إدخال اسم الشركة.');el('cf_name')?.focus();return}
   const phone=el('cf_phone')?.value.trim()||'';const existing=companies.find(c=>c.id!==id&&(normName(c.name)===normName(name)||(phone&&digitsOnly(c.phone)===digitsOnly(phone))));if(existing){alert('توجد شركة أخرى بنفس الاسم أو رقم الهاتف.');return}
@@ -5638,8 +5803,8 @@ function renderCompanies(){
 /* Reliable add-company fallback: bind the button directly after every render so a stale inline handler cannot block the form. */
 function bindCompanyAddButton(){const b=document.getElementById('addCompanyBtn');if(!b||b.dataset.boundPro)return;if(!companyCan('add'))return;b.dataset.boundPro='1';b.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openCompanyForm('')})}
 const _renderCompaniesBase=renderCompanies;renderCompanies=function(){_renderCompaniesBase();bindCompanyAddButton()};
-function saveCompanyConfig(){if(!isSuperAdmin(currentUser)){alert('إعدادات الشركات متاحة للمدير الرئيسي فقط.');return}companyConfigPro();const keys=Object.keys(COMPANY_PRO_DEFAULT);keys.forEach(k=>{const el=document.getElementById('ccfg_'+k);if(el){const vals=el.value.split(/\n/).map(x=>x.trim()).filter(Boolean);if(vals.length)companyConfig[k]=[...new Set(vals)]}});persistCompanyConfig();closeModal();renderCompanies()}
-function openCompanyConfig(){if(!isSuperAdmin(currentUser)){alert('إعدادات الشركات متاحة للمدير الرئيسي فقط.');return}companyConfigPro();const section=(key,label)=>`<div class="company-form-section"><h4>${label}</h4><textarea id="ccfg_${key}" rows="5">${escapeHtml((companyConfig[key]||[]).join('\n'))}</textarea><div class="small-note">كل سطر = اختيار مستقل. يمكنك الإضافة أو التعديل أو الحذف.</div></div>`;openModal(`<h3>إعدادات CRM الشركات والشراكات</h3>${Object.keys(COMPANY_PRO_DEFAULT).map(k=>section(k,({categories:'فئات الشركات',classifications:'تصنيفات العلاقة',stages:'مراحل الشراكة',activityTypes:'أنواع الإجراءات',companyTypes:'أنواع الشركات / العلاقة',sectors:'قطاعات الشركات',sources:'مصادر الشركات',interests:'مجالات اهتمام الشركة',partnershipTypes:'أنواع الشراكات'})[k]||k)).join('')}<div class="modal-actions"><button class="btn-primary" onclick="saveCompanyConfig()">حفظ الإعدادات</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)}
+function legacy_saveCompanyConfig(){if(!isSuperAdmin(currentUser)){alert('إعدادات الشركات متاحة للمدير الرئيسي فقط.');return}companyConfigPro();const keys=Object.keys(COMPANY_PRO_DEFAULT);keys.forEach(k=>{const el=document.getElementById('ccfg_'+k);if(el){const vals=el.value.split(/\n/).map(x=>x.trim()).filter(Boolean);if(vals.length)companyConfig[k]=[...new Set(vals)]}});persistCompanyConfig();closeModal();renderCompanies()}
+function legacy_openCompanyConfig(){if(!isSuperAdmin(currentUser)){alert('إعدادات الشركات متاحة للمدير الرئيسي فقط.');return}companyConfigPro();const section=(key,label)=>`<div class="company-form-section"><h4>${label}</h4><textarea id="ccfg_${key}" rows="5">${escapeHtml((companyConfig[key]||[]).join('\n'))}</textarea><div class="small-note">كل سطر = اختيار مستقل. يمكنك الإضافة أو التعديل أو الحذف.</div></div>`;openModal(`<h3>إعدادات CRM الشركات والشراكات</h3>${Object.keys(COMPANY_PRO_DEFAULT).map(k=>section(k,({categories:'فئات الشركات',classifications:'تصنيفات العلاقة',stages:'مراحل الشراكة',activityTypes:'أنواع الإجراءات',companyTypes:'أنواع الشركات / العلاقة',sectors:'قطاعات الشركات',sources:'مصادر الشركات',interests:'مجالات اهتمام الشركة',partnershipTypes:'أنواع الشراكات'})[k]||k)).join('')}<div class="modal-actions"><button class="btn-primary" onclick="saveCompanyConfig()">حفظ الإعدادات</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)}
 
 function openCompanyActivity(id){const c=companies.find(x=>x.id===id);if(!c||!canModule('companies','edit',currentUser))return;openModal(`<h3>تسجيل إجراء — ${escapeHtml(c.name)}</h3><div class="grid2"><div class="field"><label>نوع الإجراء</label><select id="ca_type">${companySelectOptions(companyConfig.activityTypes)}</select></div><div class="field"><label>التاريخ</label><input id="ca_date" type="date" value="${todayStr()}" max="2050-12-31"></div><div class="field"><label>المرحلة بعد الإجراء</label><select id="ca_stage">${companySelectOptions(companyConfig.stages,companyStage(c))}</select></div><div class="field"><label>جهة الاتصال</label><select id="ca_contact"><option value="">بدون تحديد</option>${(c.contacts||[]).map((x,i)=>`<option value="${i}">${escapeHtml(x.name)}${x.role?' — '+escapeHtml(x.role):''}</option>`).join('')}</select></div><div class="field"><label>موعد المتابعة القادمة</label><input id="ca_next" type="date" max="2050-12-31" value="${escapeHtml(c.nextFollowUp||'')}"></div></div><div class="field"><label>تفاصيل الإجراء والنتيجة</label><textarea id="ca_notes" rows="5" placeholder="ما الذي تم؟ ما النتيجة؟ وما المطلوب في الخطوة القادمة؟"></textarea></div><div class="modal-actions"><button class="btn-primary" onclick="saveCompanyActivity('${id}')">حفظ الإجراء</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)}
 function saveCompanyActivity(id){const c=companies.find(x=>x.id===id);if(!c)return;const idx=document.getElementById('ca_contact').value,contact=idx!==''?(c.contacts||[])[Number(idx)]:null;c.history=c.history||[];c.history.push({type:'activity',hid:uid(),date:document.getElementById('ca_date').value||todayStr(),action:document.getElementById('ca_type').value,stageFrom:companyStage(c),stageTo:document.getElementById('ca_stage').value,contactName:contact?.name||'',notes:document.getElementById('ca_notes').value.trim(),nextFollowUp:document.getElementById('ca_next').value||'',by:currentUser.fullName,createdBy:currentUser.id});c.stage=document.getElementById('ca_stage').value;c.nextFollowUp=document.getElementById('ca_next').value||'';persistCompanies();closeModal();renderCompanies()}
@@ -5743,8 +5908,8 @@ function openCompanyContact(id){
 function saveCompanyContact(id){const c=companies.find(x=>x.id===id);if(!c||!canModule('companies','edit',currentUser))return;const idx=document.getElementById('cc_contact').value;const contact=idx!==''?(c.contacts||[])[Number(idx)]:null;const date=document.getElementById('cc_date').value||todayStr();c.history=c.history||[];c.history.push({type:'contact',hid:uid(),date,action:document.getElementById('cc_action').value,contactName:contact?.name||'',contactRole:contact?.role||'',notes:document.getElementById('cc_notes').value.trim(),nextFollowUp:document.getElementById('cc_next').value||'',by:currentUser.fullName,createdBy:currentUser.id});if(document.getElementById('cc_next').value)c.nextFollowUp=document.getElementById('cc_next').value;persistCompanies();closeModal();renderCompanies();}
 function openCompanyDonation(id){if(!canDonationType('company',currentUser)){alert('ليس لديك صلاحية تسجيل تبرعات الشركات.');return}const c=companies.find(x=>x.id===id);if(!c)return;setView('donationModule');selectDonationModuleTab('new');document.getElementById('md_entityType').value='company';syncModuleDonationEntity();document.getElementById('md_company').value=c.id;document.getElementById('md_amount')?.focus()}
 
-function saveCompanyDonation(id){const c=companies.find(x=>x.id===id);if(!c||!canDonationType('company',currentUser))return;const amount=Number(document.getElementById('cd_amount').value);if(!(amount>0)){alert('يرجى إدخال قيمة تبرع صحيحة.');return}const project=document.getElementById('cd_project').value;if(!project){alert('يرجى اختيار المشروع.');return}const intention=document.getElementById('cd_intention').value;if(!intention){alert('يرجى اختيار النية.');return}const movementStatus=normalizeMovementStatus(document.getElementById('cd_movementStatus').value);c.history=c.history||[];c.history.push({type:'donation',hid:uid(),status:'confirmed',date:document.getElementById('cd_date').value||todayStr(),amount,project,intention,method:document.getElementById('cd_method').value,location:document.getElementById('cd_location').value.trim(),movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',notes:document.getElementById('cd_notes').value.trim(),by:currentUser.fullName,createdBy:currentUser.id});persistCompanies();closeModal();renderCompanies();}
-function openCompanyRecord(id){const c=companies.find(x=>x.id===id);if(!c)return;const emp=USERS.find(u=>u.id===c.employeeId),contacts=c.contacts||[],hist=(c.history||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));openModal(`<h3>${escapeHtml(c.name)}</h3>
+function saveCompanyDonation(id){const c=companies.find(x=>x.id===id);if(!c||!canDonationType('company',currentUser))return;const amount=Number(document.getElementById('cd_amount').value);if(!(amount>0)){alert('يرجى إدخال قيمة تبرع صحيحة.');return}const project=document.getElementById('cd_project').value;if(!project){alert('يرجى اختيار المشروع.');return}const intention=document.getElementById('cd_intention').value;if(!intention){alert('يرجى اختيار النية.');return}const movementStatus=normalizeMovementStatus(document.getElementById('cd_movementStatus').value);c.history=c.history||[];c.history.push({type:'donation',hid:uid(),status:'confirmed',date:document.getElementById('cd_date').value||todayStr(),amount,project,intention,method:document.getElementById('cd_method').value,location:document.getElementById('cd_location').value.trim(),movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',notes:document.getElementById('cd_notes').value.trim(),by:currentUser.fullName,createdBy:currentUser.id});persistCompanies();if(GAS_URL)syncPushNow({silent:true});closeModal();renderCompanies();}
+function legacy_openCompanyRecord(id){const c=companies.find(x=>x.id===id);if(!c)return;const emp=USERS.find(u=>u.id===c.employeeId),contacts=c.contacts||[],hist=(c.history||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));openModal(`<h3>${escapeHtml(c.name)}</h3>
   <div class="company-record-grid"><div class="company-detail"><div class="label">الحالة</div><div class="value">${companyStatusLabel(companyStatus(c))}</div><div class="company-detail"><div class="label">الفئة</div><div class="value">${escapeHtml(companyCategory(c))}</div></div><div class="company-detail"><div class="label">التصنيف</div><div class="value">${escapeHtml(companyClassification(c))}</div></div><div class="company-detail"><div class="label">مرحلة الـ Pipeline</div><div class="value">${escapeHtml(companyStage(c))}</div></div><div class="company-detail"><div class="label">المتابعة القادمة</div><div class="value">${c.nextFollowUp?fmtDate(c.nextFollowUp):'—'}</div></div><div class="company-detail"><div class="label">القيمة المتوقعة</div><div class="value">${c.expectedValue?money(c.expectedValue):'—'}</div></div><div class="company-detail"><div class="label">مصدر الشركة</div><div class="value">${escapeHtml(c.source||'—')}</div></div></div><div class="company-detail"><div class="label">المسؤول</div><div class="value">${escapeHtml(emp?.fullName||'غير محدد')}</div></div><div class="company-detail"><div class="label">إجمالي التبرعات</div><div class="value">${money(companyTotal(c))}</div></div><div class="company-detail"><div class="label">مجال النشاط</div><div class="value">${escapeHtml(c.industry||'—')}</div></div><div class="company-detail"><div class="label">الهاتف</div><div class="value">${escapeHtml(c.phone||'—')}</div></div><div class="company-detail"><div class="label">البريد</div><div class="value">${escapeHtml(c.email||'—')}</div></div><div class="company-detail"><div class="label">السجل التجاري</div><div class="value">${escapeHtml(c.commercialReg||'—')}</div></div><div class="company-detail"><div class="label">الرقم الضريبي</div><div class="value">${escapeHtml(c.taxId||'—')}</div></div><div class="company-detail"><div class="label">العنوان</div><div class="value">${escapeHtml(c.address||'—')}</div></div></div>
   ${c.tags?.length?`<div class="company-tags">${c.tags.map(t=>`<span class="company-tag">${escapeHtml(t)}</span>`).join('')}</div>`:''}
   <div class="company-form-section"><h4>جهات الاتصال</h4><div class="company-contacts">${contacts.length?contacts.map((x,i)=>`<div class="company-contact"><div class="company-contact-head"><span class="company-contact-name">${escapeHtml(x.name)}</span><span class="company-contact-role">${escapeHtml(x.role||'جهة اتصال')}</span></div><div class="small-note">${escapeHtml(x.phone||'')} ${x.email?' · '+escapeHtml(x.email):''}</div></div>`).join(''):'<div class="empty" style="padding:20px">لا توجد جهات اتصال مضافة بعد.</div>'}</div></div>
@@ -5752,7 +5917,7 @@ function openCompanyRecord(id){const c=companies.find(x=>x.id===id);if(!c)return
   <div class="company-form-section"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h4>المتابعات والمهام</h4><button class="btn-outline btn-small" onclick="closeModal();openCompanyTask('${id}')">+ متابعة</button></div>${companyTasks(c).length?companyTasks(c).slice().sort((a,b)=>(a.status==='done')-(b.status==='done')||(a.dueDate||'').localeCompare(b.dueDate||'')).map(t=>`<div class="company-task ${t.status==='done'?'done':''} ${t.status!=='done'&&t.dueDate&&t.dueDate<todayStr()?'overdue':''}"><div><b>${escapeHtml(t.title)}</b><div class="small-note">${t.dueDate?fmtDate(t.dueDate):'بدون موعد'} · ${escapeHtml(t.priority||'')}</div>${t.notes?`<div class="small-note">${escapeHtml(t.notes)}</div>`:''}</div><div>${t.status==='done'?'<span class="company-badge active">تم التنفيذ</span>':`<button class="btn-primary btn-small" onclick="completeCompanyTask('${id}','${t.id}')">تم التنفيذ</button>`}</div></div>`).join(''):'<div class="empty" style="padding:15px">لا توجد متابعات مسجلة.</div>'}</div>
   <div class="company-form-section"><h4>سجل النشاط</h4><div class="company-history">${hist.length?hist.map(h=>h.type==='donation'?`<div class="company-history-item"><b>تبرع</b> — ${fmtDate(h.date)} — <b>${money(h.amount)}</b> — ${escapeHtml(h.project||'')}<br><span class="small-note">${escapeHtml(h.intention||'')} · ${escapeHtml(h.method||'')} · ${h.financeStatus==='approved'?(donationLinkedToFinance(h)?'معتمد ماليًا':'معتمد تلقائي'):h.financeStatus==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد المالي'}${h.notes?' · '+escapeHtml(h.notes):''}</span></div>`:h.type==='activity'?`<div class="company-history-item"><b>إجراء</b> — ${fmtDate(h.date)} — ${escapeHtml(h.action||'')}${h.contactName?' — '+escapeHtml(h.contactName):''}<br><span class="small-note">${escapeHtml(h.notes||'')}${h.stageTo?' · المرحلة: '+escapeHtml(h.stageTo):''}${h.nextFollowUp?' · المتابعة القادمة: '+fmtDate(h.nextFollowUp):''}</span></div>`:`<div class="company-history-item"><b>تواصل</b> — ${fmtDate(h.date)} — ${escapeHtml(h.action||'')}${h.contactName?' — '+escapeHtml(h.contactName):''}<br><span class="small-note">${escapeHtml(h.notes||'')}${h.nextFollowUp?' · المتابعة القادمة: '+fmtDate(h.nextFollowUp):''}</span></div>`).join(''):'<div class="empty" style="padding:20px">لا يوجد نشاط مسجل حتى الآن.</div>'}</div></div>
   <div class="modal-actions"><button class="btn-gold" onclick="closeModal();openCompanyActivity('${id}')">تسجيل إجراء</button><button class="btn-outline" onclick="closeModal();openCompanyTask('${id}')">+ متابعة</button><button class="btn-gold" onclick="closeModal();openCompanyContact('${id}')">تسجيل تواصل</button><button class="btn-outline" onclick="closeModal();addCompanyContactPerson('${id}')">+ جهة اتصال</button><button class="btn-outline" onclick="closeModal();openCompanyReport('${id}')">تقرير الشركة</button><button class="btn-primary" onclick="closeModal();openCompanyDonation('${id}')">تبرع جديد</button>${canModule('companies','edit',currentUser)?`<button class="btn-outline" onclick="closeModal();openCompanyForm('${id}')">تعديل</button>`:''}<button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)}
-function openCompanyReport(id){const c=companies.find(x=>x.id===id);if(!c)return;const hist=(c.history||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));const acts=hist.filter(h=>h.type==='activity'||h.type==='contact').length;const donations=companyDonationEntries(c).length;const total=companyTotal(c);const tasks=companyTasks(c);openModal(`<div id="singleCompanyReport"><h2>تقرير شركة: ${escapeHtml(c.name)}</h2><div class="company-report-grid"><div class="company-report-card"><div class="small-note">التصنيف</div><div class="num" style="font-size:17px">${escapeHtml(companyClassification(c))}</div></div><div class="company-report-card"><div class="small-note">المرحلة</div><div class="num" style="font-size:17px">${escapeHtml(companyStage(c))}</div></div><div class="company-report-card"><div class="small-note">الإجراءات</div><div class="num">${acts}</div></div><div class="company-report-card"><div class="small-note">إجمالي التبرعات</div><div class="num">${money(total)}</div></div></div><div class="company-report-section"><h4>الملخص</h4><div class="grid2"><div><b>الفئة:</b> ${escapeHtml(companyCategory(c))}</div><div><b>المسؤول:</b> ${escapeHtml(USERS.find(u=>u.id===c.employeeId)?.fullName||'—')}</div><div><b>تاريخ التسجيل:</b> ${fmtDate(c.registeredDate)}</div><div><b>المتابعة القادمة:</b> ${c.nextFollowUp?fmtDate(c.nextFollowUp):'—'}</div><div><b>القيمة المتوقعة:</b> ${c.expectedValue?money(c.expectedValue):'—'}</div><div><b>مصدر الشركة:</b> ${escapeHtml(c.source||'—')}</div></div></div><div class="company-report-section"><h4>كل الإجراءات</h4>${hist.filter(h=>h.type!=='donation').map(h=>`<div class="company-history-item"><b>${h.type==='activity'?'إجراء':'تواصل'}</b> — ${fmtDate(h.date)} — ${escapeHtml(h.action||'')}${h.stageTo?' · '+escapeHtml(h.stageTo):''}<br><span class="small-note">${escapeHtml(h.notes||'')}${h.nextFollowUp?' · متابعة: '+fmtDate(h.nextFollowUp):''} · بواسطة ${escapeHtml(h.by||'')}</span></div>`).join('')||'<div class="empty">لا توجد إجراءات مسجلة.</div>'}</div><div class="company-report-section"><h4>التبرعات</h4>${companyDonationEntries(c).map(h=>`<div class="company-history-item">${fmtDate(h.date)} — <b>${money(h.amount)}</b> — ${escapeHtml(h.project||'')} — ${escapeHtml(h.intention||'')}</div>`).join('')||'<div class="empty">لا توجد تبرعات مسجلة.</div>'}</div><div class="company-report-section"><h4>المتابعات</h4>${tasks.map(t=>`<div class="company-task ${t.status==='done'?'done':''}"><b>${escapeHtml(t.title)}</b><span>${t.dueDate?fmtDate(t.dueDate):'—'} · ${t.status==='done'?'تم التنفيذ':'مفتوحة'}</span></div>`).join('')||'<div class="empty">لا توجد متابعات.</div>'}</div></div><div class="modal-actions"><button class="btn-primary" onclick="printSingleCompanyReport()">طباعة التقرير</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)}
+function legacy_openCompanyReport(id){const c=companies.find(x=>x.id===id);if(!c)return;const hist=(c.history||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));const acts=hist.filter(h=>h.type==='activity'||h.type==='contact').length;const donations=companyDonationEntries(c).length;const total=companyTotal(c);const tasks=companyTasks(c);openModal(`<div id="singleCompanyReport"><h2>تقرير شركة: ${escapeHtml(c.name)}</h2><div class="company-report-grid"><div class="company-report-card"><div class="small-note">التصنيف</div><div class="num" style="font-size:17px">${escapeHtml(companyClassification(c))}</div></div><div class="company-report-card"><div class="small-note">المرحلة</div><div class="num" style="font-size:17px">${escapeHtml(companyStage(c))}</div></div><div class="company-report-card"><div class="small-note">الإجراءات</div><div class="num">${acts}</div></div><div class="company-report-card"><div class="small-note">إجمالي التبرعات</div><div class="num">${money(total)}</div></div></div><div class="company-report-section"><h4>الملخص</h4><div class="grid2"><div><b>الفئة:</b> ${escapeHtml(companyCategory(c))}</div><div><b>المسؤول:</b> ${escapeHtml(USERS.find(u=>u.id===c.employeeId)?.fullName||'—')}</div><div><b>تاريخ التسجيل:</b> ${fmtDate(c.registeredDate)}</div><div><b>المتابعة القادمة:</b> ${c.nextFollowUp?fmtDate(c.nextFollowUp):'—'}</div><div><b>القيمة المتوقعة:</b> ${c.expectedValue?money(c.expectedValue):'—'}</div><div><b>مصدر الشركة:</b> ${escapeHtml(c.source||'—')}</div></div></div><div class="company-report-section"><h4>كل الإجراءات</h4>${hist.filter(h=>h.type!=='donation').map(h=>`<div class="company-history-item"><b>${h.type==='activity'?'إجراء':'تواصل'}</b> — ${fmtDate(h.date)} — ${escapeHtml(h.action||'')}${h.stageTo?' · '+escapeHtml(h.stageTo):''}<br><span class="small-note">${escapeHtml(h.notes||'')}${h.nextFollowUp?' · متابعة: '+fmtDate(h.nextFollowUp):''} · بواسطة ${escapeHtml(h.by||'')}</span></div>`).join('')||'<div class="empty">لا توجد إجراءات مسجلة.</div>'}</div><div class="company-report-section"><h4>التبرعات</h4>${companyDonationEntries(c).map(h=>`<div class="company-history-item">${fmtDate(h.date)} — <b>${money(h.amount)}</b> — ${escapeHtml(h.project||'')} — ${escapeHtml(h.intention||'')}</div>`).join('')||'<div class="empty">لا توجد تبرعات مسجلة.</div>'}</div><div class="company-report-section"><h4>المتابعات</h4>${tasks.map(t=>`<div class="company-task ${t.status==='done'?'done':''}"><b>${escapeHtml(t.title)}</b><span>${t.dueDate?fmtDate(t.dueDate):'—'} · ${t.status==='done'?'تم التنفيذ':'مفتوحة'}</span></div>`).join('')||'<div class="empty">لا توجد متابعات.</div>'}</div></div><div class="modal-actions"><button class="btn-primary" onclick="printSingleCompanyReport()">طباعة التقرير</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)}
 function printSingleCompanyReport(){const el=document.getElementById('singleCompanyReport');if(!el)return;const w=window.open('','_blank');if(!w)return;w.document.write(`<html dir="rtl"><head><meta charset="utf-8"><title>تقرير الشركة</title><style>body{font-family:Arial;padding:24px;direction:rtl}.company-report-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.company-report-card{border:1px solid #ddd;padding:10px}.company-history-item{padding:8px 0;border-bottom:1px solid #eee}</style></head><body>${el.innerHTML}</body></html>`);w.document.close();w.print()}
 
 function addCompanyContactPerson(id){
@@ -5762,7 +5927,7 @@ function addCompanyContactPerson(id){
 function saveCompanyContactPerson(id){const c=companies.find(x=>x.id===id);if(!c||!canModule('companies','edit',currentUser))return;const name=document.getElementById('cp_name').value.trim();if(!name){alert('يرجى إدخال اسم جهة الاتصال.');return}c.contacts=c.contacts||[];c.contacts.push({id:uid(),name,role:document.getElementById('cp_role').value.trim(),phone:document.getElementById('cp_phone').value.trim(),email:document.getElementById('cp_email').value.trim()});persistCompanies();closeModal();openCompanyRecord(id)}
 function deleteCompany(id){const c=companies.find(x=>x.id===id);if(!c||!canModule('companies','delete',currentUser))return;if(!isSuperAdmin(currentUser)){alert('حذف الشركات متاح للمدير الرئيسي فقط.');return}openModal(`<h3>حذف الشركة</h3><div class="manager-box"><b>تنبيه:</b> سيتم حذف «${escapeHtml(c.name)}» وجميع جهات الاتصال وسجل النشاط الخاص بها. هذه العملية لا يمكن التراجع عنها.</div><div class="field"><label>كلمة مرور المدير الرئيسي</label><input id="deleteCompanyPass" type="password"></div><div class="modal-actions"><button class="btn-danger" onclick="confirmDeleteCompany('${id}')">تأكيد الحذف</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)}
 async function confirmDeleteCompany(id){if(!isSuperAdmin(currentUser))return;const pass=document.getElementById('deleteCompanyPass')?.value||'';if(!(await verifyPassword(currentUser,pass))){alert('كلمة مرور المدير الرئيسي غير صحيحة.');return}companies=companies.filter(c=>c.id!==id);persistCompanies();closeModal();renderCompanies();}
-function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير الشركات متاح للمدير الرئيسي للنظام فقط.');return}const rows=[['اسم الشركة','الاسم القانوني','مجال النشاط','الحالة','الأولوية','الهاتف','البريد','السجل التجاري','الرقم الضريبي','العنوان','جهات الاتصال','عدد التبرعات','إجمالي التبرعات','الموظف المسؤول']];visibleCompanies().forEach(c=>rows.push([c.name,c.legalName||'',c.industry||'',companyStatusLabel(companyStatus(c)),companyPriorityLabel(companyPriority(c)),c.phone||'',c.email||'',c.commercialReg||'',c.taxId||'',c.address||'',(c.contacts||[]).length,companyDonationEntries(c).filter(h=>h.status!=='pending').length,companyTotal(c),USERS.find(u=>u.id===c.employeeId)?.fullName||'']));const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,'الشركات');XLSX.writeFile(wb,'CRM_الشركات.xlsx')}
+function legacy_exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير الشركات متاح للمدير الرئيسي للنظام فقط.');return}const rows=[['اسم الشركة','الاسم القانوني','مجال النشاط','الحالة','الأولوية','الهاتف','البريد','السجل التجاري','الرقم الضريبي','العنوان','جهات الاتصال','عدد التبرعات','إجمالي التبرعات','الموظف المسؤول']];visibleCompanies().forEach(c=>rows.push([c.name,c.legalName||'',c.industry||'',companyStatusLabel(companyStatus(c)),companyPriorityLabel(companyPriority(c)),c.phone||'',c.email||'',c.commercialReg||'',c.taxId||'',c.address||'',(c.contacts||[]).length,companyDonationEntries(c).filter(h=>h.status!=='pending').length,companyTotal(c),USERS.find(u=>u.id===c.employeeId)?.fullName||'']));const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,'الشركات');XLSX.writeFile(wb,'CRM_الشركات.xlsx')}
 
 /* ---------- new donation (separate action) ---------- */
 function donationProjectOptions(selected=''){
@@ -5975,7 +6140,7 @@ async function saveModuleDonation(){
   if(entityType==='individual'&&!name){alert('يرجى اختيار/إدخال اسم المتبرع.');return}if(entityType==='company'&&!company){alert('يرجى اختيار شركة مكودة من القائمة.');return}if(!amount||Number(String(amount).replace(/,/g,''))<=0){alert('يرجى إدخال قيمة تبرع صحيحة.');return}if(!rawMovementStatus){alert('يرجى اختيار حالة الحركة قبل تسجيل التبرع.');return}if(!project||!projects.some(p=>normName(p.name)===normName(project))){alert('يرجى اختيار مشروع مكود.');return}if(!intention||!intentions.some(x=>normName(x)===normName(intention))){alert('يرجى اختيار نية مكودة.');return}if(!method||!channels.some(x=>normName(x)===normName(method))){alert('يرجى اختيار قناة أو طريقة تبرع مكودة.');return}
   let attachmentData='';try{const file=document.getElementById('md_attachment')?.files?.[0];if(file)attachmentData=await compressDonationImage(file)}catch(e){alert(e.message||'تعذر تجهيز الصورة المرفقة.');return}
   const donation={type:'donation',hid:uid(),date,action:'تبرع جديد',amount,project,intention,location,method:channels.find(x=>normName(x)===normName(method)),notes,by:currentUser.fullName,createdBy:currentUser.id,responsibleEmployeeId:String(currentUser.id||''),responsibleEmployeeName:String(currentUser.fullName||''),status:'confirmed',movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',attachmentData,entityType};
-  if(entityType==='company'){donation.companyId=company.id;donation.companyName=company.name;company.history=company.history||[];company.history.push(donation);company.lastDonationDate=date;persistCompanies();resetModuleDonationForm();alert(movementStatus==='ناجحة'?'تم تسجيل تبرع الشركة بنجاح، وهو الآن بانتظار اعتماد الإدارة المالية.':'تم تسجيل تبرع الشركة بنجاح واعتماده مباشرة لأن حالة الحركة غير ناجحة.')}else{let donor=findDuplicate(name,phone,null);if(!donor){donor={id:uid(),name,phone,employeeId:currentUser.id,createdBy:currentUser.id,registeredDate:date,history:[]};donors.push(donor)}else if(!donor.phone&&phone)donor.phone=phone;donor.history=donor.history||[];donor.history.push(donation);persist();resetModuleDonationForm();alert(movementStatus==='ناجحة'?'تم تسجيل تبرع الفرد بنجاح، وهو الآن بانتظار اعتماد الإدارة المالية.':'تم تسجيل تبرع الفرد بنجاح واعتماده مباشرة لأن حالة الحركة غير ناجحة.')}
+  if(entityType==='company'){donation.companyId=company.id;donation.companyName=company.name;company.history=company.history||[];company.history.push(donation);company.lastDonationDate=date;persistCompanies();if(GAS_URL)await syncPushNow({silent:true});resetModuleDonationForm();alert(movementStatus==='ناجحة'?'تم تسجيل تبرع الشركة بنجاح، وهو الآن بانتظار اعتماد الإدارة المالية.':'تم تسجيل تبرع الشركة بنجاح واعتماده مباشرة لأن حالة الحركة غير ناجحة.')}else{let donor=donors.find(x=>x&&normName(x.name)===normName(name));if(!donor){donor={id:uid(),name,phone,employeeId:currentUser.id,createdBy:currentUser.id,registeredDate:date,history:[]};donors.push(donor)}else if(!donor.phone&&phone)donor.phone=phone;donor.history=donor.history||[];donor.history.push(donation);persist();if(GAS_URL)await syncPushNow({silent:true});resetModuleDonationForm();alert(movementStatus==='ناجحة'?'تم تسجيل تبرع الفرد بنجاح، وهو الآن بانتظار اعتماد الإدارة المالية.':'تم تسجيل تبرع الفرد بنجاح واعتماده مباشرة لأن حالة الحركة غير ناجحة.')}
   if(donationModuleTab==='records')renderModuleDonationRecords();
 }
 
@@ -6047,7 +6212,7 @@ async function saveNewDonation(id){
   let attachmentData='';try{const file=document.getElementById('dn_attachment')?.files?.[0];if(file)attachmentData=await compressDonationImage(file)}catch(e){alert(e.message||'تعذر تجهيز الصورة المرفقة.');return}
   const method=document.getElementById('dn_method').value;
   d.history=d.history||[];d.history.push({type:'donation',hid:uid(),date:document.getElementById('dn_date').value||todayStr(),action:'تبرع جديد',amount,project,intention,location:document.getElementById('dn_location').value.trim(),method,notes:document.getElementById('dn_notes').value.trim(),by:currentUser.fullName,createdBy:currentUser.id,status:'confirmed',movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',attachmentData});
-  persist();closeModal();render();alert(movementStatus==='ناجحة'?'تم تسجيل التبرع بنجاح، وهو الآن بانتظار اعتماد الإدارة المالية.':'تم تسجيل التبرع بنجاح واعتماده مباشرة لأن حالة الحركة غير ناجحة.');
+  persist();if(GAS_URL)await syncPushNow({silent:true});closeModal();render();alert(movementStatus==='ناجحة'?'تم تسجيل التبرع بنجاح، وهو الآن بانتظار اعتماد الإدارة المالية.':'تم تسجيل التبرع بنجاح واعتماده مباشرة لأن حالة الحركة غير ناجحة.');
 }
 
 /* ---------- contact (no donation option here anymore) ---------- */
@@ -6609,7 +6774,7 @@ async function testSyncConnection(){
   if(!canModule('syncData','edit',currentUser))return;
   if(!GAS_URL){alert('يرجى إدخال رابط Google Sheets أولًا.');return}
   updateSyncViewBadge('connecting');const ok=await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});updateSyncViewBadge(ok?'on':'off');
-  alert(ok?'تم الاتصال بنجاح، وتمت مزامنة البيانات.':'تعذر الاتصال. تأكد من صحة الرابط ومن نشر تطبيق الويب بصلاحية "Anyone".');
+  alert(ok?'تم الاتصال بنجاح، وتمت مزامنة البيانات. إذا كان النظام فارغًا والشيت يحتوي بيانات، تم تحميل بيانات الشيت إلى النظام تلقائيًا.':'تعذر الاتصال. تأكد من صحة الرابط ومن نشر تطبيق الويب بصلاحية "Anyone".');
   if(ok)setView('syncData');
 }
 function copySyncGasCode(){if(!isSuperAdmin(currentUser)){alert('عرض أو نسخ كود الربط متاح للمدير الرئيسي للنظام فقط.');return}copyGasCode();}
@@ -8043,7 +8208,7 @@ window.chromeLoginRecovery=async function(){
  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
  if(!await verifySensitiveSetupCode('إصلاح الدخول للمتصفح','هذا إجراء استرداد كامل وحساس. بعد التحقق سيتم حذف كل بيانات النظام المحلية المخزنة في هذا المتصفح (الحسابات، المتبرعون، الشركات، المشاريع، القنوات، الإعدادات والجلسة) وإعادة تحميلها من Google Sheets إذا كان الربط متاحًا.'))return;
  if(!confirm('تأكيد نهائي: سيتم حذف كل بيانات النظام المحلية المخزنة في هذا المتصفح، ولن يمكن التراجع عن هذا الحذف المحلي. سيتم الاحتفاظ ببيانات Google Sheets فقط، ثم محاولة إعادة تحميلها. هل تريد المتابعة؟'))return;
- try{const gas=safeGet(localStorage,GASKEY)||getQueryParam('gas')||DEFAULT_GAS_URL||'';[UKEY,DKEY,COMPANYKEY,COMPANYCONFIGKEY,PKEY,CKEY,IKEY,MCKEY,SESSION,SYNCKEY].forEach(k=>{safeRemove(localStorage,k);safeRemove(sessionStorage,k)});Object.keys(MEMORY_STORAGE).forEach(k=>delete MEMORY_STORAGE[k]);if(gas)safeSet(localStorage,GASKEY,gas);currentUser=null;otpContext=null;__localDirty=false;alert('تم حذف بيانات النظام المحلية من هذا المتصفح. سيتم إعادة فتح النظام وإعادة تحميل البيانات من Google Sheets إذا كان الربط متاحًا.');window.location.reload()}catch(e){alert('تعذر تنفيذ إصلاح الدخول بالكامل.')}
+ try{const gas='';[UKEY,DKEY,COMPANYKEY,COMPANYCONFIGKEY,PKEY,CKEY,IKEY,MCKEY,SESSION,SYNCKEY].forEach(k=>{safeRemove(localStorage,k);safeRemove(sessionStorage,k)});Object.keys(MEMORY_STORAGE).forEach(k=>delete MEMORY_STORAGE[k]);if(gas)safeSet(localStorage,GASKEY,gas);currentUser=null;otpContext=null;__localDirty=false;alert('تم حذف بيانات النظام المحلية من هذا المتصفح. سيتم إعادة فتح النظام وإعادة تحميل البيانات من Google Sheets إذا كان الربط متاحًا.');window.location.reload()}catch(e){alert('تعذر تنفيذ إصلاح الدخول بالكامل.')}
 };
 window.confirmOtp=async function(){
  if(!otpContext)return;const entered=(document.getElementById('otpInput')?.value||'').trim();if(!entered){alert('يرجى إدخال رمز التحقق.');return}if(!otpValid(otpContext)){alert('انتهت صلاحية رمز التحقق. اضغط "إعادة إرسال الرمز".');return}if(entered!==otpContext.code){alert('رمز التحقق غير صحيح.');return}
@@ -8066,7 +8231,7 @@ window.deleteCompanyDonation=async function(id,hid){
  if(GAS_URL){await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});const freshC=(companies||[]).find(x=>String(x.id)===String(id));const freshE=freshC&&(freshC.history||[]).find(x=>x&&x.hid===hid&&x.type==='donation');if(!freshE){alert('تعذر الحذف: الحركة غير موجودة في آخر نسخة متزامنة.');render();return}if(!canEditDeleteDonationEntry(freshE,'delete')){alert('تعذر الحذف: تغيرت حالة الحركة على جهاز آخر.');render();return}c=freshC;e=freshE}
  c.history=(c.history||[]).filter(x=>x.hid!==hid);persistCompanies();if(GAS_URL)await syncPushNow({silent:true});closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();
 };
-let lastRealtimeSync=0;async function realtimeSyncTick(){if(!GAS_URL||!currentUser||document.hidden||document.getElementById('overlay')||__localDirty||__bgSyncInFlight)return;const now=Date.now();if(now-lastRealtimeSync<8000)return;lastRealtimeSync=now;__bgSyncInFlight=true;try{const changed=await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});if(changed){render();if(currentView==='financeReview')renderFinanceReview();if(currentView==='donations')renderDonations();if(currentView==='channels')renderChannels();if(currentView==='projects')renderProjects();if(currentView==='companies')renderCompanies();if(currentView==='reports')renderReports()}}catch(e){}finally{__bgSyncInFlight=false}}setInterval(realtimeSyncTick,5000);
+let lastRealtimeSync=0;async function realtimeSyncTick(){if(!GAS_URL||!currentUser||document.hidden||document.getElementById('overlay')||__localDirty||__bgSyncInFlight)return;const now=Date.now();if(now-lastRealtimeSync<2500)return;lastRealtimeSync=now;__bgSyncInFlight=true;try{const changed=await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});if(changed){render();if(currentView==='financeReview')renderFinanceReview();if(currentView==='donations')renderDonations();if(currentView==='channels')renderChannels();if(currentView==='projects')renderProjects();if(currentView==='companies')renderCompanies();if(currentView==='reports')renderReports();if(currentView==='donationModule'&&typeof renderModuleDonationRecords==='function')renderModuleDonationRecords()}}catch(e){}finally{__bgSyncInFlight=false}}setInterval(realtimeSyncTick,1000);
 const css=document.createElement('style');css.id='final-requested-layout-fixes-v3';css.textContent=`
 #app>.top-tabs~#donationModuleView,#app>.top-tabs~#donorsView,#app>.top-tabs~#companiesView,#app>.top-tabs~#donationsView,#app>.top-tabs~#projectsView,#app>.top-tabs~#donorRatingsView,#app>.top-tabs~#donationCountsView,#app>.top-tabs~#channelsView{height:calc(100vh - 122px)!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding-bottom:34px!important;box-sizing:border-box!important}
 @media(max-width:760px){#app>.top-tabs~#donationModuleView,#app>.top-tabs~#donorsView,#app>.top-tabs~#companiesView,#app>.top-tabs~#donationsView,#app>.top-tabs~#projectsView,#app>.top-tabs~#donorRatingsView,#app>.top-tabs~#donationCountsView,#app>.top-tabs~#channelsView{height:calc(100vh - 96px)!important;max-height:none!important;overflow-y:auto!important;padding-bottom:24px!important}}
