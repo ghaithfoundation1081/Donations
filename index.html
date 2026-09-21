@@ -843,6 +843,11 @@ body{overflow:hidden!important;}
 @media(max-width:900px){.company-report-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.company-report-grid{grid-template-columns:1fr}}
 </style>
 <style>
+#financeFilterToolbar.finance-review-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+#financeFilterToolbar .finance-filter-chips{display:flex;align-items:center;gap:7px;flex:1 1 auto;margin:0;padding:0;background:transparent;border:0;box-shadow:none}
+#financeFilterToolbar .finance-search-inline{flex:0 1 430px;min-width:260px}
+#financeFilterToolbar #financeReviewSearch{width:100%;height:42px}
+@media(max-width:900px){#financeFilterToolbar .finance-search-inline{flex:1 1 100%;min-width:0}}
 .donation-attachment{display:inline-flex;align-items:center;gap:6px;margin-top:7px;padding:5px 9px;border:1px solid #D7EEE6;border-radius:8px;background:#F2FAF7;color:var(--primary-dark);text-decoration:none;font-size:12px;font-weight:700}
 .donation-attachment:hover{background:#E8F6F1}
 .attachment-note{font-size:11px;color:var(--muted);margin-top:4px}
@@ -1925,10 +1930,10 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 
 <div id="financeReviewView" class="hidden">
   <div class="manager-box"><b>مراجعة الإدارة المالية:</b> كل حركة تبرع تحتاج اعتماد الإدارة المالية. بعد اعتماد الإدارة المالية، لا يمكن للمدير أو المستخدمين تعديل أو حذف الحركة، وتظل صلاحية التعديل والحذف لدى الإدارة المالية فقط.</div>
-  <div class="toolbar" id="financeSearchBar">
-    <input id="financeReviewSearch" type="search" placeholder="بحث داخل المراجعة المالية: الموظف، القناة، اسم المتبرع، المشروع، حالة الاعتماد، التاريخ، المبلغ، الملاحظات..." value="" oninput="setFinanceSearch(this.value)">
+  <div class="toolbar finance-review-toolbar" id="financeFilterToolbar">
+    <div class="toolbar filters finance-filter-chips" id="financeChips"></div>
+    <div class="finance-search-inline"><input id="financeReviewSearch" type="search" placeholder="بحث: الموظف، القناة، الاسم، المشروع، حالة الاعتماد، التاريخ، المبلغ، الملاحظات..." value="" oninput="setFinanceSearch(this.value)"></div>
   </div>
-  <div class="toolbar filters" id="financeChips"></div>
   <div class="stats" id="financeStats"></div>
   <div class="toolbar" id="financeBulkBar" style="margin-bottom:10px"></div>
   <div class="list" id="financeReviewList"></div>
@@ -2079,7 +2084,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzz0sZfesxzrP-RThSTfokNxMbhFoq9n8-eAAubfrAK5sbDJ96ku6hmy_-S1Saaq-pW/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby476wlHDzA6CNJkuywNrRRxtDsGItJVeoUlIteuX--AFEqvdg3MoYKKZ5C4LoFh2gD/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2848,20 +2853,15 @@ function mergeServerSnapshot_(old, incoming) {
   if(recreated.channels)Object.keys(recreated.channels).forEach(function(k){delete (tombs.channels||{})[k]});
   var mergedProjects;
   var mergedChannels;
-  if(sameBase){
-    mergedProjects=incoming.projects||[];
-    mergedChannels=incoming.channels||[];
-  }else{
-    mergedProjects=mergeSimpleArrayForConflict_(old.projects||[],incoming.projects||[]);
-    mergedChannels=mergeSimpleArrayForConflict_(old.channels||[],incoming.channels||[]);
-  }
+  mergedProjects=mergeSimpleArrayForConflict_(old.projects||[],incoming.projects||[]);
+  mergedChannels=mergeSimpleArrayForConflict_(old.channels||[],incoming.channels||[]);
   var result={
     users: mergedUsers,
     donors: sameBase ? (incoming.donors||[]) : mergeEntityListForConflict_(old.donors,incoming.donors,(incoming.__deleted&&incoming.__deleted.donors)||[],true),
     companies: sameBase ? (incoming.companies||[]) : mergeEntityListForConflict_(old.companies,incoming.companies,(incoming.__deleted&&incoming.__deleted.companies)||[],true),
     projects: mergedProjects,
     channels: mergedChannels,
-    intentions: sameBase ? (incoming.intentions||[]) : mergeSimpleArrayForConflict_(old.intentions,incoming.intentions),
+    intentions: mergeSimpleArrayForConflict_(old.intentions,incoming.intentions),
     managerCategories: sameBase ? (incoming.managerCategories||[]) : mergeSimpleArrayForConflict_(old.managerCategories,incoming.managerCategories),
     companyConfig: incoming.companyConfig || old.companyConfig || null,
     donationResetVersion: incoming.donationResetVersion || old.donationResetVersion || '',
@@ -3283,6 +3283,23 @@ function __clearCatalogDeleted(kind,item){
 }
 function __catalogTombstonesPayload(){return JSON.parse(JSON.stringify(__deletedCatalog||{projects:{},channels:{}}))}
 function __catalogRecreatedPayload(){return JSON.parse(JSON.stringify(__recreatedCatalog||{projects:{},channels:{}}))}
+function __reconcileCatalogTombstonesWithLocal(){try{
+  (Array.isArray(projects)?projects:[]).forEach(function(p){
+    if(!p||!String(p.name||'').trim())return;
+    var keys=[projectStableKey(p),normName(p.name)].filter(Boolean);
+    var pt=Date.parse(String(p.updatedAt||''));
+    keys.forEach(function(k){
+      var dt=Date.parse(String((__deletedCatalog.projects||{})[k]||''));
+      /* لا نلغي حذفًا صريحًا أحدث من النسخة المحلية؛ نلغي فقط علامة قديمة
+         إذا كان المشروع المحلي نفسه قد أُنشئ/عُدّل بعد وقت الحذف. */
+      if(!isNaN(pt)&&!isNaN(dt)&&pt>dt){
+        delete __deletedCatalog.projects[k];
+        __recreatedCatalog.projects[k]=new Date().toISOString();
+      }
+    });
+  });
+  safeSet(localStorage,DELCATKEY,JSON.stringify(__deletedCatalog));
+}catch(e){}}
 async function verifyPasswordHash(storedHash,password){
   const stored=String(storedHash||'');
   const value=String(password||'');
@@ -4045,6 +4062,7 @@ async function syncPull(options){
     try{data=await gasCall('getAll')}catch(e){data=await gasJsonpGet()}
     if(!data||data.error)throw new Error(data&&data.error||'فشل الاتصال');
     if(data.catalogTombstones){__deletedCatalog=data.catalogTombstones;safeSet(localStorage,DELCATKEY,JSON.stringify(__deletedCatalog));}
+    __reconcileCatalogTombstonesWithLocal();
 
     if(__localDirty && !options.forceOverwriteLocal){data=mergeCollaborativeData(data);}
     if(!hasRemoteData(data) && hasLocalData() && !options.forceOverwriteLocal){
@@ -4086,7 +4104,8 @@ async function syncPull(options){
      ensureProjectCodes();
     channels=Array.isArray(data.channels)&&data.channels.length?data.channels:channels;
     channels=normalizeChannelsLocal(channels);
-    intentions=Array.isArray(data.intentions)&&data.intentions.length?data.intentions:intentions;
+    intentions=[...new Set([...(Array.isArray(data.intentions)?data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).map(x=>x.trim()).filter(Boolean))];
+    ensureIntentionCodes();
     managerCategories=Array.isArray(data.managerCategories)&&data.managerCategories.length?data.managerCategories:managerCategories;
     ensureSuperAdmin();
 
@@ -4243,6 +4262,7 @@ async function syncPushNow(options){
   if(!GAS_URL)return false;
   clearTimeout(pushTimer);
   if(__pushInFlight){__pushQueued=true;__queueDurableSnapshot();return true;}
+  __reconcileCatalogTombstonesWithLocal();
   __pushInFlight=true;
   const revisionAtStart=__localRevision;
   const pendingAtStart=safeGet(localStorage,PENDING_SYNC_KEY)||'';
@@ -4266,9 +4286,10 @@ async function syncPushNow(options){
       USERS=normalizeUsersLocal(Array.isArray(res.data.users)?res.data.users:USERS);
       donors=Array.isArray(res.data.donors)?res.data.donors:donors;
       companies=Array.isArray(res.data.companies)?res.data.companies:companies;
-      projects=Array.isArray(res.data.projects)?res.data.projects:projects;
-      channels=Array.isArray(res.data.channels)?res.data.channels:channels;
-      intentions=Array.isArray(res.data.intentions)?res.data.intentions:intentions;
+      projects=mergeProjectListsNoLoss_(Array.isArray(res.data.projects)?normalizeProjects(res.data.projects):[],projects);
+      channels=Array.isArray(res.data.channels)&&res.data.channels.length?res.data.channels:channels;
+      intentions=[...new Set([...(Array.isArray(res.data.intentions)?res.data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).map(x=>x.trim()).filter(Boolean))];
+      ensureProjectCodes();ensureIntentionCodes();
       managerCategories=Array.isArray(res.data.managerCategories)?res.data.managerCategories:managerCategories;
       companyConfig=normalizeCompanyConfig(res.data.companyConfig||companyConfig);
       safeSet(localStorage,UKEY,JSON.stringify(USERS));safeSet(localStorage,DKEY,JSON.stringify(donors));
@@ -7452,6 +7473,8 @@ function renderFinanceReview(){
  const bulkBar=document.getElementById('financeBulkBar');
  if(!box||!chips||!stats)return;
  bindFinanceChannelTabs();
+ const financeSearchInput=document.getElementById('financeReviewSearch');
+ if(financeSearchInput && financeSearchTerm) financeSearchInput.value=financeSearchTerm;
  if(!canModule('financeReview','view',currentUser)){chips.innerHTML='';stats.innerHTML='';if(bulkBar)bulkBar.innerHTML='';box.innerHTML='<div class="empty">ليس لديك صلاحية عرض مراجعة الإدارة المالية.</div>';return}
  // ابنِ الفلاتر أولًا حتى لا يؤدي خطأ في بيانات القنوات/الحركات إلى شاشة فارغة.
  const channelList=Array.isArray(channels)?channels.map(c=>typeof c==='object'&&c!==null?(c.name||c.label||c.channel||''):c).filter(c=>c!==null&&c!==undefined&&String(c).trim()!==''):[];
