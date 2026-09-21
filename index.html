@@ -2085,7 +2085,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxp4ujptLyms6tRARV8kcuNY2BZS5HivK8qU_EDt0tadr7gKFRFwVnKtpBATF7YoZVcQg/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbz_po_65mTN-ZSQCQHNWXbldSWRDw65D2uN0mfIMhgu5Ogl89eWqdLJ8EzbHXxUDtX1zw/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -4557,7 +4557,7 @@ function showApp(){
   document.getElementById('addProjectBtn')?.classList.toggle('hidden',!isSuper);
   // لا تسمح قواعد الدور القديمة بإظهار أي مديول يخالف الصلاحيات التي حددها المدير الرئيسي.
   Object.entries(navMap).forEach(([k,id])=>document.getElementById(id)?.classList.toggle('hidden',k==='accounts'?!isSuperAdmin(currentUser):!canModule(k,'view',currentUser)));
-  document.getElementById('donorExcelExportBtn')?.classList.toggle('hidden',!isSuper);
+  document.getElementById('donorExcelExportBtn')?.classList.toggle('hidden',!canModule('donors','view',currentUser));
   document.getElementById('deleteAllDonorsBtn')?.classList.toggle('hidden',!isSuper);
   document.getElementById('reportExcelExportBtn')?.classList.toggle('hidden',!isSuper);
   document.getElementById('pdfExportBtn')?.classList.toggle('hidden',!isReportAllowed(currentUser));
@@ -5452,6 +5452,9 @@ function restoreBackup(file){
 
 /* ---------- donor helpers ---------- */
 function visibleDonors(){
+  /* الإدارة المالية والمدير الرئيسي يريان جميع المتبرعين؛ بقية الأدوار
+     تخضع لملكية المتبرع/المستخدم كما في القواعد الأصلية. */
+  if(isFinance(currentUser))return Array.isArray(donors)?donors:[];
   if(isManagerRole(currentUser)){
     if(!isSuperAdmin(currentUser)){
       // sub-managers can only ever see donors owned by employees, never by other managers
@@ -5473,6 +5476,7 @@ function allDonationEntries(d){return (d.history||[]).filter(x=>x.type==='donati
 /* صاحب الحركة هو createdBy/responsibleEmployeeId/userId، وليس صاحب المتبرع. */
 function movementCreatedByCurrentUser(h){
   if(!h||!currentUser)return false;
+  if(isFinance(currentUser)||isSuperAdmin(currentUser))return true;
   const uid=String(currentUser.id||'');
   if(uid && [h.createdBy,h.createdById,h.creatorId,h.userId,h.responsibleEmployeeId].some(v=>String(v||'')===uid))return true;
   /* توافق مع الحركات القديمة التي لم يكن بها createdBy لكن كانت تحفظ اسم من سجلها. */
@@ -6545,6 +6549,7 @@ function ensureProject(name){
    donor ratings, or individual donation totals.
    ========================================================= */
 function visibleCompanies(){
+  if(isFinance(currentUser))return Array.isArray(companies)?companies:[];
   if(isManagerRole(currentUser)){
     if(!isSuperAdmin(currentUser)){
       const base=companies.filter(c=>{const owner=USERS.find(u=>u.id===c.employeeId);return owner&&owner.role==='employee'});
@@ -9273,5 +9278,115 @@ window.exportChannelDetailsExcel=function(name){const rows=channelContributions(
 window.openChannelDetails=function(name){const rows=channelContributions(name),total=rows.reduce((s,r)=>s+(Number(String(r.amount).replace(/,/g,''))||0),0),body=rows.length?rows.map(r=>'<tr><td>'+escapeHtml(r.sourceType||'فرد')+'</td><td>'+escapeHtml(r.donor||'')+'</td><td>'+fmtDate(r.date)+'</td><td><b>'+money(r.amount)+'</b></td><td>'+escapeHtml(r.project||'—')+'</td><td>'+escapeHtml(r.intention||'—')+'</td><td>'+escapeHtml(r.location||'—')+'</td><td>'+escapeHtml(r.responsibleEmployeeName||r.by||'—')+'</td></tr>').join(''):'<tr><td colspan="8" class="empty">لا توجد حركات ناجحة ومعتمدة ماليًا ضمن الفترة المحددة.</td></tr>';openModal('<h3>قناة التبرع: '+escapeHtml(name)+'</h3><div class="meta" style="margin-bottom:10px">الإجمالي الفعلي للحركات الناجحة والمعتمدة ماليًا: <b>'+money(total)+'</b> · عدد العمليات: <b>'+rows.length+'</b></div><div class="channel-detail-table-wrap"><table class="channel-detail-table"><thead><tr><th>النوع</th><th>المتبرع/الشركة</th><th>التاريخ</th><th>القيمة</th><th>المشروع</th><th>النية</th><th>المكان</th><th>الموظف المسؤول</th></tr></thead><tbody>'+body+'</tbody></table></div><div class="modal-actions"><button class="btn-primary btn-small" onclick="exportChannelDetailsExcel('+JSON.stringify(String(name))+')">تصدير التفاصيل إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>')};
 })();
 </script>
+
+<style id="donor-table-export-fix">
+#donorSummaryTableWrap{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+#donorSummaryTable{width:100%;min-width:900px;border-collapse:separate;border-spacing:0}
+#donorSummaryTable th{background:#EEF7F3;color:var(--primary-dark);font-weight:800;padding:12px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:right}
+#donorSummaryTable td{padding:11px 10px;border-bottom:1px solid #EAF2EE;white-space:nowrap;text-align:right}
+#donorSummaryTable tr:last-child td{border-bottom:0}
+#donorSummaryTable tbody tr{cursor:pointer;transition:background .15s ease}
+#donorSummaryTable tbody tr:hover{background:#F3FBF7}
+.donor-number-link{border:0;background:transparent;color:var(--primary);font-weight:800;text-decoration:underline;padding:3px 7px;border-radius:7px}
+.donor-number-link:hover{background:var(--primary-light)}
+.donor-summary-name{font-weight:800;color:var(--primary-dark)}
+</style>
+<script id="donor-table-export-fix-script">
+(function(){
+  /* سياسة الرؤية: المالية والمدير الرئيسي يريان السجل الكامل؛ كل دور آخر يرى
+     فقط الحركات التي أنشأها المستخدم الحالي، حتى لو كان المتبرع مشتركًا. */
+  const __ownerMovement=window.movementCreatedByCurrentUser;
+  window.movementCreatedByCurrentUser=function(h){
+    if(currentUser && (isFinance(currentUser)||isSuperAdmin(currentUser)))return true;
+    return typeof __ownerMovement==='function' ? __ownerMovement(h) : false;
+  };
+  const __visibleDonors=window.visibleDonors;
+  window.visibleDonors=function(){
+    if(currentUser && (isFinance(currentUser)||isSuperAdmin(currentUser))){
+      if(isSuperAdmin(currentUser) && managerEmployee && managerEmployee!=='all')return donors.filter(d=>d.employeeId===managerEmployee);
+      return Array.isArray(donors)?donors:[];
+    }
+    return typeof __visibleDonors==='function'?__visibleDonors():[];
+  };
+  const __visibleCompanies=window.visibleCompanies;
+  window.visibleCompanies=function(){
+    if(currentUser && (isFinance(currentUser)||isSuperAdmin(currentUser)))return Array.isArray(companies)?companies:[];
+    return typeof __visibleCompanies==='function'?__visibleCompanies():[];
+  };
+
+  function donorRowsForUser(d){
+    const history=Array.isArray(d&&d.history)?d.history:[];
+    return history.filter(h=>h&&h.type==='donation'&&movementCreatedByCurrentUser(h));
+  }
+  function donorCounts(d){
+    const rows=donorRowsForUser(d);
+    return {
+      all:rows.length,
+      approved:rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='approved').length,
+      pending:rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='pending').length,
+      rejected:rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='rejected').length
+    };
+  }
+  function donorListForTable(){
+    let list=typeof donorsFilteredList==='function'?donorsFilteredList():visibleDonors();
+    const q=String(searchTerm||'').trim();
+    if(q)list=list.filter(d=>String(d.name||'').includes(q)||String(d.phone||'').includes(q));
+    if(currentFilter&&currentFilter!=='all')list=list.filter(d=>status(d)===currentFilter);
+    return list.slice().sort((a,b)=>normName(a.name).localeCompare(normName(b.name),'ar'));
+  }
+  function statusLabel(s){return s==='approved'?'معتمد ماليًا':s==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد المالي'}
+  function safeArg(v){return JSON.stringify(String(v||''));}
+
+  window.exportDonorRecordExcel=function(id){
+    if(!currentUser||!canModule('donors','view',currentUser)){alert('ليس لديك صلاحية تصدير سجل المتبرع.');return}
+    const d=(donors||[]).find(x=>String(x.id)===String(id));if(!d)return;
+    const rows=donorRowsForUser(d);
+    const out=[['اسم المتبرع','رقم الهاتف','التاريخ','قيمة التبرع','المشروع','النية','المكان','القناة','الموظف المسؤول','حالة الحركة','حالة الاعتماد المالي','الملاحظات','مرجع الحركة']];
+    rows.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).forEach(h=>out.push([d.name||'',d.phone||'',h.date||'',Number(String(h.amount??'').replace(/,/g,''))||0,h.project||'',h.intention||'',h.location||'',h.method||'',h.responsibleEmployeeName||h.by||'',movementStatusLabel(h.movementStatus),statusLabel(normalizeFinanceStatus(h.financeStatus)),h.notes||'',h.hid||'']));
+    const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:24},{wch:16},{wch:14},{wch:14},{wch:22},{wch:18},{wch:18},{wch:18},{wch:22},{wch:18},{wch:24},{wch:30},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,'سجل المتبرع');XLSX.writeFile(wb,'سجل_المتبرع_'+String(d.name||'').replace(/[\\/:*?"<>|]/g,'_')+'_'+todayStr()+'.xlsx');
+  };
+
+  window.exportExcel=function(){
+    if(!currentUser||!canModule('donors','view',currentUser)){alert('ليس لديك صلاحية التصدير.');return}
+    const list=donorListForTable();
+    const out=[['الاسم','رقم الهاتف','عدد التبرعات','التبرعات المعتمدة','التبرعات بانتظار الاعتماد','التبرعات المرفوضة']];
+    list.forEach(d=>{const c=donorCounts(d);out.push([d.name||'',d.phone||'',c.all,c.approved,c.pending,c.rejected]);});
+    const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:28},{wch:18},{wch:16},{wch:22},{wch:28},{wch:22}];XLSX.utils.book_append_sheet(wb,ws,'ملخص المتبرعين');XLSX.writeFile(wb,'ملخص_المتبرعين_'+todayStr()+'.xlsx');
+  };
+
+  function historyItems(d,filter){
+    let rows=donorRowsForUser(d).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    if(filter&&['approved','pending','rejected'].includes(filter))rows=rows.filter(h=>normalizeFinanceStatus(h.financeStatus)===filter);
+    return rows;
+  }
+  function openDonorHistory(d,filter){
+    const rows=historyItems(d,filter), title=filter?('تفاصيل '+statusLabel(filter)):'السجل الكامل للمتبرع';
+    const items=rows.length?rows.map(x=>{
+      const fs=normalizeFinanceStatus(x.financeStatus);
+      const badge='<span class="badge '+(fs==='approved'?'green':fs==='rejected'?'red':'amber')+'">'+statusLabel(fs)+'</span>';
+      const financeActions=x.type==='donation'&&isFinance(currentUser)&&fs==='pending'?'<button class="btn-primary btn-small" onclick="approveFinanceDonation('+safeArg(d.id)+','+safeArg(x.hid)+')">اعتماد مالي</button><button class="btn-danger btn-small" onclick="rejectFinanceDonation('+safeArg(d.id)+','+safeArg(x.hid)+')">رفض ماليًا</button>':'';
+      const editAction=canEditDeleteDonationEntry(x,'edit')?'<button class="btn-outline btn-small" onclick="editDonation('+safeArg(d.id)+','+safeArg(x.hid)+')">تعديل التبرع</button>':'';
+      const deleteAction=canEditDeleteDonationEntry(x,'delete')?'<button class="btn-danger btn-small" onclick="deleteDonation('+safeArg(d.id)+','+safeArg(x.hid)+')">حذف</button>':'';
+      return '<div class="hist-item" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:240px;cursor:pointer" onclick="openFinanceDetail('+safeArg(d.id)+','+safeArg(x.hid)+')"><b>'+fmtDate(x.date)+'</b> — <b>'+escapeHtml(x.action||'تبرع جديد')+'</b> — قيمة التبرع: <b>'+money(x.amount)+'</b>'+(x.project?' — المشروع: '+escapeHtml(x.project):'')+(x.intention?' — النية: '+escapeHtml(x.intention):'')+' '+badge+attachmentMarkup(x)+'<br><span class="small-note">بواسطة: '+escapeHtml(x.by||'—')+(x.notes?' · '+escapeHtml(x.notes):'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap" onclick="event.stopPropagation()">'+financeActions+editAction+deleteAction+'</div></div>';
+    }).join(''):'<div class="empty">لا توجد حركات مطابقة.</div>';
+    openModal('<h3>سجل المتبرع — '+escapeHtml(d.name)+(filter?' — '+title:'')+'</h3><div class="meta" style="margin-bottom:10px"><b>'+escapeHtml(d.phone||'—')+'</b> · عدد الحركات المعروضة: <b>'+rows.length+'</b></div><div class="hist">'+items+'</div><div class="modal-actions"><button class="btn-primary btn-small" onclick="exportDonorRecordExcel('+safeArg(d.id)+')">تصدير سجل المتبرع إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>');
+  }
+  window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=>String(x.id)===String(id));if(d)openDonorHistory(d,filter)};
+  window.openRecord=function(id){if(!currentUser||!canBasicDonorActions(currentUser)){alert('يجب تسجيل الدخول أولًا.');return}const d=(donors||[]).find(x=>String(x.id)===String(id));if(!d)return;if(currentUser.role==='employee'&&d.employeeId!==currentUser.id){alert('هذا المتبرع غير تابع لحسابك.');return}if(ensureHid(d))persist();openDonorHistory(d,'');};
+
+  window.render=function(){
+    renderManagerTabs();renderStats();renderChips();
+    const list=donorListForTable();
+    const body=list.map(d=>{
+      const c=donorCounts(d), id=safeArg(d.id);
+      return '<tr onclick="openRecord('+id+')"><td><span class="donor-summary-name">'+escapeHtml(d.name||'—')+'</span></td><td>'+escapeHtml(d.phone||'—')+'</td><td><button class="donor-number-link" onclick="event.stopPropagation();openDonorMovementDetails('+id+',\'all\')">'+c.all+'</button></td><td><button class="donor-number-link" onclick="event.stopPropagation();openDonorMovementDetails('+id+',\'approved\')">'+c.approved+'</button></td><td><button class="donor-number-link" onclick="event.stopPropagation();openDonorMovementDetails('+id+',\'pending\')">'+c.pending+'</button></td><td><button class="donor-number-link" onclick="event.stopPropagation();openDonorMovementDetails('+id+',\'rejected\')">'+c.rejected+'</button></td></tr>';
+    }).join('');
+    document.getElementById('listArea').innerHTML='<div id="donorSummaryTableWrap"><table id="donorSummaryTable"><thead><tr><th>الاسم</th><th>رقم الهاتف</th><th>عدد التبرعات</th><th>التبرعات المعتمدة</th><th>التبرعات بانتظار الاعتماد</th><th>التبرعات المرفوضة</th></tr></thead><tbody>'+(body||'<tr><td colspan="6" class="empty">لا توجد نتائج مطابقة.</td></tr>')+'</tbody></table></div>';
+    const exp=document.getElementById('donorExcelExportBtn');if(exp)exp.textContent='تصدير جدول المتبرعين إلى Excel';
+  };
+  setTimeout(()=>{if(document.getElementById('donorExcelExportBtn'))document.getElementById('donorExcelExportBtn').textContent='تصدير جدول المتبرعين إلى Excel';},0);
+})();
+</script>
+
 </body>
 </html>
