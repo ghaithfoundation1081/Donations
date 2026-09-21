@@ -1697,8 +1697,11 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
   </div>
   <div id="donorModuleAllPanel" class="donor-module-panel">
   <div id="managerArea" class="hidden">
-    <div class="manager-box"><b>لوحة المدير:</b> يمكنك متابعة جميع الموظفين، وعدد المتبرعين، والتواصل والتبرعات المسجلة. اختر موظفًا لعرض قائمته.</div>
-    <div class="employee-tabs" id="employeeTabs"></div>
+    <div class="manager-filter-box">
+      <label for="managerEmployeeSearch">تصفية حسب المستخدم</label>
+      <input id="managerEmployeeSearch" type="search" placeholder="ابحث بجزء من اسم المستخدم..." oninput="filterManagerEmployeeOptions(this.value)">
+      <select id="managerEmployeeSelect" onchange="managerEmployee=this.value||'all';render()"></select>
+    </div>
   </div>
 
   <div class="stats" id="statsRow"></div>
@@ -1741,12 +1744,10 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 
 <div id="companiesView" class="hidden">
   <div id="companyManagerArea" class="hidden">
-    <div class="manager-tabs-panel">
-      <div class="manager-tabs-head">
-        <div><b>لوحة مدير الشركات</b><span class="small-note">اختر الموظف لمتابعة الشركات المسندة إليه.</span></div>
-        <button class="user-chip" id="companyManagerAllBtn" onclick="companyManagerEmployee='all';renderCompanies()">كل الموظفين</button>
-      </div>
-      <div class="manager-people" id="companyEmployeeTabs"></div>
+    <div class="manager-filter-box">
+      <label for="companyManagerSearch">تصفية الشركات حسب المستخدم</label>
+      <input id="companyManagerSearch" type="search" placeholder="ابحث بجزء من اسم المستخدم..." oninput="filterCompanyManagerOptions(this.value)">
+      <select id="companyManagerSelect" onchange="companyManagerEmployee=this.value||'all';renderCompanies()"></select>
     </div>
   </div>
   <div class="company-subnav">
@@ -2085,7 +2086,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyIihM7h_b3xPPgKDyvm9jBA_SRMqygbQCabll-xuIUjziCcpCFNwQl7j6MC28TVrZnhQ/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwB7pVaxw-Uoyqhd2Tl5joSWpc31dCyLPh8mAInZpfGa2_8t1OfLVV3xCdLaIuCWZKhSA/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل المصدر المتصل.
@@ -5451,21 +5452,14 @@ function restoreBackup(file){
 }
 
 /* ---------- donor helpers ---------- */
+function donorHasMovementByUser_(d,uid){return String(d&&d.employeeId||'')===String(uid||'')||(d&&d.history||[]).some(h=>h&&[h.createdBy,h.createdById,h.creatorId,h.userId,h.responsibleEmployeeId].map(v=>String(v||'')).includes(String(uid||'')))}
 function visibleDonors(){
-  /* الإدارة المالية والمدير الرئيسي يريان جميع المتبرعين؛ بقية الأدوار
-     تخضع لملكية المتبرع/المستخدم كما في القواعد الأصلية. */
   if(isFinance(currentUser))return Array.isArray(donors)?donors:[];
   if(isManagerRole(currentUser)){
-    if(!isSuperAdmin(currentUser)){
-      // sub-managers can only ever see donors owned by employees, never by other managers
-      const base=donors.filter(d=>{const owner=USERS.find(u=>u.id===d.employeeId);return owner&&owner.role==='employee'});
-      if(managerEmployee==='all')return base;
-      const owner=USERS.find(u=>u.id===managerEmployee);
-      return (owner&&owner.role==='employee')?base.filter(d=>d.employeeId===managerEmployee):base;
-    }
-    return managerEmployee==='all'?donors:donors.filter(d=>d.employeeId===managerEmployee)
+    if(managerEmployee==='all')return Array.isArray(donors)?donors:[];
+    return (donors||[]).filter(d=>donorHasMovementByUser_(d,managerEmployee));
   }
-  return donors.filter(d=>d.employeeId===currentUser.id)
+  return (donors||[]).filter(d=>donorHasMovementByUser_(d,currentUser&&currentUser.id));
 }
 function findDuplicate(name,phone,excludeId){
   const n=normName(name), ph=digitsOnly(phone);
@@ -5522,76 +5516,13 @@ function render(){
   document.getElementById('listArea').innerHTML=list.length?list.map(card).join(''):'<div class="empty">لا توجد نتائج. جرّب تغيير البحث أو الفلتر أو إضافة متبرع.</div>'
 }
 function renderManagerTabs(){
-  if(!isManagerRole(currentUser))return;
-
-  const box=document.getElementById('employeeTabs');
-  if(!box)return;
-
-  // المدير الرئيسي يرى كل الموظفين والمديرين.
-  // المدير (غير الرئيسي) يرى الموظفين فقط، ولا يرى بيانات مديرين آخرين.
-  const people = isSuperAdmin(currentUser)
-    ? USERS.filter(u=>u.role==='employee'||u.role==='manager')
-    : USERS.filter(u=>u.role==='employee');
-
-  const employees = people.filter(u=>u.role==='employee');
-  const managers  = people.filter(u=>u.role==='manager');
-
-  const personButton = (u) => {
-    const count = donors.filter(d=>d.employeeId===u.id).length;
-    const active = isActiveUser(u);
-    const roleText = u.role==='manager' ? userRoleLabel(u) : 'موظف';
-    const roleClass = u.role==='manager' ? 'manager' : 'employee';
-
-    return `<button class="manager-person-chip ${managerEmployee===u.id?'selected':''} ${!active?'inactive':''}"
-      onclick="managerEmployee='${u.id}';render()">
-      <span class="manager-person-main">
-        <span class="manager-person-name">${escapeHtml(u.fullName)}</span>
-        <span class="manager-person-role ${roleClass}">${escapeHtml(roleText)}</span>
-        ${!active?'<span class="manager-person-status">غير نشط</span>':''}
-      </span>
-      <span class="manager-person-count">${count}</span>
-    </button>`;
-  };
-
-  const employeeButtons = employees.length
-    ? employees.map(personButton).join('')
-    : '<span class="small-note">لا يوجد موظفون.</span>';
-
-  const managerButtons = managers.length
-    ? managers.map(personButton).join('')
-    : '<span class="small-note">لا يوجد مديرون مسجلون.</span>';
-
-  box.innerHTML = `
-    <div class="manager-tabs-panel">
-      <div class="manager-tabs-head">
-        <div>
-          <b>لوحة المدير</b>
-          <span class="small-note">${isSuperAdmin(currentUser)?'اختر الموظف أو المدير لعرض المتبرعين التابعين له':'اختر الموظف لعرض المتبرعين التابعين له'}</span>
-        </div>
-        <button class="user-chip ${managerEmployee==='all'?'btn-primary':''}"
-          onclick="managerEmployee='all';render()">
-          ${isSuperAdmin(currentUser)?'كل الموظفين والمديرين':'كل الموظفين'} (${visibleDonors().length})
-        </button>
-      </div>
-
-      <div class="manager-group">
-        <div class="manager-group-title">
-          <span>الموظفون</span>
-          <span class="manager-group-count">${employees.length}</span>
-        </div>
-        <div class="manager-people">${employeeButtons}</div>
-      </div>
-
-      ${isSuperAdmin(currentUser)?`<div class="manager-group">
-        <div class="manager-group-title">
-          <span>مديرو الإدارات</span>
-          <span class="manager-group-count">${managers.length}</span>
-        </div>
-        <div class="manager-people">${managerButtons}</div>
-      </div>`:''}
-    </div>`;
+  const area=document.getElementById('managerArea');if(!area)return;
+  if(!isManagerRole(currentUser)){area.classList.add('hidden');return}
+  area.classList.remove('hidden');
+  const sel=document.getElementById('managerEmployeeSelect'), search=document.getElementById('managerEmployeeSearch');if(!sel)return;
+  const people=USERS.filter(u=>u.role==='employee'||(isSuperAdmin(currentUser)&&u.role==='manager'));
+  const q=normName(search?.value||'');sel.innerHTML='<option value="all">كل المستخدمين</option>'+people.filter(u=>!q||normName(u.fullName).includes(q)||normName(u.username).includes(q)).map(u=>`<option value="${escapeHtml(u.id)}">${escapeHtml(u.fullName||u.username||'مستخدم')}${u.role==='manager'?' (مدير)':''}</option>`).join('');sel.value=managerEmployee||'all';
 }
-
 function donorsFilteredList(){
   let list=visibleDonors();
   if(donorsCustomRange)list=list.filter(d=>inRange(d.registeredDate,donorsFrom,donorsTo||todayStr()));
@@ -6548,17 +6479,11 @@ function ensureProject(name){
    Companies never enter individual-donor lists, donor reports,
    donor ratings, or individual donation totals.
    ========================================================= */
+function companyHasMovementByUser_(c,uid){return String(c&&c.employeeId||'')===String(uid||'')||(c&&c.history||[]).some(h=>h&&[h.createdBy,h.createdById,h.creatorId,h.userId,h.responsibleEmployeeId].map(v=>String(v||'')).includes(String(uid||'')))}
 function visibleCompanies(){
   if(isFinance(currentUser))return Array.isArray(companies)?companies:[];
-  if(isManagerRole(currentUser)){
-    if(!isSuperAdmin(currentUser)){
-      const base=companies.filter(c=>{const owner=USERS.find(u=>u.id===c.employeeId);return owner&&owner.role==='employee'});
-      if(companyManagerEmployee==='all')return base;
-      return base.filter(c=>c.employeeId===companyManagerEmployee);
-    }
-    return companyManagerEmployee==='all'?companies:companies.filter(c=>c.employeeId===companyManagerEmployee);
-  }
-  return companies.filter(c=>c.employeeId===currentUser.id);
+  if(isManagerRole(currentUser))return companyManagerEmployee==='all'?(companies||[]):(companies||[]).filter(c=>companyHasMovementByUser_(c,companyManagerEmployee));
+  return (companies||[]).filter(c=>companyHasMovementByUser_(c,currentUser&&currentUser.id));
 }
 function companyStatus(c){
   const s=String(c.status||'active');
@@ -6590,13 +6515,11 @@ let companiesCustomRange=false, companiesFrom='', companiesTo='';
 function applyCompaniesRange(){companiesFrom=document.getElementById('companiesFromInput').value;companiesTo=document.getElementById('companiesToInput').value;if(companiesFrom&&companiesTo&&companiesFrom>companiesTo){alert('تاريخ البداية يجب أن يكون قبل أو مساويًا لتاريخ النهاية.');return}companiesCustomRange=!!(companiesFrom||companiesTo);renderCompanies()}
 function clearCompaniesRange(){companiesCustomRange=false;companiesFrom='';companiesTo='';document.getElementById('companiesFromInput').value='';document.getElementById('companiesToInput').value='';renderCompanies()}
 function renderCompanyManagerTabs(){
-  const area=document.getElementById('companyManagerArea'); if(!area)return;
+  const area=document.getElementById('companyManagerArea');if(!area)return;
   if(!isManagerRole(currentUser)){area.classList.add('hidden');return}
-  area.classList.remove('hidden');
-  const people=USERS.filter(u=>u.role==='employee');
-  document.getElementById('companyManagerAllBtn').classList.toggle('btn-primary',companyManagerEmployee==='all');
-  document.getElementById('companyManagerAllBtn').textContent=`كل الموظفين (${visibleCompanies().length})`;
-  document.getElementById('companyEmployeeTabs').innerHTML=people.length?people.map(u=>`<button class="manager-person-chip ${companyManagerEmployee===u.id?'selected':''} ${!isActiveUser(u)?'inactive':''}" onclick="companyManagerEmployee='${u.id}';renderCompanies()"><span class="manager-person-main"><span class="manager-person-name">${escapeHtml(u.fullName)}</span><span class="manager-person-role employee">موظف</span>${!isActiveUser(u)?'<span class="manager-person-status">غير نشط</span>':''}</span><span class="manager-person-count">${companies.filter(c=>c.employeeId===u.id).length}</span></button>`).join(''):'<span class="small-note">لا يوجد موظفون.</span>';
+  area.classList.remove('hidden');const sel=document.getElementById('companyManagerSelect'),search=document.getElementById('companyManagerSearch');if(!sel)return;
+  const q=normName(search?.value||''),people=USERS.filter(u=>u.role==='employee'||(isSuperAdmin(currentUser)&&u.role==='manager'));
+  sel.innerHTML='<option value="all">كل المستخدمين</option>'+people.filter(u=>!q||normName(u.fullName).includes(q)||normName(u.username).includes(q)).map(u=>`<option value="${escapeHtml(u.id)}">${escapeHtml(u.fullName||u.username||'مستخدم')}${u.role==='manager'?' (مدير)':''}</option>`).join('');sel.value=companyManagerEmployee||'all';
 }
 function renderCompanyKpis(){
   const list=companyFilteredList();
@@ -7590,7 +7513,7 @@ function deleteProject(name){
 function projectContributions(name){
  const list=visibleDonors();
  const rows=[];
- list.forEach(d=>donationEntries(d).forEach(h=>{if(normName(h.project)===normName(name)&&inRange(h.date,projFrom,projTo))rows.push({donor:d.name,donorId:d.id,...h})}));
+ list.forEach(d=>donationEntries(d).forEach(h=>{if(normName(h.project)===normName(name)&&inRange(h.date,projFrom,projTo))rows.push({donor:d.name,phone:d.phone||'',donorId:d.id,...h})}));
  return rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''))
 }
 function renderProjects(){
@@ -9401,6 +9324,58 @@ window.openChannelDetails=function(name){const rows=channelContributions(name),t
     a.setAttribute('aria-busy','true');
     setTimeout(function(){try{a.removeAttribute('aria-busy')}catch(e){} if(typeof __syncIndicatorHide==='function')__syncIndicatorHide()},1200);
   },true);
+})();
+</script>
+<style id="user-selector-fix">
+.manager-filter-box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px;display:grid;grid-template-columns:minmax(180px,.7fr) minmax(220px,1fr) minmax(220px,1fr);gap:10px;align-items:center;box-shadow:var(--shadow)}
+.manager-filter-box label{font-weight:800;color:var(--primary-dark)}
+.manager-filter-box input,.manager-filter-box select{width:100%;min-height:40px}
+@media(max-width:760px){.manager-filter-box{grid-template-columns:1fr}}
+.project-detail-table-wrap{overflow:auto;max-height:58vh;border:1px solid var(--line);border-radius:10px}
+.project-detail-table{width:100%;min-width:920px;border-collapse:collapse}
+.project-detail-table th,.project-detail-table td{padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:right}
+.project-detail-table th{background:var(--primary-light);color:var(--primary-dark);position:sticky;top:0}
+</style>
+<script id="user-filter-details-fix">
+(function(){
+  function movementOwnerIds(h){return [h&&h.createdBy,h&&h.createdById,h&&h.creatorId,h&&h.userId,h&&h.responsibleEmployeeId].map(v=>String(v||'')).filter(Boolean)}
+  function donorHasUserMovement(d,uid){return String(d&&d.employeeId||'')===String(uid||'') || (d&&d.history||[]).some(h=>h&&movementOwnerIds(h).includes(String(uid||'')))}
+  function companyHasUserMovement(c,uid){return String(c&&c.employeeId||'')===String(uid||'') || (c&&c.history||[]).some(h=>h&&movementOwnerIds(h).includes(String(uid||'')))}
+  function managerPeople(){return USERS.filter(u=>u.role==='employee'||(isSuperAdmin(currentUser)&&u.role==='manager'))}
+  function selectedDonorIds(){if(!isManagerRole(currentUser))return null;if(managerEmployee==='all')return null;return new Set(donors.filter(d=>donorHasUserMovement(d,managerEmployee)).map(d=>String(d.id)))}
+  window.visibleDonors=function(){
+    if(!currentUser)return [];
+    if(isFinance(currentUser))return Array.isArray(donors)?donors:[];
+    if(isManagerRole(currentUser)){
+      const people=managerPeople().map(u=>String(u.id));
+      if(managerEmployee!=='all'&&!people.includes(String(managerEmployee)))managerEmployee='all';
+      const chosen=selectedDonorIds();
+      return (donors||[]).filter(d=>!chosen||chosen.has(String(d.id)));
+    }
+    return (donors||[]).filter(d=>donorHasUserMovement(d,currentUser.id));
+  };
+  window.visibleCompanies=function(){
+    if(!currentUser)return [];
+    if(isFinance(currentUser))return Array.isArray(companies)?companies:[];
+    if(isManagerRole(currentUser)){
+      if(companyManagerEmployee==='all')return companies||[];
+      return (companies||[]).filter(c=>companyHasUserMovement(c,companyManagerEmployee));
+    }
+    return (companies||[]).filter(c=>companyHasUserMovement(c,currentUser.id));
+  };
+  function optionHtml(list,selected,query){const q=normName(query||'');return '<option value="all">كل المستخدمين</option>'+list.filter(u=>!q||normName(u.fullName).includes(q)||normName(u.username).includes(q)).map(u=>'<option value="'+escapeHtml(u.id)+'" '+(String(u.id)===String(selected)?'selected':'')+'>'+escapeHtml(u.fullName||u.username||'مستخدم')+(u.role==='manager'?' (مدير)':'')+'</option>').join('')}
+  window.filterManagerEmployeeOptions=function(q){const el=document.getElementById('managerEmployeeSelect');if(el){el.innerHTML=optionHtml(managerPeople(),managerEmployee,q);el.value=managerEmployee||'all'}};
+  window.filterCompanyManagerOptions=function(q){const el=document.getElementById('companyManagerSelect');if(el){el.innerHTML=optionHtml(USERS.filter(u=>u.role==='employee'||(isSuperAdmin(currentUser)&&u.role==='manager')),companyManagerEmployee,q);el.value=companyManagerEmployee||'all'}};
+  window.renderManagerTabs=function(){const area=document.getElementById('managerArea');if(!area)return;if(!isManagerRole(currentUser)){area.classList.add('hidden');return}area.classList.remove('hidden');const input=document.getElementById('managerEmployeeSearch');filterManagerEmployeeOptions(input?input.value:'')};
+  window.renderCompanyManagerTabs=function(){const area=document.getElementById('companyManagerArea');if(!area)return;if(!isManagerRole(currentUser)){area.classList.add('hidden');return}area.classList.remove('hidden');const input=document.getElementById('companyManagerSearch');filterCompanyManagerOptions(input?input.value:'')};
+  function projectRowsForExport(name){return typeof projectContributions==='function'?projectContributions(name):[]}
+  window.exportProjectDetailsExcel=function(name){
+    const rows=projectRowsForExport(name);const out=[['اسم المتبرع','رقم الهاتف','التاريخ','قيمة التبرع','النية','قناة التبرع','مكان التبرع','الموظف المسؤول','حالة الحركة','حالة الاعتماد المالي','الملاحظات','مرجع الحركة']];
+    rows.forEach(r=>out.push([r.donor||'',r.phone||'',r.date||'',Number(String(r.amount??'').replace(/,/g,''))||0,r.intention||'',r.method||'',r.location||'',r.responsibleEmployeeName||r.by||'',movementStatusLabel(r.movementStatus),normalizeFinanceStatus(r.financeStatus)==='approved'?'معتمد ماليًا':normalizeFinanceStatus(r.financeStatus)==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد',r.notes||'',r.hid||'']));
+    const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:25},{wch:16},{wch:14},{wch:15},{wch:20},{wch:18},{wch:18},{wch:24},{wch:18},{wch:22},{wch:30},{wch:24}];XLSX.utils.book_append_sheet(wb,ws,'تفاصيل المشروع');XLSX.writeFile(wb,'تفاصيل_مشروع_'+String(name).replace(/[\\/:*?"<>|]/g,'_')+'_'+todayStr()+'.xlsx')
+  };
+  window.openProjectDetails=function(name){const p=projects.find(x=>x.name===name),rows=projectRowsForExport(name),total=rows.reduce((s,r)=>s+(Number(String(r.amount||0).replace(/,/g,''))||0),0);const body=rows.length?rows.map(r=>'<tr><td>'+escapeHtml(r.donor||'')+'</td><td>'+escapeHtml(r.phone||'—')+'</td><td>'+fmtDate(r.date)+'</td><td><b>'+money(r.amount)+'</b></td><td>'+escapeHtml(r.intention||'—')+'</td><td>'+escapeHtml(r.method||'—')+'</td><td>'+escapeHtml(r.location||'—')+'</td><td>'+escapeHtml(r.responsibleEmployeeName||r.by||'—')+'</td><td>'+escapeHtml(normalizeFinanceStatus(r.financeStatus)==='approved'?'معتمد ماليًا':normalizeFinanceStatus(r.financeStatus)==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد')+'</td></tr>').join(''):'<tr><td colspan="9" class="empty">لا توجد تبرعات مسجلة لهذا المشروع ضمن الفترة المحددة.</td></tr>';openModal('<h3>تفاصيل مشروع: '+escapeHtml(name)+'</h3><div class="meta" style="margin-bottom:10px">'+(p&&p.intention?'النية: <b>'+escapeHtml(p.intention)+'</b> · ':'')+'إجمالي التبرعات: <b>'+money(total)+'</b> · عدد التبرعات: <b>'+rows.length+'</b></div><div class="project-detail-table-wrap"><table class="project-detail-table"><thead><tr><th>المتبرع</th><th>الهاتف</th><th>التاريخ</th><th>القيمة</th><th>النية</th><th>القناة</th><th>المكان</th><th>الموظف</th><th>الاعتماد</th></tr></thead><tbody>'+body+'</tbody></table></div><div class="modal-actions"><button class="btn-primary btn-small" onclick="exportProjectDetailsExcel('+JSON.stringify(String(name))+')">تصدير التفاصيل إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>')};
+  setTimeout(function(){if(typeof render==='function'&&currentUser)try{render()}catch(e){}},0);
 })();
 </script>
 </body>
