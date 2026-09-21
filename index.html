@@ -2067,7 +2067,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzQXlMjSOBOG6szpj9ISiKF-IXFcKhD3vzHbe6FNC1HeFeXPuHZrdt619WzGWmdnP2l/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbx6RoCbezbG-PogEJG7f_yPDC-KfRzWSvmO_G13Kk-U9ds-EL23_7tSqCgEh6NAA11H/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2590,7 +2590,7 @@ function getSheet(name) {
 function readAll() {
   var sh = getSheet(SHEET_DATA);
   var lastRow = sh.getLastRow();
-  var empty = { users: [], donors: [], companies: [], projects: [], channels: [], intentions: [], managerCategories: [], companyConfig: null };
+  var empty = { users: [], donors: [], companies: [], projects: [], channels: [], intentions: [], managerCategories: [], companyConfig: null, catalogTombstones:{projects:{},channels:{}} };
   if (lastRow < 1) {
     var mirrored = readMirrorSheets();
     return mirrored || empty;
@@ -2602,7 +2602,7 @@ function readAll() {
     return mirroredEmpty || empty;
   }
   try {
-    return JSON.parse(json);
+    return normalizeServerCatalog_(JSON.parse(json));
   } catch (err) {
     return { error: 'تعذرت قراءة البيانات المخزّنة في شيت Data (قد تكون تالفة).' };
   }
@@ -2667,13 +2667,79 @@ function protectEntityList(oldList, newList) {
 function cloneJson_(obj) {
   return JSON.parse(JSON.stringify(obj == null ? null : obj));
 }
+function catalogKey_(kind, item) {
+  if (kind === 'project') {
+    if (!item) return '';
+    return String(item.code || item.id || item.name || '').trim().toLowerCase();
+  }
+  return String(item == null ? '' : item).trim().toLowerCase();
+}
+function mergeTombstones_(a,b) {
+  var out={projects:{},channels:{}};
+  [a||{},b||{}].forEach(function(src){
+    ['projects','channels'].forEach(function(kind){
+      var bucket=src[kind]||{};
+      Object.keys(bucket).forEach(function(k){
+        var t=String(bucket[k]||'');
+        if(!out[kind][k] || Date.parse(t)>Date.parse(out[kind][k])) out[kind][k]=t;
+      });
+    });
+  });
+  return out;
+}
+function normalizeServerCatalog_(data) {
+  data=data||{};
+  function newer_(a,b){
+    var at=Date.parse(a&&a.updatedAt||''),bt=Date.parse(b&&b.updatedAt||'');
+    return (!isNaN(bt)&&isNaN(at))||(!isNaN(bt)&&!isNaN(at)&&bt>=at)?b:a;
+  }
+  var userMap={};
+  (Array.isArray(data.users)?data.users:[]).forEach(function(u){
+    if(!u||typeof u!=='object')return;
+    var k=String(u.username||u.id||u.fullName||'').trim().toLowerCase(); if(!k)return;
+    userMap[k]=userMap[k]?newer_(userMap[k],u):u;
+  });
+  var users=Object.keys(userMap).map(function(k){return userMap[k]});
+  var projectMap={};
+  (Array.isArray(data.projects)?data.projects:[]).forEach(function(p){
+    if(!p||typeof p!=='object'||!String(p.name||'').trim())return;
+    var k=String(p.name).trim().toLowerCase();
+    projectMap[k]=projectMap[k]?newer_(projectMap[k],p):p;
+  });
+  var projects=Object.keys(projectMap).map(function(k){return projectMap[k]});
+  var used={}; projects.forEach(function(p){
+    var code=String(p.code||'').trim().toUpperCase();
+    if(!code||used[code]){var n=1;while(used['P'+n])n++;code='P'+n;}
+    p.code=code; used[code]=1;
+    if(!p.id)p.id='project_'+code;
+    if(!p.updatedAt)p.updatedAt=new Date().toISOString();
+  });
+  var channelSeen={};
+  var channels=[];
+  (Array.isArray(data.channels)?data.channels:[]).forEach(function(c){var v=String(c==null?'':c).trim(),k=v.toLowerCase();if(v&&k&&!channelSeen[k]){channelSeen[k]=1;channels.push(v)}});
+  data.users=users;data.projects=projects;data.channels=channels;
+  return data;
+}
+function projectMatchesTombstone_(p,bucket){
+  var keys=[catalogKey_('project',p),String(p&&p.code||'').trim().toLowerCase(),String(p&&p.id||'').trim().toLowerCase(),String(p&&p.name||'').trim().toLowerCase()].filter(Boolean);
+  return keys.some(function(k){return bucket&&bucket[k]});
+}
+function applyCatalogTombstones_(data,tombs,recreated){
+  data=data||{}; tombs=tombs||{}; recreated=recreated||{};
+  var rt=recreated.projects||{}; Object.keys(rt).forEach(function(k){delete (tombs.projects||{})[k]});
+  rt=recreated.channels||{}; Object.keys(rt).forEach(function(k){delete (tombs.channels||{})[k]});
+  data.projects=(Array.isArray(data.projects)?data.projects:[]).filter(function(p){return !projectMatchesTombstone_(p,tombs.projects||{})});
+  data.channels=(Array.isArray(data.channels)?data.channels:[]).filter(function(c){return !(tombs.channels||{})[String(c||'').trim().toLowerCase()]});
+  return data;
+}
 function indexById_(list) {
   var m = {};
   (Array.isArray(list) ? list : []).forEach(function(x, i) {
     if (!x) return;
     var key = x.code != null && String(x.code) ? 'code:'+String(x.code).trim().toUpperCase()
       : (x.id != null && String(x.id) ? 'id:'+String(x.id)
-      : (x.name != null && String(x.name) ? 'name:'+String(x.name).trim().toLowerCase() : 'idx:'+i));
+      : (x.username != null && String(x.username) ? 'username:'+String(x.username).trim().toLowerCase()
+      : (x.name != null && String(x.name) ? 'name:'+String(x.name).trim().toLowerCase() : 'idx:'+i)));
     m[key] = x;
   });
   return m;
@@ -2752,45 +2818,44 @@ function mergeSimpleArrayForConflict_(remoteList, incomingList) {
   return out;
 }
 function mergeServerSnapshot_(old, incoming) {
-  old = old || {};
-  incoming = incoming || {};
+  old = normalizeServerCatalog_(old || {});
+  incoming = normalizeServerCatalog_(incoming || {});
   var baseUpdatedAt = String(incoming.__baseServerUpdatedAt || '');
   var oldUpdatedAt = String(old.updatedAt || '');
   var sameBase = !oldUpdatedAt || (!!baseUpdatedAt && baseUpdatedAt === oldUpdatedAt);
-  /* قائمة الحذف الصريحة للمستخدمين فقط (وليست __deleted.users التاريخية القائمة على
-     استنتاج تلقائي) — انظر شرح mergeUsersSafe_ أعلاه. */
   var explicitDeletedUsers = Array.isArray(incoming.__deletedUsers) ? incoming.__deletedUsers
     : ((incoming.__deleted && incoming.__deleted.users) || []);
-  /* تصفير صريح ومقصود لكل الحسابات (ميزة "بدء نظام جديد" من شاشة الإدارة) — الاستثناء
-     الوحيد الذي يُسمح فيه باستبدال كامل لقائمة المستخدمين دون دمج. */
   var mergedUsers = incoming.__wipeAllUsers === true
     ? (incoming.users || [])
     : mergeUsersSafe_(old.users, incoming.users, explicitDeletedUsers);
-  if (sameBase) {
-    return {
-      users: mergedUsers,
-      donors: incoming.donors || [],
-      projects: incoming.projects || [],
-      channels: incoming.channels || [],
-      intentions: incoming.intentions || [],
-      managerCategories: incoming.managerCategories || [],
-      companies: incoming.companies || [],
-      companyConfig: incoming.companyConfig || null,
-      donationResetVersion: incoming.donationResetVersion || ''
-    };
+  var oldTombs=old.catalogTombstones||{};
+  var incomingTombs=incoming.__catalogTombstones||{};
+  var tombs=mergeTombstones_(oldTombs,incomingTombs);
+  var recreated=incoming.__catalogRecreated||{};
+  if(recreated.projects)Object.keys(recreated.projects).forEach(function(k){delete (tombs.projects||{})[k]});
+  if(recreated.channels)Object.keys(recreated.channels).forEach(function(k){delete (tombs.channels||{})[k]});
+  var mergedProjects;
+  var mergedChannels;
+  if(sameBase){
+    mergedProjects=incoming.projects||[];
+    mergedChannels=incoming.channels||[];
+  }else{
+    mergedProjects=mergeSimpleArrayForConflict_(old.projects||[],incoming.projects||[]);
+    mergedChannels=mergeSimpleArrayForConflict_(old.channels||[],incoming.channels||[]);
   }
-  var deleted = incoming.__deleted || {};
-  return {
+  var result={
     users: mergedUsers,
-    donors: mergeEntityListForConflict_(old.donors, incoming.donors, deleted.donors || [], true),
-    companies: mergeEntityListForConflict_(old.companies, incoming.companies, deleted.companies || [], true),
-    projects: mergeEntityListForConflict_(old.projects, incoming.projects, deleted.projects || [], false),
-    channels: mergeSimpleArrayForConflict_(old.channels, incoming.channels),
-    intentions: mergeSimpleArrayForConflict_(old.intentions, incoming.intentions),
-    managerCategories: mergeSimpleArrayForConflict_(old.managerCategories, incoming.managerCategories),
+    donors: sameBase ? (incoming.donors||[]) : mergeEntityListForConflict_(old.donors,incoming.donors,(incoming.__deleted&&incoming.__deleted.donors)||[],true),
+    companies: sameBase ? (incoming.companies||[]) : mergeEntityListForConflict_(old.companies,incoming.companies,(incoming.__deleted&&incoming.__deleted.companies)||[],true),
+    projects: mergedProjects,
+    channels: mergedChannels,
+    intentions: sameBase ? (incoming.intentions||[]) : mergeSimpleArrayForConflict_(old.intentions,incoming.intentions),
+    managerCategories: sameBase ? (incoming.managerCategories||[]) : mergeSimpleArrayForConflict_(old.managerCategories,incoming.managerCategories),
     companyConfig: incoming.companyConfig || old.companyConfig || null,
-    donationResetVersion: incoming.donationResetVersion || old.donationResetVersion || ''
+    donationResetVersion: incoming.donationResetVersion || old.donationResetVersion || '',
+    catalogTombstones:tombs
   };
+  return applyCatalogTombstones_(normalizeServerCatalog_(result),tombs,recreated);
 }
 function writeAll(payload) {
   payload = payload || {};
@@ -2807,6 +2872,7 @@ function writeAll(payload) {
     managerCategories: merged.managerCategories || [],
     companies: merged.companies || [],
     companyConfig: merged.companyConfig || null,
+    catalogTombstones: merged.catalogTombstones || {projects:{},channels:{}},
     donationResetVersion: merged.donationResetVersion || '',
     updatedAt: new Date().toISOString()
   };
@@ -3184,6 +3250,25 @@ function __markUserDeleted(id){
   try{safeSet(localStorage,DELUSERKEY,JSON.stringify(__deletedUserIds))}catch(e){}
 }
 function __clearDeletedUserIds(){__deletedUserIds=[];try{safeSet(localStorage,DELUSERKEY,JSON.stringify([]))}catch(e){}}
+const DELCATKEY='donors_deleted_catalog_v1';
+let __deletedCatalog={projects:{},channels:{}};
+let __recreatedCatalog={projects:{},channels:{}};
+function __loadDeletedCatalog(){try{const v=JSON.parse(safeGet(localStorage,DELCATKEY)||'{}');__deletedCatalog={projects:v.projects||{},channels:v.channels||{}}}catch(e){__deletedCatalog={projects:{},channels:{}}}}
+function __catalogKey(kind,item){return kind==='project'?projectStableKey(item):normName(item)}
+function __markCatalogDeleted(kind,item){
+  const bucket=kind==='project'?'projects':'channels',stamp=new Date().toISOString();
+  const keys=kind==='project'?[projectStableKey(item),normName(item&&item.name)]:[normName(item)];
+  keys.filter(Boolean).forEach(k=>__deletedCatalog[bucket][k]=stamp);
+  safeSet(localStorage,DELCATKEY,JSON.stringify(__deletedCatalog));
+}
+function __clearCatalogDeleted(kind,item){
+  const bucket=kind==='project'?'projects':'channels';
+  const keys=kind==='project'?[projectStableKey(item),normName(item&&item.name)]:[normName(item)];
+  keys.filter(Boolean).forEach(k=>{delete __deletedCatalog[bucket][k];__recreatedCatalog[bucket][k]=new Date().toISOString()});
+  safeSet(localStorage,DELCATKEY,JSON.stringify(__deletedCatalog));
+}
+function __catalogTombstonesPayload(){return JSON.parse(JSON.stringify(__deletedCatalog||{projects:{},channels:{}}))}
+function __catalogRecreatedPayload(){return JSON.parse(JSON.stringify(__recreatedCatalog||{projects:{},channels:{}}))}
 async function verifyPasswordHash(storedHash,password){
   const stored=String(storedHash||'');
   const value=String(password||'');
@@ -3318,10 +3403,64 @@ async function confirmOtp(){
 function inRange(date,from,to){if(from&&(!date||date<from))return false;if(to&&(!date||date>to))return false;return true}
 function daysBetween(a,b){const d1=new Date(a),d2=new Date(b);if(isNaN(d1)||isNaN(d2))return Infinity;return Math.round((d2-d1)/86400000)}
 function isNewDonor(d){if(!d.registeredDate)return false;const days=daysBetween(d.registeredDate,todayStr());return days>=0&&days<=30}
-function normalizeProjects(list){return (Array.isArray(list)?list:[]).map(p=>typeof p==='string'?{name:p,intention:''}:{name:p.name||'',intention:p.intention||''})}
+function normalizeProjects(list){
+  const out=[];
+  (Array.isArray(list)?list:[]).forEach(p=>{
+    if(typeof p==='string'){const name=p.trim();if(name)out.push({name,intention:''});return}
+    if(!p||typeof p!=='object')return;
+    const x={...p};
+    x.name=String(x.name||'').trim();
+    x.intention=String(x.intention||'').trim();
+    if(!x.name)return;
+    if(!x.id&&x.code)x.id='project_'+String(x.code).toUpperCase();
+    out.push(x);
+  });
+  return out;
+}
+function normalizeChannelsLocal(list){
+  const out=[],seen=new Set();
+  (Array.isArray(list)?list:[]).forEach(x=>{const v=String(x??'').trim(),k=normName(v);if(v&&k&&!seen.has(k)){seen.add(k);out.push(v)}});
+  return out.length?out:DONATION_METHODS.slice();
+}
+function projectStableKey(p){
+  if(!p)return '';
+  return String(p.code||p.id||normName(p.name)||'').trim().toLowerCase();
+}
+function normalizeUsersLocal(list){
+  const map=new Map();
+  (Array.isArray(list)?list:[]).forEach(u=>{
+    if(!u||typeof u!=='object')return;
+    const username=String(u.username||'').trim();
+    const key=(username||String(u.id||u.fullName||'')).toLowerCase();
+    if(!key)return;
+    const old=map.get(key);
+    if(!old){map.set(key,{...u,username});return}
+    const ot=Date.parse(old.updatedAt||''),ut=Date.parse(u.updatedAt||'');
+    const newer=(!isNaN(ut)&&isNaN(ot))||(!isNaN(ut)&&!isNaN(ot)&&ut>=ot)?u:old;
+    map.set(key,{...old,...newer,username:String(newer.username||username).trim()});
+  });
+  return [...map.values()];
+}
+function dedupeProjectsLocal(list){
+  const map=new Map();
+  normalizeProjects(list).forEach(p=>{
+    const nameKey=normName(p.name), codeKey=p.code?String(p.code).trim().toUpperCase():'';
+    const key=nameKey||('code:'+codeKey);
+    const old=map.get(key);
+    if(!old){map.set(key,{...p});return}
+    const ot=Date.parse(old.updatedAt||''), pt=Date.parse(p.updatedAt||'');
+    const newer=(!isNaN(pt)&&isNaN(ot))||(!isNaN(pt)&&!isNaN(ot)&&pt>=ot)?p:old;
+    const merged={...old,...newer};
+    merged.code=old.code||p.code;
+    merged.id=old.id||p.id||('project_'+String(merged.code||'').toUpperCase());
+    merged.intention=merged.intention||old.intention||p.intention||'';
+    map.set(key,merged);
+  });
+  return [...map.values()];
+}
 
 /* ---------- persistence (local cache) ---------- */
-function saveUsers(){safeSet(localStorage,UKEY,JSON.stringify(USERS));syncPushDebounced();showSaveToast('تم الحفظ')}
+function saveUsers(){USERS=normalizeUsersLocal(USERS);safeSet(localStorage,UKEY,JSON.stringify(USERS));syncPushDebounced();showSaveToast('تم الحفظ')}
 /* used for account-lifecycle changes (create/reset/setup) where we must be sure the save reached
    the server before the user might close the tab — avoids the "user not found" bug on next login */
 async function saveUsersReliable(){
@@ -3385,8 +3524,8 @@ function logDonationChangesAndSnapshot(){
 function persist(){safeSet(localStorage,DKEY,JSON.stringify(donors));logDonationChangesAndSnapshot();syncPushDebounced();refreshFinanceBadge();showSaveToast('تم الحفظ')}
 function persistCompanies(){safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));logDonationChangesAndSnapshot();syncPushDebounced();showSaveToast('تم الحفظ')}
 function persistCompanyConfig(){companyConfig=normalizeCompanyConfig(companyConfig);safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));syncPushDebounced();showSaveToast('تم الحفظ')}
-function saveProjects(){safeSet(localStorage,PKEY,JSON.stringify(projects));syncPushDebounced();showSaveToast('تم الحفظ')}
-function saveChannels(){safeSet(localStorage,CKEY,JSON.stringify(channels));syncPushDebounced();showSaveToast('تم الحفظ')}
+function saveProjects(){projects=dedupeProjectsLocal(projects);ensureProjectCodes();safeSet(localStorage,PKEY,JSON.stringify(projects));syncPushDebounced();showSaveToast('تم الحفظ')}
+function saveChannels(){channels=normalizeChannelsLocal(channels);safeSet(localStorage,CKEY,JSON.stringify(channels));syncPushDebounced();showSaveToast('تم الحفظ')}
 function saveIntentions(){safeSet(localStorage,IKEY,JSON.stringify(intentions));syncPushDebounced();showSaveToast('تم الحفظ')}
 function saveManagerCategories(){safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));syncPushDebounced();showSaveToast('تم الحفظ')}
 
@@ -3396,17 +3535,23 @@ function saveManagerCategories(){safeSet(localStorage,MCKEY,JSON.stringify(manag
    وثابت يمكن كتابته بدلًا من الاسم الكامل. الكود يُنشأ تلقائيًا أول مرة ويبقى
    ثابتًا لنفس العنصر حتى لو تغيّر اسمه لاحقًا، ولا يُعاد استخدامه لعنصر آخر. */
 function ensureProjectCodes(){
-  let changed=false; const used=new Set(projects.map(p=>p&&p.code).filter(Boolean));
-  let n=1;
+  let changed=false;
+  projects=dedupeProjectsLocal(projects);
+  const used=new Set(); let n=1;
   projects.forEach(p=>{
     if(!p||typeof p!=='object')return;
-    if(!p.code){
+    let code=String(p.code||'').trim().toUpperCase();
+    if(!code||used.has(code)){
       while(used.has('P'+n))n++;
-      p.code='P'+n; used.add(p.code); changed=true;
-    }
-    if(!p.id&&p.code){p.id='project_'+String(p.code).toUpperCase();changed=true;}
+      code='P'+n; n++; p.code=code; changed=true;
+    }else if(p.code!==code){p.code=code;changed=true}
+    used.add(code);
+    const id='project_'+code;
+    if(!p.id){p.id=id;changed=true}
+    if(!p.updatedAt){p.updatedAt=new Date().toISOString();changed=true}
   });
-  if(changed)saveProjects();
+  if(changed)safeSet(localStorage,PKEY,JSON.stringify(projects));
+  return projects;
 }
 function projectByCode(code){
   const c=String(code||'').trim().toUpperCase(); if(!c)return null;
@@ -3625,7 +3770,8 @@ function restoreLocalUsersIfMissing(){
 
 async function loadAll(){
   __loadDeletedUserIds();
-  try{USERS=JSON.parse(safeGet(localStorage,UKEY)||'[]')}catch(e){USERS=[]}
+  __loadDeletedCatalog();
+  try{USERS=normalizeUsersLocal(JSON.parse(safeGet(localStorage,UKEY)||'[]'))}catch(e){USERS=[]}
   try{donors=JSON.parse(safeGet(localStorage,DKEY)||'[]');donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}))}catch(e){donors=[]}
   try{companies=JSON.parse(safeGet(localStorage,COMPANYKEY)||'[]');companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}))}catch(e){companies=[]}
   try{companyConfig=normalizeCompanyConfig(JSON.parse(safeGet(localStorage,COMPANYCONFIGKEY)||'null'))}catch(e){companyConfig=normalizeCompanyConfig(null)}
@@ -3804,11 +3950,11 @@ function mergeCollaborativeData(remote){
   const data=remote||{};
   return {
     ...data,
-    users:mergeEntityHistories(data.users,USERS),
+    users:normalizeUsersLocal(mergeEntityHistories(data.users,USERS)),
     donors:mergeEntityHistories(data.donors,donors),
     companies:mergeEntityHistories(data.companies,companies),
-    projects:Array.from(new Map([...(Array.isArray(data.projects)?data.projects:[]),...(Array.isArray(projects)?projects:[])].filter(x=>x&&x.id!=null).map(x=>[String(x.id),x])).values()),
-    channels:[...new Set([...(Array.isArray(data.channels)?data.channels:[]),...(Array.isArray(channels)?channels:[])].map(String).filter(Boolean))],
+    projects:mergeProjectListsNoLoss_(normalizeProjects(data.projects),projects),
+    channels:normalizeChannelsLocal([...(Array.isArray(data.channels)?data.channels:[]),...(Array.isArray(channels)?channels:[])]),
     intentions:[...new Set([...(Array.isArray(data.intentions)?data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).filter(Boolean))],
     managerCategories:[...new Set([...(Array.isArray(data.managerCategories)?data.managerCategories:[]),...(Array.isArray(managerCategories)?managerCategories:[])].map(String).filter(Boolean))],
     companyConfig:data.companyConfig||companyConfig
@@ -3826,14 +3972,17 @@ function mergeProjectListsNoLoss_(remoteList, localList){
   const all=[...(Array.isArray(remoteList)?remoteList:[]),...(Array.isArray(localList)?localList:[])];
   const map=new Map();
   all.forEach(p=>{
-    if(!p||typeof p!=='object')return;
-    const key=p.code?'code:'+String(p.code).toUpperCase():(p.id?'id:'+p.id:'name:'+normName(p.name));
-    if(!key)return;
+    if(!p||typeof p!=='object'||!String(p.name||'').trim())return;
+    const key=normName(p.name);
     const old=map.get(key);
     if(!old){map.set(key,{...p});return;}
     const ot=Date.parse(old.updatedAt||''), pt=Date.parse(p.updatedAt||'');
     const newer=(!isNaN(pt)&&isNaN(ot))||(!isNaN(pt)&&!isNaN(ot)&&pt>=ot)?p:old;
-    map.set(key,{...old,...newer});
+    const merged={...old,...newer};
+    merged.code=old.code||p.code;
+    merged.id=old.id||p.id||('project_'+String(merged.code||'').toUpperCase());
+    merged.intention=merged.intention||old.intention||p.intention||'';
+    map.set(key,merged);
   });
   return [...map.values()];
 }
@@ -3852,6 +4001,7 @@ async function syncPull(options){
     let data;
     try{data=await gasCall('getAll')}catch(e){data=await gasJsonpGet()}
     if(!data||data.error)throw new Error(data&&data.error||'فشل الاتصال');
+    if(data.catalogTombstones){__deletedCatalog=data.catalogTombstones;safeSet(localStorage,DELCATKEY,JSON.stringify(__deletedCatalog));}
 
     if(__localDirty && !options.forceOverwriteLocal){data=mergeCollaborativeData(data);}
     if(!hasRemoteData(data) && hasLocalData() && !options.forceOverwriteLocal){
@@ -3879,8 +4029,8 @@ async function syncPull(options){
        يدمج الآن حسابات الخادم مع الحسابات المحلية بالمعرّف (id)، ولا يُسقط أي حساب محلي
        غير محذوف صراحة، ويُفضَّل الحساب الأحدث فعليًا (updatedAt) عند تعارض نفس المعرّف. */
     USERS=options.forceOverwriteLocal
-      ? (Array.isArray(data.users)?data.users:USERS)
-      : mergeEntityHistories(Array.isArray(data.users)?data.users:[],USERS).filter(u=>u&&__deletedUserIds.indexOf(String(u.id))===-1);
+      ? normalizeUsersLocal(Array.isArray(data.users)?data.users:USERS)
+      : normalizeUsersLocal(mergeEntityHistories(Array.isArray(data.users)?data.users:[],USERS).filter(u=>u&&__deletedUserIds.indexOf(String(u.id))===-1));
     donors=mergeEntityHistories(Array.isArray(data.donors)?data.donors:[],donors).map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));
     companies=mergeEntityHistories(Array.isArray(data.companies)?data.companies:[],companies);
     companies=companies.map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
@@ -3892,7 +4042,7 @@ async function syncPull(options){
     projects=mergeProjectListsNoLoss_(Array.isArray(data.projects)?normalizeProjects(data.projects):[],projects);
      ensureProjectCodes();
     channels=Array.isArray(data.channels)&&data.channels.length?data.channels:channels;
-    channels=Array.isArray(channels)?channels.filter(c=>c!==null&&c!==undefined&&String(c).trim()!==''):DONATION_METHODS.slice();
+    channels=normalizeChannelsLocal(channels);
     intentions=Array.isArray(data.intentions)&&data.intentions.length?data.intentions:intentions;
     managerCategories=Array.isArray(data.managerCategories)&&data.managerCategories.length?data.managerCategories:managerCategories;
     ensureSuperAdmin();
@@ -3950,7 +4100,7 @@ function __setBaseSnapshot(data){
     updatedAt:data.updatedAt||'',users:data.users||[],donors:data.donors||[],
     companies:data.companies||[],projects:data.projects||[],channels:data.channels||[],
     intentions:data.intentions||[],managerCategories:data.managerCategories||[],
-    companyConfig:data.companyConfig||null,donationResetVersion:data.donationResetVersion||''
+    companyConfig:data.companyConfig||null,catalogTombstones:data.catalogTombstones||{projects:{},channels:{}},donationResetVersion:data.donationResetVersion||''
   }));
 }
 function __deletedIdsAgainstBase(){
@@ -3973,6 +4123,8 @@ function __makeDurablePayload(){
   return {...__safeClone(__currentSyncState()),
     __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),
     __deletedUsers:__deletedUserIds.slice(),
+    __catalogTombstones:__catalogTombstonesPayload(),
+    __catalogRecreated:__catalogRecreatedPayload(),
     __queuedAt:new Date().toISOString()};
 }
 function __queueDurableSnapshot(){
@@ -4055,6 +4207,8 @@ async function syncPushNow(options){
   const payload={...__safeClone(__currentSyncState()),
     __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),
     __deletedUsers:__deletedUserIds.slice(),
+    __catalogTombstones:__catalogTombstonesPayload(),
+    __catalogRecreated:__catalogRecreatedPayload(),
     donationResetVersion:DONATION_RESET_VERSION,__allowDonationReset:__pendingDonationReset===true};
   if(!options.silent)__syncIndicatorShow('جارٍ حفظ التعديلات...');
   try{
@@ -4064,7 +4218,9 @@ async function syncPushNow(options){
     if(!res||res.error)throw new Error(res&&res.error||'فشل الحفظ');
     if(res.data){
       __setBaseSnapshot(res.data);
-      USERS=Array.isArray(res.data.users)?res.data.users:USERS;
+      if(res.data.catalogTombstones){__deletedCatalog=res.data.catalogTombstones;safeSet(localStorage,DELCATKEY,JSON.stringify(__deletedCatalog));}
+      __recreatedCatalog={projects:{},channels:{}};
+      USERS=normalizeUsersLocal(Array.isArray(res.data.users)?res.data.users:USERS);
       donors=Array.isArray(res.data.donors)?res.data.donors:donors;
       companies=Array.isArray(res.data.companies)?res.data.companies:companies;
       projects=Array.isArray(res.data.projects)?res.data.projects:projects;
@@ -5196,7 +5352,7 @@ function restoreBackup(file){
     try{
       const data=JSON.parse(ev.target.result);
       if(!Array.isArray(data.users)||!Array.isArray(data.donors)){alert('ملف النسخة الاحتياطية غير صالح.');return}
-      USERS=data.users;donors=data.donors;companies=Array.isArray(data.companies)?data.companies:[];companyConfig=normalizeCompanyConfig(data.companyConfig||companyConfig);projects=normalizeProjects(data.projects);
+      USERS=data.users;donors=data.donors;companies=Array.isArray(data.companies)?data.companies:[];companyConfig=normalizeCompanyConfig(data.companyConfig||companyConfig);projects=normalizeProjects(data.projects);__deletedCatalog={projects:{},channels:{}};safeSet(localStorage,DELCATKEY,JSON.stringify(__deletedCatalog));
       channels=Array.isArray(data.channels)&&data.channels.length?data.channels:DONATION_METHODS.slice();
       intentions=Array.isArray(data.intentions)&&data.intentions.length?data.intentions:INTENTION_TYPES.slice();
       managerCategories=Array.isArray(data.managerCategories)&&data.managerCategories.length?data.managerCategories:MANAGER_CATEGORIES_DEFAULT.slice();
@@ -7285,7 +7441,7 @@ function saveNewProject(){
  const intention=document.getElementById('p_intention').value;
  if(!name){alert('يرجى إدخال اسم المشروع.');return}
  if(projects.some(p=>normName(p.name)===normName(name))){alert('هذا المشروع مضاف بالفعل.');return}
- projects.push({id:'project_'+uid(),name,intention,updatedAt:new Date().toISOString()});ensureProjectCodes();saveProjects();closeModal();renderProjects();
+ projects.push({id:'project_'+uid(),name,intention,updatedAt:new Date().toISOString()});__clearCatalogDeleted('project',{name});ensureProjectCodes();saveProjects();closeModal();renderProjects();
 }
 function editProject(name){
  if(!canModule('projects','edit',currentUser))return;
@@ -7312,7 +7468,7 @@ function deleteProject(name){
  if(!canModule('projects','delete',currentUser)){alert('ليس لديك صلاحية حذف المشاريع.');return}
  if(projectHasMovements(name)){alert('لا يمكن حذف المشروع «'+name+'» لوجود حركات تبرع مسجلة عليه. يجب حذف أو نقل حركات التبرع المرتبطة به أولًا (الحذف متاح لحساب الإدارة المالية فقط، ولا يمكن حذف الحركات المعتمدة ماليًا).');return}
  if(!confirm('حذف المشروع من قائمة المشاريع؟'))return;
- projects=projects.filter(p=>p.name!==name);saveProjects();renderProjects();
+ const removed=projects.find(p=>normName(p.name)===normName(name)); if(removed)__markCatalogDeleted('project',removed); projects=projects.filter(p=>normName(p.name)!==normName(name));saveProjects();renderProjects();
 }
 function projectContributions(name){
  const list=visibleDonors();
@@ -7552,13 +7708,13 @@ function addChannel(){
  const inp=document.getElementById('newChannelInput');const name=inp.value.trim();
  if(!name)return;
  if(channels.some(c=>normName(c)===normName(name))){alert('هذه القناة موجودة بالفعل.');return}
- channels.push(name);saveChannels();ensureChannelCodes();inp.value='';renderSettingsChannels();
+ channels.push(name);__clearCatalogDeleted('channel',name);saveChannels();ensureChannelCodes();inp.value='';renderSettingsChannels();
 }
 function removeChannel(name){
  if(!canModule('settings','delete',currentUser)){alert('ليس لديك صلاحية حذف قنوات التبرع.');return}
  if(channels.length<=1){alert('يجب أن تبقى قناة تبرع واحدة على الأقل.');return}
  if(!confirm('حذف قناة "'+name+'"؟ (لن يتم حذف التبرعات المسجلة عليها من قبل)'))return;
- channels=channels.filter(c=>c!==name);saveChannels();renderSettingsChannels();
+ __markCatalogDeleted('channel',name); channels=channels.filter(c=>normName(c)!==normName(name));saveChannels();renderSettingsChannels();
 }
 function renderSettingsIntentions(){
  document.getElementById('intentionsTagList').innerHTML=intentions.map(c=>`<span class="tag">${escapeHtml(c)}<button onclick="removeIntention('${escapeHtml(c).replace(/'/g,"\\'")}')">✕</button></span>`).join('');
@@ -7689,8 +7845,8 @@ function __reloadKeyFromStorage(key){
     const v=JSON.parse(raw);
     if(key===DKEY){donors=(Array.isArray(v)?v:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));return true}
     if(key===COMPANYKEY){companies=(Array.isArray(v)?v:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));return true}
-    if(key===PKEY){projects=normalizeProjects(v);return true}
-    if(key===UKEY&&Array.isArray(v)&&v.length){USERS=v;if(currentUser){const me=USERS.find(u=>u.id===currentUser.id);if(me)currentUser=me}return true}
+    if(key===PKEY){projects=normalizeProjects(v);ensureProjectCodes();return true}
+    if(key===UKEY&&Array.isArray(v)&&v.length){USERS=normalizeUsersLocal(v);if(currentUser){const me=USERS.find(u=>u.id===currentUser.id);if(me)currentUser=me}return true}
   }catch(e){}
   return false;
 }
