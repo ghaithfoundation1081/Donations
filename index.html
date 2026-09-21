@@ -843,10 +843,12 @@ body{overflow:hidden!important;}
 @media(max-width:900px){.company-report-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.company-report-grid{grid-template-columns:1fr}}
 </style>
 <style>
-#financeFilterToolbar.finance-review-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+#financeFilterToolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 #financeFilterToolbar .finance-filter-chips{display:flex;align-items:center;gap:7px;flex:1 1 auto;margin:0;padding:0;background:transparent;border:0;box-shadow:none}
-#financeFilterToolbar .finance-search-inline{flex:0 1 430px;min-width:260px}
+#financeFilterToolbar .finance-status-group{display:flex;align-items:center;gap:7px;flex:0 0 auto;flex-wrap:wrap}
+#financeFilterToolbar .finance-search-inline{flex:0 1 430px;min-width:280px}
 #financeFilterToolbar #financeReviewSearch{width:100%;height:42px}
+#financeFilterToolbar .finance-channel-break{flex-basis:100%;height:0}
 @media(max-width:900px){#financeFilterToolbar .finance-search-inline{flex:1 1 100%;min-width:0}}
 .donation-attachment{display:inline-flex;align-items:center;gap:6px;margin-top:7px;padding:5px 9px;border:1px solid #D7EEE6;border-radius:8px;background:#F2FAF7;color:var(--primary-dark);text-decoration:none;font-size:12px;font-weight:700}
 .donation-attachment:hover{background:#E8F6F1}
@@ -1932,7 +1934,6 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
   <div class="manager-box"><b>مراجعة الإدارة المالية:</b> كل حركة تبرع تحتاج اعتماد الإدارة المالية. بعد اعتماد الإدارة المالية، لا يمكن للمدير أو المستخدمين تعديل أو حذف الحركة، وتظل صلاحية التعديل والحذف لدى الإدارة المالية فقط.</div>
   <div class="toolbar finance-review-toolbar" id="financeFilterToolbar">
     <div class="toolbar filters finance-filter-chips" id="financeChips"></div>
-    <div class="finance-search-inline"><input id="financeReviewSearch" type="search" placeholder="بحث: الموظف، القناة، الاسم، المشروع، حالة الاعتماد، التاريخ، المبلغ، الملاحظات..." value="" oninput="setFinanceSearch(this.value)"></div>
   </div>
   <div class="stats" id="financeStats"></div>
   <div class="toolbar" id="financeBulkBar" style="margin-bottom:10px"></div>
@@ -2084,7 +2085,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby476wlHDzA6CNJkuywNrRRxtDsGItJVeoUlIteuX--AFEqvdg3MoYKKZ5C4LoFh2gD/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwQa9HrQcJUGh1qXE5AQUQA6I3dtBeTK7qMhe_5L4DljciF4vdQRJXeJrOroBNL2dh0/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -7374,6 +7375,9 @@ function financeRows(){
      if(normName(h.project||'')==='تواصل')return;
      const amountNum=Number(String(h.amount??'').replace(/,/g,''));
      if(!h.amount || isNaN(amountNum) || amountNum<=0)return;
+     /* مراجعة الإدارة المالية تعرض فقط الحركات التي سجلها المستخدم الحالي،
+        ولا تعتمد على صاحب المتبرع لأن المتبرع قد تكون له حركات لمستخدمين مختلفين. */
+     if(!movementCreatedByCurrentUser(h))return;
      const status=normalizeFinanceStatus(h.financeStatus);
      rows.push({donorId:d.id||'',donorName:d.name||'—',...h,financeStatus:status});
    });
@@ -7473,16 +7477,16 @@ function renderFinanceReview(){
  const bulkBar=document.getElementById('financeBulkBar');
  if(!box||!chips||!stats)return;
  bindFinanceChannelTabs();
- const financeSearchInput=document.getElementById('financeReviewSearch');
- if(financeSearchInput && financeSearchTerm) financeSearchInput.value=financeSearchTerm;
  if(!canModule('financeReview','view',currentUser)){chips.innerHTML='';stats.innerHTML='';if(bulkBar)bulkBar.innerHTML='';box.innerHTML='<div class="empty">ليس لديك صلاحية عرض مراجعة الإدارة المالية.</div>';return}
  // ابنِ الفلاتر أولًا حتى لا يؤدي خطأ في بيانات القنوات/الحركات إلى شاشة فارغة.
  const channelList=Array.isArray(channels)?channels.map(c=>typeof c==='object'&&c!==null?(c.name||c.label||c.channel||''):c).filter(c=>c!==null&&c!==undefined&&String(c).trim()!==''):[];
  const channelOptions=['all',...channelList.filter(c=>normName(c)!=='all').filter((c,i,a)=>a.findIndex(x=>normName(x)===normName(c))===i)];
- chips.innerHTML=[
+ const statusChips=[
    {k:'pending',l:'بانتظار الاعتماد'},{k:'approved',l:'معتمدة ماليًا'},{k:'rejected',l:'مرفوضة ماليًا'},{k:'all',l:'الكل'}
- ].map(c=>`<div class="chip ${financeFilter===c.k?'active':''}" onclick="setFinanceFilter('${c.k}')">${c.l}</div>`).join('')+
- `<div style="flex-basis:100%;height:1px"></div>`+
+ ].map(c=>`<div class="chip ${financeFilter===c.k?'active':''}" onclick="setFinanceFilter('${c.k}')">${c.l}</div>`).join('');
+ chips.innerHTML=`<div class="finance-status-group">${statusChips}</div>`+
+ `<div class="finance-search-inline"><input id="financeReviewSearch" type="search" placeholder="بحث داخل المراجعة المالية..." value="${escapeHtml(financeSearchTerm)}" oninput="setFinanceSearch(this.value)"></div>`+
+ `<div class="finance-channel-break"></div>`+
  channelOptions.map(c=>{
    const value=String(c);
    return `<button type="button" class="chip ${normName(financeChannel)===normName(value)?'active':''}" data-finance-channel="${escapeHtml(value)}">${escapeHtml(c==='all'?'كل القنوات':value)}</button>`;
@@ -8420,6 +8424,8 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
         if(normName(h.project||'')==='تواصل')return;
         const amountNum=Number(String(h.amount??'').replace(/,/g,''));
         if(!h.amount||isNaN(amountNum)||amountNum<=0)return;
+        /* نفس قاعدة الملكية للشركات: لا تظهر في المراجعة إلا حركة المستخدم الحالي. */
+        if(!movementCreatedByCurrentUser(h))return;
         rows.push({companyId:c.id,entityType:'company',donorId:'company:'+c.id,donorName:c.name||'—',...h,financeStatus:normalizeFinanceStatus(h.financeStatus)});
       });
     });
