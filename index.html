@@ -1552,6 +1552,11 @@ body{
   background:var(--ghaith-dark)!important;
   border-color:var(--ghaith-dark)!important;
 }
+.login-sync-wait{display:flex;align-items:center;justify-content:center;gap:10px;margin:14px 0;padding:12px 14px;border-radius:12px;background:#EAF7F2;border:1px solid #D5EEE5;color:#006B59;font-size:13px;font-weight:700}
+.login-sync-wait.hidden{display:none!important}
+.login-sync-spinner{width:20px;height:20px;border:3px solid #BFE4D8;border-top-color:#08A86D;border-radius:50%;animation:loginSyncSpin .8s linear infinite;flex:0 0 auto}
+@keyframes loginSyncSpin{to{transform:rotate(360deg)}}
+.login-sync-locked #normalLoginArea{opacity:.55;pointer-events:none}
 
 /* Keep hidden welcome element harmless */
 #app header #welcome{display:none!important;}
@@ -1587,6 +1592,10 @@ body{
   <h2 id="loginTitleTrigger" onclick="loginTitleClicked()" style="user-select:none">مؤسسة غيث للتنمية المجتمعية</h2>
   <div class="subtitle" style="margin-bottom:10px;text-align:center">إدارة تنمية الموارد المالية ( أفراد )</div>
   <p class="subtitle" id="loginSubtitle">تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.</p>
+  <div id="loginSyncWait" class="login-sync-wait hidden" aria-live="polite">
+    <span class="login-sync-spinner" aria-hidden="true"></span>
+    <span id="loginSyncWaitText">جارٍ الربط الفعلي مع Google Sheets...</span>
+  </div>
 
   <div id="loginFormArea">
     <div id="normalLoginArea">
@@ -2067,7 +2076,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbx6RoCbezbG-PogEJG7f_yPDC-KfRzWSvmO_G13Kk-U9ds-EL23_7tSqCgEh6NAA11H/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzjgxjp5dNOw02u7p1pEa1i_PT29qPQn5MqUgHtJThB8gIzSEeg2v6MH9GYxm7wQZaQ/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -3146,6 +3155,8 @@ function bootstrapGasUrlCandidate(){
   return '';
 }
 let GAS_URL=bootstrapGasUrlCandidate()||DEFAULT_GAS_URL;
+/* حسابات المستخدمين لا تدخل إلا بعد نجاح مزامنة فعلية؛ المدير الرئيسي مستثنى. */
+let __syncReadyForUsers=false;
 /* يُستخدم في prepareActivationScreen لمعرفة هل الرابط الحالي جاء من رابط تفعيل
    (وبالتالي يحتاج تأكيدًا بمطابقة الرمز قبل حفظه بشكل دائم) أم كان محفوظًا
    بالفعل في هذا المتصفح من قبل (فلا حاجة لإعادة التأكيد). */
@@ -3755,6 +3766,29 @@ async function migrateLegacyBrowserUsers(){
 
 
 /* === LOGIN DATA SAFETY === */
+function isCurrentUserAllowedOffline(u){return !!u&&isSuperAdmin(u)}
+function setLoginSyncWait(show,text){
+  const box=document.getElementById('loginSyncWait');
+  const area=document.getElementById('loginFormArea');
+  const txt=document.getElementById('loginSyncWaitText');
+  if(txt&&text)txt.textContent=text;
+  if(box)box.classList.toggle('hidden',!show);
+  if(area)area.classList.toggle('login-sync-locked',!!show);
+}
+function lockNonAdminLogin(message){
+  __syncReadyForUsers=false;
+  setLoginSyncWait(true,message||'جارٍ انتظار الربط الفعلي مع Google Sheets...');
+  const btn=document.querySelector('#normalLoginArea button.btn-primary');
+  if(btn)btn.disabled=true;
+}
+function unlockNonAdminLogin(){
+  __syncReadyForUsers=true;
+  setLoginSyncWait(false);
+  const btn=document.querySelector('#normalLoginArea button.btn-primary');
+  if(btn)btn.disabled=false;
+}
+function syncRequiredForUserLogin(){return !__syncReadyForUsers}
+
 function restoreLocalUsersIfMissing(){
   if(Array.isArray(USERS) && USERS.length)return true;
   try{
@@ -3787,15 +3821,21 @@ async function loadAll(){
   ensureProjectCodes();ensureChannelCodes();ensureIntentionCodes();
   try{managerCategories=JSON.parse(safeGet(localStorage,MCKEY)||'null')||MANAGER_CATEGORIES_DEFAULT.slice()}catch(e){managerCategories=MANAGER_CATEGORIES_DEFAULT.slice()}
   const hadPendingSnapshot=__restorePendingSnapshot();
+  __syncReadyForUsers=false;
   if(GAS_URL){
     if(hadPendingSnapshot){__localDirty=true;await syncPushNow({silent:true});}
     const sub=document.getElementById('loginSubtitle');
-    if(sub)sub.textContent='جارِ مزامنة البيانات مع جوجل شيت...';
+    if(sub)sub.textContent='جارِ مزامنة البيانات مع Google Sheets...';
+    lockNonAdminLogin('جارٍ الربط الفعلي مع Google Sheets...');
     const localHadData=hasLocalData();
     const pulled=await syncPull({preserveLocalIfRemoteEmpty:true});
     try{const authoritative=await gasCall('getAll');if(authoritative&&!authoritative.error)__setBaseSnapshot(authoritative);}catch(e){}
+    if(__lastPullSuccess)unlockNonAdminLogin();
+    else lockNonAdminLogin('تعذر الربط الفعلي مع Google Sheets — لن يُسمح للمستخدمين بالدخول حتى ينجح الربط.');
     if(!pulled && localHadData) setConnStatus('off');
-    if(sub)sub.textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
+    if(sub)sub.textContent=__syncReadyForUsers?'تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.':'يرجى انتظار اكتمال المزامنة الفعلية مع Google Sheets.';
+  }else{
+    lockNonAdminLogin('النظام غير مرتبط بـ Google Sheets — حسابات المستخدمين مقفلة حتى يتم الربط الفعلي.');
   }
   __lastDonationSnapshot=__snapshotDonationState(); /* نقطة انطلاق السجل الفوري: لا نسجّل الحركات الموجودة مسبقًا كـ"جديدة" */
   USERS.forEach(u=>{if(typeof u.active==='undefined')u.active=true;if(!u.followScope)u.followScope='both';if(!u.permissions)u.permissions=defaultPermissionsFor(u);});
@@ -4347,6 +4387,10 @@ function loginTitleClicked(){
 function showLogin(){
   document.getElementById('loginScreen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
+  const btn=document.querySelector('#normalLoginArea button.btn-primary');
+  if(btn)btn.disabled=false;
+  if(!__syncReadyForUsers && !isAdminPortal())setLoginSyncWait(true,'جارٍ انتظار الربط الفعلي مع Google Sheets...');
+  else if(__syncReadyForUsers)setLoginSyncWait(false);
   prepareActivationScreen();
 }
 /* === LEGACY BROWSER / OLD DATA LOGIN COMPATIBILITY === */
@@ -4409,6 +4453,12 @@ async function login(){
 
   if(found.active===false){
     alert('هذا الحساب غير نشط. يرجى مراجعة مدير النظام.');
+    return;
+  }
+
+  if(syncRequiredForUserLogin() && !isCurrentUserAllowedOffline(found)){
+    setLoginSyncWait(true,'جارٍ انتظار الربط الفعلي مع Google Sheets...');
+    alert('لا يمكن تسجيل دخول هذا المستخدم قبل نجاح المزامنة الفعلية مع Google Sheets.');
     return;
   }
 
@@ -5388,7 +5438,21 @@ function findDuplicate(name,phone,excludeId){
 }
 function isCashMethod(m){return /نقد/.test(String(m||''))}
 function allDonationEntries(d){return (d.history||[]).filter(x=>x.type==='donation')}
-function donationEntries(d){return allDonationEntries(d).filter(h=>h.status!=='pending')}
+/* صاحب الحركة هو createdBy/responsibleEmployeeId/userId، وليس صاحب المتبرع. */
+function movementCreatedByCurrentUser(h){
+  if(!h||!currentUser)return false;
+  if(isFinance(currentUser)||isManagerRole(currentUser))return true;
+  const uid=String(currentUser.id||'');
+  if(uid && [h.createdBy,h.createdById,h.creatorId,h.userId].some(v=>String(v||'')===uid))return true;
+  /* توافق مع الحركات القديمة التي لم يكن بها createdBy لكن كانت تحفظ اسم من سجلها. */
+  return !!(h.by && currentUser.fullName && normName(h.by)===normName(currentUser.fullName));
+}
+function visibleDonationEntries(d){
+  const all=allDonationEntries(d);
+  if(!currentUser||isFinance(currentUser)||isManagerRole(currentUser))return all;
+  return all.filter(movementCreatedByCurrentUser);
+}
+function donationEntries(d){return visibleDonationEntries(d).filter(h=>h.status!=='pending')}
 function pendingDonationEntries(d){return allDonationEntries(d).filter(h=>h.status==='pending')}
 function ensureHid(d){
   let changed=false;
@@ -6740,7 +6804,7 @@ function openCompanyContact(id){
 function saveCompanyContact(id){const c=companies.find(x=>x.id===id);if(!c||!canModule('companies','edit',currentUser))return;const idx=document.getElementById('cc_contact').value;const contact=idx!==''?(c.contacts||[])[Number(idx)]:null;const date=document.getElementById('cc_date').value||todayStr();c.history=c.history||[];c.history.push({type:'contact',hid:uid(),date,action:document.getElementById('cc_action').value,contactName:contact?.name||'',contactRole:contact?.role||'',notes:document.getElementById('cc_notes').value.trim(),nextFollowUp:document.getElementById('cc_next').value||'',by:currentUser.fullName,createdBy:currentUser.id});if(document.getElementById('cc_next').value)c.nextFollowUp=document.getElementById('cc_next').value;persistCompanies();closeModal();renderCompanies();}
 function openCompanyDonation(id){if(!canDonationType('company',currentUser)){alert('ليس لديك صلاحية تسجيل تبرعات الشركات.');return}const c=companies.find(x=>x.id===id);if(!c)return;setView('donationModule');selectDonationModuleTab('new');document.getElementById('md_entityType').value='company';syncModuleDonationEntity();document.getElementById('md_company').value=c.id;document.getElementById('md_amount')?.focus()}
 
-function saveCompanyDonation(id){const c=companies.find(x=>x.id===id);if(!c||!canDonationType('company',currentUser))return;const amount=Number(document.getElementById('cd_amount').value);if(!(amount>0)){alert('يرجى إدخال قيمة تبرع صحيحة.');return}const project=document.getElementById('cd_project').value;if(!project){alert('يرجى اختيار المشروع.');return}const intention=document.getElementById('cd_intention').value;if(!intention){alert('يرجى اختيار النية.');return}const movementStatus=normalizeMovementStatus(document.getElementById('cd_movementStatus').value);c.history=c.history||[];c.history.push({type:'donation',hid:uid(),status:'confirmed',date:document.getElementById('cd_date').value||todayStr(),amount,project,intention,method:document.getElementById('cd_method').value,location:document.getElementById('cd_location').value.trim(),movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',notes:document.getElementById('cd_notes').value.trim(),by:currentUser.fullName,createdBy:currentUser.id});persistCompanies();if(GAS_URL)syncPushNow({silent:true});closeModal();renderCompanies();}
+function saveCompanyDonation(id){const c=companies.find(x=>x.id===id);if(!c||!canDonationType('company',currentUser))return;const amount=Number(document.getElementById('cd_amount').value);if(!(amount>0)){alert('يرجى إدخال قيمة تبرع صحيحة.');return}const project=document.getElementById('cd_project').value;if(!project){alert('يرجى اختيار المشروع.');return}const intention=document.getElementById('cd_intention').value;if(!intention){alert('يرجى اختيار النية.');return}const movementStatus=normalizeMovementStatus(document.getElementById('cd_movementStatus').value);c.history=c.history||[];c.history.push({type:'donation',hid:uid(),status:'confirmed',date:document.getElementById('cd_date').value||todayStr(),amount,project,intention,method:document.getElementById('cd_method').value,location:document.getElementById('cd_location').value.trim(),movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',notes:document.getElementById('cd_notes').value.trim(),by:currentUser.fullName,createdBy:currentUser.id,createdById:currentUser.id,responsibleEmployeeId:currentUser.id,responsibleEmployeeName:currentUser.fullName});persistCompanies();if(GAS_URL)syncPushNow({silent:true});closeModal();renderCompanies();}
 function legacy_openCompanyRecord(id){const c=companies.find(x=>x.id===id);if(!c)return;const emp=USERS.find(u=>u.id===c.employeeId),contacts=c.contacts||[],hist=(c.history||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));openModal(`<h3>${escapeHtml(c.name)}</h3>
   <div class="company-record-grid"><div class="company-detail"><div class="label">الحالة</div><div class="value">${companyStatusLabel(companyStatus(c))}</div><div class="company-detail"><div class="label">الفئة</div><div class="value">${escapeHtml(companyCategory(c))}</div></div><div class="company-detail"><div class="label">التصنيف</div><div class="value">${escapeHtml(companyClassification(c))}</div></div><div class="company-detail"><div class="label">مرحلة الـ Pipeline</div><div class="value">${escapeHtml(companyStage(c))}</div></div><div class="company-detail"><div class="label">المتابعة القادمة</div><div class="value">${c.nextFollowUp?fmtDate(c.nextFollowUp):'—'}</div></div><div class="company-detail"><div class="label">القيمة المتوقعة</div><div class="value">${c.expectedValue?money(c.expectedValue):'—'}</div></div><div class="company-detail"><div class="label">مصدر الشركة</div><div class="value">${escapeHtml(c.source||'—')}</div></div></div><div class="company-detail"><div class="label">المسؤول</div><div class="value">${escapeHtml(emp?.fullName||'غير محدد')}</div></div><div class="company-detail"><div class="label">إجمالي التبرعات</div><div class="value">${money(companyTotal(c))}</div></div><div class="company-detail"><div class="label">مجال النشاط</div><div class="value">${escapeHtml(c.industry||'—')}</div></div><div class="company-detail"><div class="label">الهاتف</div><div class="value">${escapeHtml(c.phone||'—')}</div></div><div class="company-detail"><div class="label">البريد</div><div class="value">${escapeHtml(c.email||'—')}</div></div><div class="company-detail"><div class="label">السجل التجاري</div><div class="value">${escapeHtml(c.commercialReg||'—')}</div></div><div class="company-detail"><div class="label">الرقم الضريبي</div><div class="value">${escapeHtml(c.taxId||'—')}</div></div><div class="company-detail"><div class="label">العنوان</div><div class="value">${escapeHtml(c.address||'—')}</div></div></div>
   ${c.tags?.length?`<div class="company-tags">${c.tags.map(t=>`<span class="company-tag">${escapeHtml(t)}</span>`).join('')}</div>`:''}
@@ -6824,15 +6888,13 @@ function moduleDonationRows(){
   /* جميع التبرعات المسجلة من مديول "تبرع جديد" — أفراد + شركات، بدون فلتر اعتماد مالي. */
   visibleDonors().forEach(d=>{
     (Array.isArray(d.history)?d.history:[]).filter(h=>h&&h.type==='donation').forEach(h=>{
-      const owner=h.responsibleEmployeeId||h.createdBy||d.employeeId||'';
-      if(currentUser?.role==='employee' && String(owner)!==String(currentUser.id))return;
+      if(currentUser?.role==='employee' && !movementCreatedByCurrentUser(h))return;
       rows.push({entityType:'individual',entityLabel:'فرد',donor:d.name||'—',phone:d.phone||'',donorId:d.id||'',...h});
     });
   });
   (Array.isArray(companies)?companies:[]).forEach(c=>{
     (Array.isArray(c.history)?c.history:[]).filter(h=>h&&h.type==='donation').forEach(h=>{
-      const owner=h.responsibleEmployeeId||h.createdBy||c.employeeId||'';
-      if(currentUser?.role==='employee' && String(owner)!==String(currentUser.id))return;
+      if(currentUser?.role==='employee' && !movementCreatedByCurrentUser(h))return;
       rows.push({entityType:'company',entityLabel:'شركة',donor:c.name||h.companyName||'—',phone:c.phone||'',donorId:'company:'+String(c.id||''),companyId:c.id||'',...h});
     });
   });
@@ -7043,7 +7105,7 @@ async function saveNewDonation(id){
   if(!projects.some(p=>normName(p.name)===normName(project))){alert('المشروع المختار غير مكود في النظام.');return}
   let attachmentData='';try{const file=document.getElementById('dn_attachment')?.files?.[0];if(file)attachmentData=await compressDonationImage(file)}catch(e){alert(e.message||'تعذر تجهيز الصورة المرفقة.');return}
   const method=document.getElementById('dn_method').value;
-  d.history=d.history||[];d.history.push({type:'donation',hid:uid(),date:document.getElementById('dn_date').value||todayStr(),action:'تبرع جديد',amount,project,intention,location:document.getElementById('dn_location').value.trim(),method,notes:document.getElementById('dn_notes').value.trim(),by:currentUser.fullName,createdBy:currentUser.id,status:'confirmed',movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',attachmentData});
+  d.history=d.history||[];d.history.push({type:'donation',hid:uid(),date:document.getElementById('dn_date').value||todayStr(),action:'تبرع جديد',amount,project,intention,location:document.getElementById('dn_location').value.trim(),method,notes:document.getElementById('dn_notes').value.trim(),by:currentUser.fullName,createdBy:currentUser.id,createdById:currentUser.id,responsibleEmployeeId:currentUser.id,responsibleEmployeeName:currentUser.fullName,status:'confirmed',movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',attachmentData});
   persist();if(GAS_URL)syncPushNow({silent:true});closeModal();render();alert(movementStatus==='ناجحة'?'تم تسجيل التبرع بنجاح، وهو الآن بانتظار اعتماد الإدارة المالية.':'تم تسجيل التبرع بنجاح واعتماده مباشرة لأن حالة الحركة غير ناجحة.');
 }
 
