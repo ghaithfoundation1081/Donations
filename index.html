@@ -1925,6 +1925,9 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 
 <div id="financeReviewView" class="hidden">
   <div class="manager-box"><b>مراجعة الإدارة المالية:</b> كل حركة تبرع تحتاج اعتماد الإدارة المالية. بعد اعتماد الإدارة المالية، لا يمكن للمدير أو المستخدمين تعديل أو حذف الحركة، وتظل صلاحية التعديل والحذف لدى الإدارة المالية فقط.</div>
+  <div class="toolbar" id="financeSearchBar">
+    <input id="financeReviewSearch" type="search" placeholder="بحث داخل المراجعة المالية: الموظف، القناة، اسم المتبرع، المشروع، حالة الاعتماد، التاريخ، المبلغ، الملاحظات..." value="" oninput="setFinanceSearch(this.value)">
+  </div>
   <div class="toolbar filters" id="financeChips"></div>
   <div class="stats" id="financeStats"></div>
   <div class="toolbar" id="financeBulkBar" style="margin-bottom:10px"></div>
@@ -2076,7 +2079,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzjgxjp5dNOw02u7p1pEa1i_PT29qPQn5MqUgHtJThB8gIzSEeg2v6MH9GYxm7wQZaQ/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzz0sZfesxzrP-RThSTfokNxMbhFoq9n8-eAAubfrAK5sbDJ96ku6hmy_-S1Saaq-pW/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -5441,29 +5444,29 @@ function allDonationEntries(d){return (d.history||[]).filter(x=>x.type==='donati
 /* صاحب الحركة هو createdBy/responsibleEmployeeId/userId، وليس صاحب المتبرع. */
 function movementCreatedByCurrentUser(h){
   if(!h||!currentUser)return false;
-  if(isFinance(currentUser)||isManagerRole(currentUser))return true;
   const uid=String(currentUser.id||'');
-  if(uid && [h.createdBy,h.createdById,h.creatorId,h.userId].some(v=>String(v||'')===uid))return true;
+  if(uid && [h.createdBy,h.createdById,h.creatorId,h.userId,h.responsibleEmployeeId].some(v=>String(v||'')===uid))return true;
   /* توافق مع الحركات القديمة التي لم يكن بها createdBy لكن كانت تحفظ اسم من سجلها. */
   return !!(h.by && currentUser.fullName && normName(h.by)===normName(currentUser.fullName));
 }
-function visibleDonationEntries(d){
-  const all=allDonationEntries(d);
-  if(!currentUser||isFinance(currentUser)||isManagerRole(currentUser))return all;
+function visibleHistoryEntries(history){
+  const all=Array.isArray(history)?history:[];
+  if(!currentUser)return [];
   return all.filter(movementCreatedByCurrentUser);
 }
+function visibleDonationEntries(d){return visibleHistoryEntries(d&&d.history).filter(h=>h.type==='donation')}
 function donationEntries(d){return visibleDonationEntries(d).filter(h=>h.status!=='pending')}
-function pendingDonationEntries(d){return allDonationEntries(d).filter(h=>h.status==='pending')}
+function pendingDonationEntries(d){return visibleDonationEntries(d).filter(h=>h.status==='pending')}
 function ensureHid(d){
   let changed=false;
   (d.history||[]).forEach(h=>{if(!h.hid){h.hid='h'+Date.now()+Math.random().toString(36).slice(2,7);changed=true}});
   return changed;
 }
-function contactEntries(d){return (d.history||[]).filter(x=>x.type==='contact')}
+function contactEntries(d){return visibleHistoryEntries(d&&d.history).filter(x=>x.type==='contact')}
 const REPLIED_ACTIONS=['اتصلت - رد','واتساب','زيارة'];
-function contactCount(d){return (d.history||[]).filter(x=>x.type==='contact').length}
+function contactCount(d){return contactEntries(d).length}
 function latestDonation(d){return donationEntries(d).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]||null}
-function latestActivity(d){return (d.history||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]||null}
+function latestActivity(d){return visibleHistoryEntries(d&&d.history).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]||null}
 function status(d){
   const l=latestActivity(d); if(!l)return 'available';
   if(l.date===todayStr())return 'today';
@@ -6530,8 +6533,9 @@ function companyStatus(c){
 function companyStatusLabel(s){return ({active:'نشطة',prospect:'محتملة',partner:'شريك',inactive:'غير نشطة'})[s]||'نشطة'}
 function companyPriority(c){return String(c.priority||'normal')}
 function companyPriorityLabel(p){return ({high:'أولوية عالية',normal:'عادية',low:'منخفضة'})[p]||'عادية'}
-function companyDonationEntries(c){return (c.history||[]).filter(h=>h.type==='donation')}
-function companyContactEntries(c){return (c.history||[]).filter(h=>h.type==='contact')}
+function companyVisibleHistory(c){return visibleHistoryEntries(c&&c.history)}
+function companyDonationEntries(c){return companyVisibleHistory(c).filter(h=>h.type==='donation')}
+function companyContactEntries(c){return companyVisibleHistory(c).filter(h=>h.type==='contact')}
 function companyTotal(c){return companyDonationEntries(c).filter(h=>h.status!=='pending').reduce((s,h)=>s+(Number(String(h.amount).replace(/,/g,''))||0),0)}
 function companyLastContact(c){return companyContactEntries(c).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]||null}
 function companyLastDonation(c){return companyDonationEntries(c).filter(h=>h.status!=='pending').slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]||null}
@@ -7310,7 +7314,9 @@ function bulkRejectFinance(){
 }
 let financeFilter='pending';
 let financeChannel='all';
+let financeSearchTerm='';
 let financeSelected=new Set();
+function setFinanceSearch(value){financeSearchTerm=String(value||'');financeSelected.clear();renderFinanceReview()}
 function setFinanceFilter(f){
   financeFilter=String(f||'pending');
   financeSelected.clear();
@@ -7361,6 +7367,16 @@ function financeRows(){
  else if(financeFilter==='approved')rows.splice(0,rows.length,...rows.filter(r=>r.financeStatus==='approved'));
  else if(financeFilter==='rejected')rows.splice(0,rows.length,...rows.filter(r=>r.financeStatus==='rejected'));
  if(financeChannel!=='all')rows.splice(0,rows.length,...rows.filter(r=>normName(r.method)===normName(financeChannel)));
+ if(financeSearchTerm.trim()){
+   const q=normName(financeSearchTerm.trim());
+   rows.splice(0,rows.length,...rows.filter(r=>{
+     const employee=USERS.find(u=>String(u.id)===String(r.createdBy||r.createdById||r.responsibleEmployeeId||''));
+     const employeeName=employee?.fullName||r.responsibleEmployeeName||r.by||'';
+     const statusLabel=r.financeStatus==='approved'?'معتمد ماليًا':r.financeStatus==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد المالي';
+     const hay=[r.donorName,r.name,r.phone,r.method,r.project,r.intention,r.location,r.notes,r.by,r.responsibleEmployeeName,employeeName,statusLabel,r.financeApprovedBy,r.financeRejectedBy,r.amount,r.date].join(' ');
+     return normName(hay).includes(q);
+   }));
+ }
  return rows;
 }
 function refreshFinanceBadge(){
@@ -7930,7 +7946,7 @@ __durableReady.catch(function(){}).then(function(){return loadAll()});
 
 
 function openCompanyRecord(id){
- const c=companies.find(x=>x.id===id);if(!c)return;companyNormalize(c);const emp=USERS.find(u=>u.id===c.employeeId),contacts=c.contacts||[],hist=(c.history||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')),tasks=c.tasks||[],opps=c.opportunities||[],docs=c.documents||[];
+ const c=companies.find(x=>x.id===id);if(!c)return;companyNormalize(c);const emp=USERS.find(u=>u.id===c.employeeId),contacts=(c.contacts||[]).filter(x=>movementCreatedByCurrentUser(x)),hist=companyVisibleHistory(c).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')),tasks=(c.tasks||[]).filter(x=>movementCreatedByCurrentUser(x)),opps=(c.opportunities||[]).filter(x=>movementCreatedByCurrentUser(x)),docs=(c.documents||[]).filter(x=>movementCreatedByCurrentUser(x));
  const acts=hist.filter(h=>h.type==='activity'||h.type==='contact').length, total=companyTotal(c), weighted=opps.reduce((s,o)=>s+(Number(o.value)||0)*(Number(o.probability)||0)/100,0)+companyWeightedValue(c);
  openModal(`<h3>${escapeHtml(c.name)}</h3><div class="company-record-grid"><div class="company-detail"><div class="label">التصنيف</div><div class="value">${escapeHtml(companyClassification(c))}</div></div><div class="company-detail"><div class="label">المرحلة</div><div class="value">${escapeHtml(companyStage(c))}</div></div><div class="company-detail"><div class="label">المسؤول</div><div class="value">${escapeHtml(emp?.fullName||'—')}</div></div><div class="company-detail"><div class="label">القيمة المتوقعة</div><div class="value">${money(c.expectedValue||0)}</div></div><div class="company-detail"><div class="label">القيمة المرجحة</div><div class="value">${money(weighted)}</div></div><div class="company-detail"><div class="label">احتمالية النجاح</div><div class="value">${Number(c.probability||0)}%</div></div><div class="company-detail"><div class="label">آخر تواصل</div><div class="value">${companyLastContact(c)?fmtDate(companyLastContact(c).date):'—'}</div></div><div class="company-detail"><div class="label">المتابعة القادمة</div><div class="value">${c.nextFollowUp?fmtDate(c.nextFollowUp):'—'}</div></div><div class="company-detail"><div class="label">إجمالي التبرعات</div><div class="value">${money(total)}</div></div></div>
  <div class="company-form-section"><h4>ملخص الشراكة</h4><div class="grid2"><div><b>نوع الشركة:</b> ${escapeHtml(c.companyType||'—')}</div><div><b>القطاع:</b> ${escapeHtml(c.sector||'—')}</div><div><b>المصدر:</b> ${escapeHtml(c.source||'—')}</div><div><b>الإغلاق المتوقع:</b> ${c.expectedClose?fmtDate(c.expectedClose):'—'}</div></div><div class="company-tags">${(c.partnershipInterests||[]).map(x=>`<span class="company-tag">${escapeHtml(x)}</span>`).join('')}${(c.partnershipTypes||[]).map(x=>`<span class="company-tag">${escapeHtml(x)}</span>`).join('')}</div><p class="small-note">${escapeHtml(c.goal||c.notes||'لا توجد ملاحظات.')}</p></div>
@@ -8186,7 +8202,7 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
 /* ===== COMPANY CRM FINAL CLARITY PATCH ===== */
 (function(){
   function companyPaidDonations(c){
-    return (c?.history||[]).filter(h=>{
+    return companyVisibleHistory(c).filter(h=>{
       const st=String(h.status||'confirmed').toLowerCase();
       const ms=String(h.movementStatus||'ناجحة');
       return h.type==='donation' && st!=='pending' && (ms==='ناجحة'||!h.movementStatus);
