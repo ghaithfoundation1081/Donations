@@ -2067,7 +2067,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyohDIMZ3yOcjaaivxK4o4O1X0aVL09ZLIpWrIwkZwPktytEnz0OyNEPv-aIWZlPec/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzQXlMjSOBOG6szpj9ISiKF-IXFcKhD3vzHbe6FNC1HeFeXPuHZrdt619WzGWmdnP2l/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2669,8 +2669,12 @@ function cloneJson_(obj) {
 }
 function indexById_(list) {
   var m = {};
-  (Array.isArray(list) ? list : []).forEach(function(x) {
-    if (x && x.id != null) m[String(x.id)] = x;
+  (Array.isArray(list) ? list : []).forEach(function(x, i) {
+    if (!x) return;
+    var key = x.code != null && String(x.code) ? 'code:'+String(x.code).trim().toUpperCase()
+      : (x.id != null && String(x.id) ? 'id:'+String(x.id)
+      : (x.name != null && String(x.name) ? 'name:'+String(x.name).trim().toLowerCase() : 'idx:'+i));
+    m[key] = x;
   });
   return m;
 }
@@ -3395,10 +3399,12 @@ function ensureProjectCodes(){
   let changed=false; const used=new Set(projects.map(p=>p&&p.code).filter(Boolean));
   let n=1;
   projects.forEach(p=>{
-    if(p&&!p.code){
+    if(!p||typeof p!=='object')return;
+    if(!p.code){
       while(used.has('P'+n))n++;
       p.code='P'+n; used.add(p.code); changed=true;
     }
+    if(!p.id&&p.code){p.id='project_'+String(p.code).toUpperCase();changed=true;}
   });
   if(changed)saveProjects();
 }
@@ -3723,7 +3729,7 @@ let __localDirty=false;
    البيانات. */
 let __bgSyncInFlight=false;
 let __lastBgSyncAt=0;
-const __BG_SYNC_MIN_INTERVAL=60000; // دقيقة واحدة كحد أدنى بين عمليات السحب الخلفية
+const __BG_SYNC_MIN_INTERVAL=3000; // مزامنة شبه فورية بين المستخدمين (3 ثوانٍ كحد أدنى)
 
 async function __backgroundFreshnessSync(force=false){
   if(__bgSyncInFlight||!GAS_URL||!currentUser)return;
@@ -3742,8 +3748,9 @@ async function __backgroundFreshnessSync(force=false){
   finally{__bgSyncInFlight=false;}
 }
 /* فحص خفيف عند العودة للنافذة بدل polling مستمر. */
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)__backgroundFreshnessSync(false)});
-window.addEventListener('focus',()=>__backgroundFreshnessSync(false));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)__backgroundFreshnessSync(true)});
+window.addEventListener('focus',()=>__backgroundFreshnessSync(true));
+setInterval(()=>{if(!document.hidden)__backgroundFreshnessSync(false)},3000);
 
 /* ---------- Google Sheets sync ---------- */
 function gasCall(action,payload){
@@ -3815,6 +3822,21 @@ function mergeCollaborativeData(remote){
    الاتصال...) تُظهر خطأ "حدثت مشكلة أثناء المزامنة" رغم أن الاتصال والحفظ تما
    بنجاح فعليًا. الحل: نتتبع نجاح/فشل الاتصال في __lastPullSuccess بشكل منفصل عن
    قيمة "تغيّرت البيانات" التي ما زالت تُستخدم كما كانت لتحديد الحاجة لإعادة الرسم. */
+function mergeProjectListsNoLoss_(remoteList, localList){
+  const all=[...(Array.isArray(remoteList)?remoteList:[]),...(Array.isArray(localList)?localList:[])];
+  const map=new Map();
+  all.forEach(p=>{
+    if(!p||typeof p!=='object')return;
+    const key=p.code?'code:'+String(p.code).toUpperCase():(p.id?'id:'+p.id:'name:'+normName(p.name));
+    if(!key)return;
+    const old=map.get(key);
+    if(!old){map.set(key,{...p});return;}
+    const ot=Date.parse(old.updatedAt||''), pt=Date.parse(p.updatedAt||'');
+    const newer=(!isNaN(pt)&&isNaN(ot))||(!isNaN(pt)&&!isNaN(ot)&&pt>=ot)?p:old;
+    map.set(key,{...old,...newer});
+  });
+  return [...map.values()];
+}
 let __lastPullSuccess=false, __lastPullError='';
 async function syncPull(options){
   if(!GAS_URL){__lastPullSuccess=false;__lastPullError='لا يوجد رابط Google Sheets مرتبط.';return false;}
@@ -3859,15 +3881,16 @@ async function syncPull(options){
     USERS=options.forceOverwriteLocal
       ? (Array.isArray(data.users)?data.users:USERS)
       : mergeEntityHistories(Array.isArray(data.users)?data.users:[],USERS).filter(u=>u&&__deletedUserIds.indexOf(String(u.id))===-1);
-    donors=Array.isArray(data.donors)?data.donors:donors;
-    companies=Array.isArray(data.companies)?data.companies:companies;
+    donors=mergeEntityHistories(Array.isArray(data.donors)?data.donors:[],donors).map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));
+    companies=mergeEntityHistories(Array.isArray(data.companies)?data.companies:[],companies);
     companies=companies.map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
     companyConfig=normalizeCompanyConfig(data.companyConfig||companyConfig);
     companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
     donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));
     /* ملغى: لا يُمسح أي حركة تبرع بسبب اختلاف رقم نسخة الإعادة. */
     normalizeDonationWorkflow();
-    projects=Array.isArray(data.projects)?normalizeProjects(data.projects):projects;
+    projects=mergeProjectListsNoLoss_(Array.isArray(data.projects)?normalizeProjects(data.projects):[],projects);
+     ensureProjectCodes();
     channels=Array.isArray(data.channels)&&data.channels.length?data.channels:channels;
     channels=Array.isArray(channels)?channels.filter(c=>c!==null&&c!==undefined&&String(c).trim()!==''):DONATION_METHODS.slice();
     intentions=Array.isArray(data.intentions)&&data.intentions.length?data.intentions:intentions;
@@ -3939,8 +3962,10 @@ function __deletedIdsAgainstBase(){
   };
   /* المستخدمون مستثنون عمدًا من هذا الاستنتاج التلقائي — انظر __deletedUserIds أعلاه؛
      حذف حساب لا يُرسل للخادم إلا عبر القائمة الصريحة __deletedUsers. */
-  out.donors=findDeleted('donors');
-  out.companies=findDeleted('companies');out.projects=findDeleted('projects');
+  /* لا نستنتج حذف المتبرعين أو الشركات من اختلاف لقطة المتصفح؛ هذا قد يمحو
+     حركة تبرع بسبب جهاز قديم أو مزامنة متزامنة. */
+  out.donors=[]; out.companies=[];
+  out.projects=findDeleted('projects');
   return out;
 }
 function __makeDurablePayload(){
@@ -4748,6 +4773,7 @@ async function confirmSuperAction(){
    else if(type==='resetPassword')executeResetPassword(payload);
    else if(type==='permissions')executeUserPermissions(payload);
    else if(type==='editUsername')executeEditUsername(payload);
+   else if(type==='editUserData')executeEditUserData(payload);
    else if(type==='factoryReset')executeFactoryReset();
    else if(type==='clearAllTransactions')executeClearAllTransactions();
 }
@@ -4768,7 +4794,8 @@ function renderAccountsList(){
    <div><b>${escapeHtml(u.fullName)}</b> <span class="small-note">(${escapeHtml(userRoleLabel(u))} — ${escapeHtml(u.username)} — ${escapeHtml(u.email||'بدون إيميل')} — ${escapeHtml(u.department||'بدون إدارة')} — ${escapeHtml(u.phone||'')})${self?' — حسابك الحالي':''}</span>
    <span class="badge ${active?'green':'red'}">${active?'نشط':'غير نشط'}</span><span class="badge gold">متابعة: ${escapeHtml(followScopeLabel(u))}</span></div>
    <div style="display:flex;gap:6px;flex-wrap:wrap">
-    ${canDelete?`${u.activated===false?`<button class="btn-primary btn-small" onclick="copyActivationLink('${u.id}')">نسخ رابط التفعيل</button>`:''}<button class="btn-outline btn-small" onclick="editUserUsername('${u.id}')">تعديل اسم المستخدم</button><button class="btn-outline btn-small" onclick="resetUserPassword('${u.id}')">إرسال رابط تعيين كلمة المرور</button><button class="btn-outline btn-small" onclick="openUserPermissions('${u.id}')">تعديل الصلاحيات</button>`:''}
+    <button class="btn-outline btn-small" onclick="editUserData('${u.id}')">تعديل البيانات</button>
+     ${canDelete?`${u.activated===false?`<button class="btn-primary btn-small" onclick="copyActivationLink('${u.id}')">نسخ رابط التفعيل</button>`:''}<button class="btn-outline btn-small" onclick="editUserUsername('${u.id}')">تعديل اسم المستخدم</button><button class="btn-outline btn-small" onclick="resetUserPassword('${u.id}')">إرسال رابط تعيين كلمة المرور</button><button class="btn-outline btn-small" onclick="openUserPermissions('${u.id}')">تعديل الصلاحيات</button>`:''}
     ${u.role==='employee'?`<button class="btn-outline btn-small" onclick="promoteToManager('${u.id}')">ترقية لمدير</button>`:''}
     ${u.role==='manager'?`<button class="btn-outline btn-small" onclick="editManagerCategory('${u.id}')">تغيير الفئة</button>
     <button class="btn-outline btn-small" onclick="demoteToEmployee('${u.id}')">إرجاع لموظف</button>`:''}
@@ -4836,6 +4863,44 @@ async function executeUserPermissions(payload){
  u.permissions={...defaultPermissionsFor(u),...payload.permissions};if(payload.permissions&&payload.permissions.followScope)u.followScope=normalizeFollowScope(payload.permissions.followScope);
  touchUser(u);
  await saveUsersReliable();closeModal();alert('تم حفظ الصلاحيات بنجاح.');openManageAccounts();
+}
+function editUserData(id){
+  if(!isSuperAdmin(currentUser))return;
+  const u=USERS.find(x=>x.id===id);if(!u)return;
+  openModal(`<h3>تعديل بيانات الحساب — ${escapeHtml(u.fullName||u.username||'المستخدم')}</h3>
+  <p class="small-note">يمكن للمدير الرئيسي تعديل بيانات الحساب، بما فيها بيانات حساب المدير الرئيسي نفسه. كلمة المرور لا تظهر هنا؛ استخدم تغيير كلمة المرور لتعديلها.</p>
+  <div class="field"><label>الاسم</label><input id="edit_ud_name" value="${escapeHtml(u.fullName||'')}"></div>
+  <div class="grid2"><div class="field"><label>رقم الهاتف</label><input id="edit_ud_phone" value="${escapeHtml(u.phone||'')}" type="tel"></div>
+  <div class="field"><label>الإيميل</label><input id="edit_ud_email" value="${escapeHtml(u.email||'')}" type="email"></div></div>
+  <div class="grid2"><div class="field"><label>الإدارة</label><input id="edit_ud_department" value="${escapeHtml(u.department||'')}"></div>
+  <div class="field"><label>فئة المدير</label>${u.role==='manager'?`<select id="edit_ud_category">${managerCategoryOptions(u.managerCategory||'')}</select>`:`<input id="edit_ud_category" value="${escapeHtml(u.managerCategory||'')}" disabled>`}</div></div>
+  <div class="modal-actions"><button class="btn-primary" onclick="submitEditUserData('${id}')">حفظ التعديل</button><button class="btn-outline" onclick="closeModal();openManageAccounts()">إلغاء</button></div>`);
+}
+function submitEditUserData(id){
+  if(!isSuperAdmin(currentUser))return;
+  const u=USERS.find(x=>x.id===id);if(!u)return;
+  const fullName=(document.getElementById('edit_ud_name')?.value||'').trim();
+  if(!fullName){alert('يرجى إدخال الاسم.');return}
+  requireSuperAdminConfirm('editUserData',{
+    id,fullName,
+    phone:digitsOnly(document.getElementById('edit_ud_phone')?.value||''),
+    email:(document.getElementById('edit_ud_email')?.value||'').trim(),
+    department:(document.getElementById('edit_ud_department')?.value||'').trim(),
+    managerCategory:u.role==='manager'?(document.getElementById('edit_ud_category')?.value||''):(u.managerCategory||'')
+  },'تعديل بيانات الحساب "'+(u.fullName||u.username||'المستخدم')+'"');
+}
+async function executeEditUserData(payload){
+  if(!isSuperAdmin(currentUser)||!payload)return;
+  const u=USERS.find(x=>x.id===payload.id);if(!u)return;
+  u.fullName=String(payload.fullName||'').trim();
+  u.phone=digitsOnly(payload.phone||'');
+  u.email=String(payload.email||'').trim();
+  u.department=String(payload.department||'').trim();
+  if(u.role==='manager')u.managerCategory=String(payload.managerCategory||'').trim();
+  touchUser(u);
+  await saveUsersReliable();
+  if(currentUser.id===u.id)currentUser=u;
+  closeModal();alert('تم تعديل بيانات الحساب بنجاح.');openManageAccounts();
 }
 function editUserUsername(id){
   if(!isSuperAdmin(currentUser))return;
@@ -7220,7 +7285,7 @@ function saveNewProject(){
  const intention=document.getElementById('p_intention').value;
  if(!name){alert('يرجى إدخال اسم المشروع.');return}
  if(projects.some(p=>normName(p.name)===normName(name))){alert('هذا المشروع مضاف بالفعل.');return}
- projects.push({name,intention});ensureProjectCodes();saveProjects();closeModal();renderProjects();
+ projects.push({id:'project_'+uid(),name,intention,updatedAt:new Date().toISOString()});ensureProjectCodes();saveProjects();closeModal();renderProjects();
 }
 function editProject(name){
  if(!canModule('projects','edit',currentUser))return;
@@ -7237,7 +7302,7 @@ function saveEditProject(oldName){
  const intention=document.getElementById('p_intention').value;
  if(!name){alert('يرجى إدخال اسم المشروع.');return}
  if(normName(name)!==normName(oldName)&&projects.some(x=>normName(x.name)===normName(name))){alert('يوجد مشروع آخر بنفس الاسم.');return}
- p.name=name;p.intention=intention;
+ p.name=name;p.intention=intention;p.updatedAt=new Date().toISOString();
  saveProjects();closeModal();renderProjects();
 }
 function projectHasMovements(name){
