@@ -2085,7 +2085,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxfMHXVGTlL3PqTtSqpELCIqbvSf7zyb6JQA8MTH4h73Srvm17X3Otv58X4GPX48nw3Sg/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxp4ujptLyms6tRARV8kcuNY2BZS5HivK8qU_EDt0tadr7gKFRFwVnKtpBATF7YoZVcQg/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -3758,7 +3758,7 @@ function hasRemoteData(data){
 
 function normalizeDonationWorkflow(){
   let changed=false;
-  (Array.isArray(donors)?donors:[]).forEach(d=>(d.history||[]).forEach(h=>{
+  const normalizeList=list=>(Array.isArray(list)?list:[]).forEach(d=>(d.history||[]).forEach(h=>{
     if(!h||h.type!=='donation')return;
     if(h.status!=='confirmed'){h.status='confirmed';changed=true}
     const ms=normalizeMovementStatus(h.movementStatus);
@@ -3766,7 +3766,8 @@ function normalizeDonationWorkflow(){
     const desiredFinanceStatus=ms==='ناجحة'?'pending':'approved';
     if(!h.financeStatus || (ms!=='ناجحة'&&normalizeFinanceStatus(h.financeStatus)==='pending')){h.financeStatus=desiredFinanceStatus;changed=true}
   }));
-  if(changed)safeSet(localStorage,DKEY,JSON.stringify(donors));
+  normalizeList(donors);normalizeList(companies);
+  if(changed){safeSet(localStorage,DKEY,JSON.stringify(donors));safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));}
   return changed;
 }
 
@@ -3842,6 +3843,9 @@ async function loadAll(){
   ensureProjectCodes();ensureChannelCodes();ensureIntentionCodes();
   try{managerCategories=JSON.parse(safeGet(localStorage,MCKEY)||'null')||MANAGER_CATEGORIES_DEFAULT.slice()}catch(e){managerCategories=MANAGER_CATEGORIES_DEFAULT.slice()}
   const hadPendingSnapshot=__restorePendingSnapshot();
+  /* اللقطة المؤجلة قديمة أحيانًا بسبب إغلاق/تحديث الصفحة أثناء المزامنة؛ طبّق
+     تطبيع حالات التبرعات بعد دمجها حتى لا تختفي حركة ناجحة من قائمة المالية. */
+  normalizeDonationWorkflow();
   __syncReadyForUsers=false;
   if(GAS_URL){
     if(hadPendingSnapshot){__localDirty=true;await syncPushNow({silent:true});}
@@ -4235,14 +4239,17 @@ function __restorePendingSnapshot(){
     return false;
   }
   try{
-    if(Array.isArray(p.users))USERS=p.users;
-    if(Array.isArray(p.donors))donors=p.donors;
-    if(Array.isArray(p.companies))companies=p.companies;
-    if(Array.isArray(p.projects))projects=p.projects;
-    if(Array.isArray(p.channels))channels=p.channels;
-    if(Array.isArray(p.intentions))intentions=p.intentions;
-    if(Array.isArray(p.managerCategories))managerCategories=p.managerCategories;
-    if(p.companyConfig!==undefined)companyConfig=normalizeCompanyConfig(p.companyConfig);
+    /* لا نستبدل الحالة الحالية بلقطة مؤجلة؛ قد تكون اللقطة أقدم من آخر حفظ
+       محلي، وكان ذلك يعيد حذف حركات أُضيفت من متصفح آخر عند عمل Refresh.
+       ندمج فقط السجلات/الحركات الناقصة، ثم تظل المزامنة مع الخادم هي الحكم. */
+    const u=__unionEntities(USERS,p.users);USERS=u.list;
+    const d=__unionEntities(donors,p.donors,function(x){return {...x,history:Array.isArray(x.history)?x.history:[]}});donors=d.list;
+    const c=__unionEntities(companies,p.companies,function(x){return {...x,contacts:Array.isArray(x.contacts)?x.contacts:[],history:Array.isArray(x.history)?x.history:[],tags:Array.isArray(x.tags)?x.tags:[],tasks:Array.isArray(x.tasks)?x.tasks:[]}});companies=c.list;
+    if(Array.isArray(p.projects))projects=mergeProjectListsNoLoss_(projects,p.projects);
+    if(Array.isArray(p.channels))channels=normalizeChannelsLocal([...channels,...p.channels]);
+    if(Array.isArray(p.intentions))intentions=[...new Set([...intentions,...p.intentions].map(String).filter(Boolean))];
+    if(Array.isArray(p.managerCategories))managerCategories=[...new Set([...managerCategories,...p.managerCategories].map(String).filter(Boolean))];
+    if(p.companyConfig!==undefined && !companyConfig)companyConfig=normalizeCompanyConfig(p.companyConfig);
     safeSet(localStorage,UKEY,JSON.stringify(USERS));safeSet(localStorage,DKEY,JSON.stringify(donors));
     safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));safeSet(localStorage,PKEY,JSON.stringify(projects));
     safeSet(localStorage,CKEY,JSON.stringify(channels));safeSet(localStorage,IKEY,JSON.stringify(intentions));
@@ -7375,9 +7382,9 @@ function financeRows(){
      if(normName(h.project||'')==='تواصل')return;
      const amountNum=Number(String(h.amount??'').replace(/,/g,''));
      if(!h.amount || isNaN(amountNum) || amountNum<=0)return;
-     /* مراجعة الإدارة المالية تعرض فقط الحركات التي سجلها المستخدم الحالي،
-        ولا تعتمد على صاحب المتبرع لأن المتبرع قد تكون له حركات لمستخدمين مختلفين. */
-     if(!movementCreatedByCurrentUser(h))return;
+     /* الإدارة المالية تراجع حركات جميع المستخدمين. أما المدير/المستخدم العادي
+        فيستمر تقييده بملكية الحركة، لا بمالك سجل المتبرع. */
+     if(!isFinance(currentUser) && !movementCreatedByCurrentUser(h))return;
      const status=normalizeFinanceStatus(h.financeStatus);
      rows.push({donorId:d.id||'',donorName:d.name||'—',...h,financeStatus:status});
    });
@@ -8424,8 +8431,9 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
         if(normName(h.project||'')==='تواصل')return;
         const amountNum=Number(String(h.amount??'').replace(/,/g,''));
         if(!h.amount||isNaN(amountNum)||amountNum<=0)return;
-        /* نفس قاعدة الملكية للشركات: لا تظهر في المراجعة إلا حركة المستخدم الحالي. */
-        if(!movementCreatedByCurrentUser(h))return;
+        /* الإدارة المالية ترى حركات الشركات المسجلة من جميع المستخدمين؛
+           بقية الأدوار تظل مقيدة بملكية الحركة. */
+        if(!isFinance(currentUser) && !movementCreatedByCurrentUser(h))return;
         rows.push({companyId:c.id,entityType:'company',donorId:'company:'+c.id,donorName:c.name||'—',...h,financeStatus:normalizeFinanceStatus(h.financeStatus)});
       });
     });
