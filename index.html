@@ -1982,6 +1982,11 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
     <p class="small-note">يحذف هذا الخيار جميع حركات/عمليات التبرع المسجلة (للأفراد والشركات) من هذا الجهاز، ومن الشيت المربوط إن وُجد، بحيث تبدأ سجلات التبرعات من جديد. لا يحذف الحسابات ولا المتبرعين ولا الشركات ولا المشاريع ولا الإعدادات — يبقى كل شيء كما هو عدا حركات التبرع نفسها.</p>
     <button class="btn-outline btn-small" id="clearTransactionsBtn" style="border-color:#d92d20;color:#b42318" onclick="requestClearAllTransactions()">حذف جميع حركات التبرعات</button>
   </div>
+  <div class="settings-section" id="usersOnlyResetSection" style="border:1px solid #f0b8b8;background:#fff8f8">
+    <h4 style="color:#b42318">حذف جميع الحسابات (بدء نظام جديد للمستخدمين)</h4>
+    <p class="small-note">يحذف هذا الخيار جميع حسابات المستخدمين (بما فيها حسابك الحالي) من هذا الجهاز ومن الشيت المربوط إن وُجد، ليصبح النظام جديدًا من ناحية الحسابات فقط. لا يحذف المتبرعين ولا الشركات ولا المشاريع ولا حركات التبرعات ولا ربط الشيت — تبقى كما هي. بعد التنفيذ ستظهر شاشة إنشاء حساب مدير رئيسي جديد.</p>
+    <button class="btn-outline btn-small" id="usersOnlyResetBtn" style="border-color:#d92d20;color:#b42318" onclick="requestUsersOnlyReset()">حذف جميع الحسابات وبدء نظام جديد للمستخدمين</button>
+  </div>
   <div class="settings-section">
     <h4 style="color:#b42318">إعادة ضبط المصنع</h4>
     <p class="small-note">إعادة ضبط المصنع تعيد النظام كأنه جديد تمامًا: تحذف الحسابات والمتبرعين والمشاريع وقنوات التبرع والنيات وسائر بيانات النظام من الجهاز، وتفصل رابط Google Sheets بعد تفريغ البيانات المتزامنة. بعد التنفيذ ستظهر شاشة إنشاء حساب المدير الرئيسي من جديد.</p>
@@ -2062,7 +2067,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw8l9ZWMUv-T36HN6E8lE2Qs2sy7m35jHfKoOmq70k19dbYvvwBvhgIZY8HE_Erv9PW/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyohDIMZ3yOcjaaivxK4o4O1X0aVL09ZLIpWrIwkZwPktytEnz0OyNEPv-aIWZlPec/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2316,6 +2321,7 @@ async function activateAccount(){
   user.securityQuestion=''; user.securityAnswer='';
   if(activate){user.activated=true;user.activationToken='';}
   if(reset){user.resetToken='';}
+  touchUser(user);
   await saveUsersReliable();
   history.replaceState({},document.title,window.location.pathname+'?portal=user');
   prepareActivationScreen();
@@ -2565,6 +2571,7 @@ function completePasswordReset_(payload) {
   delete u.password;
   u.securityQuestion=''; u.securityAnswer='';
   u.resetOtpToken=''; u.resetOtpTokenExpiresAt='';
+  u.updatedAt=new Date().toISOString();
   data.users[found.index]=u;
   writeAll(data);
   return {ok:true};
@@ -2699,6 +2706,39 @@ function mergeEntityListForConflict_(remoteList, incomingList, deletedIds, merge
   });
   return out;
 }
+/* ============================================================
+   دمج آمن لحسابات المستخدمين — لا يُسقط أي حساب أبدًا إلا بحذف صريح
+   ------------------------------------------------------------
+   خلافًا لبقية الكيانات (متبرعين/شركات/مشاريع)، حساب المستخدم لا يُحتمل فيه أي
+   فقد صامت: فقدانه يعني قفل شخص عن الدخول أو ضياع حساب مدير رئيسي. لذلك:
+   1) لا حذف إلا عبر deletedIds الصريحة (مصدرها __deletedUsers من العميل، المبنية
+      فقط من ضغطة زر "حذف الحساب" الفعلية — وليس أي استنتاج تلقائي بالمقارنة).
+   2) عند تعارض نفس المعرّف بين نسخة الخادم والنسخة الواردة، تُفضَّل النسخة
+      الأحدث فعليًا حسب updatedAt (إن وُجد في الطرفين)، بدل تفضيل "الوارد" دائمًا
+      كما كان يحدث سابقًا — وهذا هو سبب فقدان كلمة مرور/تفعيل تم للتو على جهاز آخر.
+   3) أي حساب موجود في أحد الطرفين فقط (خادم أو وارد) يُحتفَظ به دائمًا ما لم يكن
+      ضمن deletedIds الصريحة. */
+function mergeUsersSafe_(remoteList, incomingList, deletedIds) {
+  var r = indexById_(remoteList);
+  var inc = indexById_(incomingList);
+  var deleted = {};
+  (Array.isArray(deletedIds) ? deletedIds : []).forEach(function(id){ deleted[String(id)] = true; });
+  var out = [];
+  Object.keys(r).forEach(function(id) {
+    if (deleted[id]) return;
+    var rv = r[id], iv = inc[id];
+    if (!iv) { out.push(cloneJson_(rv)); return; }
+    var rvT = Date.parse(rv && rv.updatedAt || '');
+    var ivT = Date.parse(iv && iv.updatedAt || '');
+    var keepRemote = !isNaN(rvT) && !isNaN(ivT) && rvT > ivT;
+    out.push(cloneJson_(keepRemote ? rv : iv));
+  });
+  Object.keys(inc).forEach(function(id) {
+    if (deleted[id] || r[id]) return;
+    out.push(cloneJson_(inc[id]));
+  });
+  return out;
+}
 function mergeSimpleArrayForConflict_(remoteList, incomingList) {
   var seen = {}, out = [];
   (Array.isArray(remoteList) ? remoteList : []).concat(Array.isArray(incomingList) ? incomingList : []).forEach(function(x) {
@@ -2713,9 +2753,18 @@ function mergeServerSnapshot_(old, incoming) {
   var baseUpdatedAt = String(incoming.__baseServerUpdatedAt || '');
   var oldUpdatedAt = String(old.updatedAt || '');
   var sameBase = !oldUpdatedAt || (!!baseUpdatedAt && baseUpdatedAt === oldUpdatedAt);
+  /* قائمة الحذف الصريحة للمستخدمين فقط (وليست __deleted.users التاريخية القائمة على
+     استنتاج تلقائي) — انظر شرح mergeUsersSafe_ أعلاه. */
+  var explicitDeletedUsers = Array.isArray(incoming.__deletedUsers) ? incoming.__deletedUsers
+    : ((incoming.__deleted && incoming.__deleted.users) || []);
+  /* تصفير صريح ومقصود لكل الحسابات (ميزة "بدء نظام جديد" من شاشة الإدارة) — الاستثناء
+     الوحيد الذي يُسمح فيه باستبدال كامل لقائمة المستخدمين دون دمج. */
+  var mergedUsers = incoming.__wipeAllUsers === true
+    ? (incoming.users || [])
+    : mergeUsersSafe_(old.users, incoming.users, explicitDeletedUsers);
   if (sameBase) {
     return {
-      users: incoming.users || [],
+      users: mergedUsers,
       donors: incoming.donors || [],
       projects: incoming.projects || [],
       channels: incoming.channels || [],
@@ -2728,7 +2777,7 @@ function mergeServerSnapshot_(old, incoming) {
   }
   var deleted = incoming.__deleted || {};
   return {
-    users: mergeEntityListForConflict_(old.users, incoming.users, deleted.users || [], false),
+    users: mergedUsers,
     donors: mergeEntityListForConflict_(old.donors, incoming.donors, deleted.donors || [], true),
     companies: mergeEntityListForConflict_(old.companies, incoming.companies, deleted.companies || [], true),
     projects: mergeEntityListForConflict_(old.projects, incoming.projects, deleted.projects || [], false),
@@ -3105,6 +3154,32 @@ async function hashPassword(value){
   const hash=await pbkdf2Hash(value,salt,PBKDF2_ITERATIONS);
   return 'pbkdf2$'+PBKDF2_ITERATIONS+'$'+salt+'$'+hash;
 }
+/* ---------- تتبّع "آخر تعديل" لكل حساب مستخدم (إصلاح فقدان كلمة المرور/التفعيل) ----------
+   المشكلة السابقة: عند تعارض بين جهازين (مثلًا: مدير يضيف حسابًا من جهازه، وفي نفس الوقت
+   موظف آخر يفعّل حسابه من جهاز جديد) كان الدمج يفضّل نسخة كاملة من أحد الطرفين فقط
+   (الأحدث في الإرسال، وليس الأحدث فعليًا في التعديل)، فتُفقد كلمة مرور تم تعيينها للتو أو
+   يعود الحساب لحالة "غير مفعّل" — وهذا سبب رئيسي لرسالة "اسم المستخدم أو كلمة المرور
+   غير صحيحة" رغم أن التفعيل تم بنجاح ظاهريًا. الآن نضع طابع زمني على كل حساب عند أي
+   تعديل جوهري (تفعيل، كلمة مرور، اسم مستخدم، صلاحيات، حالة نشط/غير نشط)، ويستخدمه كل
+   من دمج السحب المحلي ودمج الخادم لتفضيل النسخة الأحدث فعليًا بدل نسخة "آخر من رفع". */
+function touchUser(u){if(u&&typeof u==='object')u.updatedAt=new Date().toISOString();return u}
+/* ---------- تتبّع حذف الحسابات الصريح فقط ----------
+   المشكلة السابقة: كان حذف مستخدم من الشيت يُستنتج ضمنيًا بمقارنة قائمة المستخدمين
+   الحالية بلقطة قديمة محفوظة محليًا (BASE_SYNC_KEY)، فإذا غاب حساب محليًا لأي سبب غير
+   مقصود (فشل تحميل، سباق مزامنة، ربط بشيت آخر) كان يُعتبر "محذوفًا" ويُطبَّق الحذف فعليًا
+   على الشيت — وهذا هو سبب اختفاء المستخدمين المكوَّدين حديثًا من الشيت المربوط. الآن حذف
+   حساب لا يحدث على الخادم إلا عبر هذه القائمة الصريحة التي لا تُملأ إلا من زر "حذف الحساب"
+   نفسه، وليس بأي استنتاج تلقائي. */
+const DELUSERKEY='donors_deleted_user_ids_v1';
+let __deletedUserIds=[];
+function __loadDeletedUserIds(){try{const v=JSON.parse(safeGet(localStorage,DELUSERKEY)||'[]');__deletedUserIds=Array.isArray(v)?v.map(String):[]}catch(e){__deletedUserIds=[]}}
+function __markUserDeleted(id){
+  if(id==null)return;
+  const s=String(id);
+  if(__deletedUserIds.indexOf(s)===-1)__deletedUserIds.push(s);
+  try{safeSet(localStorage,DELUSERKEY,JSON.stringify(__deletedUserIds))}catch(e){}
+}
+function __clearDeletedUserIds(){__deletedUserIds=[];try{safeSet(localStorage,DELUSERKEY,JSON.stringify([]))}catch(e){}}
 async function verifyPasswordHash(storedHash,password){
   const stored=String(storedHash||'');
   const value=String(password||'');
@@ -3543,6 +3618,7 @@ function restoreLocalUsersIfMissing(){
 }
 
 async function loadAll(){
+  __loadDeletedUserIds();
   try{USERS=JSON.parse(safeGet(localStorage,UKEY)||'[]')}catch(e){USERS=[]}
   try{donors=JSON.parse(safeGet(localStorage,DKEY)||'[]');donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}))}catch(e){donors=[]}
   try{companies=JSON.parse(safeGet(localStorage,COMPANYKEY)||'[]');companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}))}catch(e){companies=[]}
@@ -3774,7 +3850,15 @@ async function syncPull(options){
       users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig
     });
 
-    USERS=Array.isArray(data.users)?data.users:USERS;
+    /* ملاحظة مهمة: لا نستبدل قائمة المستخدمين بالكامل بنسخة الخادم أبدًا (إلا عند طلب
+       استيراد صريح forceOverwriteLocal)، حتى لو لم يوجد تعديل محلي معلّق (__localDirty).
+       كان الاستبدال الكامل هنا هو السبب الرئيسي لاختفاء حساب تم تكويده للتو على هذا
+       الجهاز فور ربط/مزامنة الشيت (مثلًا عند ربط النظام بشيت قديم يحتوي بيانات مختلفة):
+       يدمج الآن حسابات الخادم مع الحسابات المحلية بالمعرّف (id)، ولا يُسقط أي حساب محلي
+       غير محذوف صراحة، ويُفضَّل الحساب الأحدث فعليًا (updatedAt) عند تعارض نفس المعرّف. */
+    USERS=options.forceOverwriteLocal
+      ? (Array.isArray(data.users)?data.users:USERS)
+      : mergeEntityHistories(Array.isArray(data.users)?data.users:[],USERS).filter(u=>u&&__deletedUserIds.indexOf(String(u.id))===-1);
     donors=Array.isArray(data.donors)?data.donors:donors;
     companies=Array.isArray(data.companies)?data.companies:companies;
     companies=companies.map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
@@ -3853,7 +3937,9 @@ function __deletedIdsAgainstBase(){
     const ids=new Set(c.filter(x=>x&&x.id!=null).map(x=>String(x.id)));
     return b.filter(x=>x&&x.id!=null&&!ids.has(String(x.id))).map(x=>String(x.id));
   };
-  out.users=findDeleted('users');out.donors=findDeleted('donors');
+  /* المستخدمون مستثنون عمدًا من هذا الاستنتاج التلقائي — انظر __deletedUserIds أعلاه؛
+     حذف حساب لا يُرسل للخادم إلا عبر القائمة الصريحة __deletedUsers. */
+  out.donors=findDeleted('donors');
   out.companies=findDeleted('companies');out.projects=findDeleted('projects');
   return out;
 }
@@ -3861,6 +3947,7 @@ function __makeDurablePayload(){
   const base=__getBaseSnapshot()||{};
   return {...__safeClone(__currentSyncState()),
     __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),
+    __deletedUsers:__deletedUserIds.slice(),
     __queuedAt:new Date().toISOString()};
 }
 function __queueDurableSnapshot(){
@@ -3942,6 +4029,7 @@ async function syncPushNow(options){
   const base=__getBaseSnapshot()||{};
   const payload={...__safeClone(__currentSyncState()),
     __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),
+    __deletedUsers:__deletedUserIds.slice(),
     donationResetVersion:DONATION_RESET_VERSION,__allowDonationReset:__pendingDonationReset===true};
   if(!options.silent)__syncIndicatorShow('جارٍ حفظ التعديلات...');
   try{
@@ -4097,6 +4185,7 @@ async function verifyLegacyPassword(found, plainPassword){
   if(typeof found.password === 'string' && found.password === plainPassword){
     found.passwordHash = await hashPassword(plainPassword);
     delete found.password;
+    touchUser(found);
     safeSet(localStorage,UKEY,JSON.stringify(USERS));
     if(GAS_URL){
       try{ await syncPushNow(); }catch(e){}
@@ -4201,6 +4290,7 @@ function showApp(){
   document.getElementById('sidePolicyBtn')?.classList.toggle('hidden',!canModule('policy','view',currentUser));
   document.getElementById('sideSyncBtn')?.classList.toggle('hidden',!canModule('syncData','view',currentUser));
   document.getElementById('factoryResetSection')?.classList.toggle('hidden',!isSuper);
+  document.getElementById('usersOnlyResetSection')?.classList.toggle('hidden',!isSuper);
   document.getElementById('addProjectBtn')?.classList.toggle('hidden',!isSuper);
   // لا تسمح قواعد الدور القديمة بإظهار أي مديول يخالف الصلاحيات التي حددها المدير الرئيسي.
   Object.entries(navMap).forEach(([k,id])=>document.getElementById(id)?.classList.toggle('hidden',k==='accounts'?!isSuperAdmin(currentUser):!canModule(k,'view',currentUser)));
@@ -4423,12 +4513,14 @@ async function submitRegister(locked){
       payload={id:uid(),fullName:name,phone,email,department,username,passwordHash,role:'superadmin',managerCategory:'',active:true,permissions:defaultPermissionsFor({role:'superadmin'}),securityQuestion:'',securityAnswer:'',activated:true};
       USERS.push(payload);
     }
+    touchUser(payload);
     safeSet(localStorage,UKEY,JSON.stringify(USERS));
     await saveUsersReliable(); currentUser=payload; safeSet(sessionStorage,SESSION,payload.id);
     setupCodeVerified=false;
     closeModal(); showApp(); alert('تم إنشاء حساب المدير الرئيسي للنظام بنجاح. يمكنك الآن ربط Google Sheets متى شئت من شاشة "مزامنة البيانات" — الخطوة اختيارية وليست شرطًا لاستخدام النظام.'); return;
   }
   payload={id:uid(),fullName:name,phone,email,department,username,passwordHash:'',role,managerCategory,followScope,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:'',securityAnswer:'',activated:false,activationToken:genSecureToken(24),phoneVerified:false};
+  touchUser(payload);
   requireSuperAdminConfirm('addAccount',payload,'إضافة حساب "'+name+'" ('+roleLabel(role)+')');
 }
 async function executeAddAccount(payload){
@@ -4538,6 +4630,7 @@ async function submitChangePassword(){
   if(newPass!==newPass2){alert('كلمتا المرور الجديدتان غير متطابقتين.');return}
   currentUser.passwordHash=await hashPassword(newPass);
   delete currentUser.password;
+  touchUser(currentUser);
   await saveUsersReliable();
   closeModal();
   alert('تم تغيير كلمة المرور بنجاح.');
@@ -4741,6 +4834,7 @@ function saveUserPermissions(id){
 async function executeUserPermissions(payload){
  const u=USERS.find(x=>x.id===payload.id);if(!u)return;
  u.permissions={...defaultPermissionsFor(u),...payload.permissions};if(payload.permissions&&payload.permissions.followScope)u.followScope=normalizeFollowScope(payload.permissions.followScope);
+ touchUser(u);
  await saveUsersReliable();closeModal();alert('تم حفظ الصلاحيات بنجاح.');openManageAccounts();
 }
 function editUserUsername(id){
@@ -4778,6 +4872,7 @@ async function executeEditUsername(payload){
   // Changing a username invalidates old activation/reset links so an old URL cannot target the renamed account.
   if(u.activationToken)u.activationToken=genSecureToken(24);
   if(u.resetToken)u.resetToken=genSecureToken(24);
+  touchUser(u);
   await saveUsersReliable();
   if(currentUser.id===u.id)currentUser=u;
   closeModal();
@@ -4794,6 +4889,7 @@ function resetUserPassword(id){
 async function executeResetPassword(payload){
   const u=USERS.find(x=>x.id===payload.id);if(!u)return;
   u.resetToken=payload.resetToken;
+  touchUser(u);
   await saveUsersReliable();
   closeModal();
   const link=makePasswordResetLink(u);
@@ -4822,7 +4918,7 @@ function demoteToEmployee(id){
 }
 function executeDemote(payload){
  const u=USERS.find(x=>x.id===payload.id);if(!u)return;
- if(u.role==='manager'){u.role='employee';u.managerCategory='';saveUsers()}
+ if(u.role==='manager'){u.role='employee';u.managerCategory='';touchUser(u);saveUsers()}
  closeModal();renderManagerTabs();openManageAccounts();
 }
 function toggleUserActive(id){
@@ -4832,7 +4928,7 @@ function toggleUserActive(id){
 }
 function executeToggleActive(payload){
  const u=USERS.find(x=>x.id===payload.id);if(!u)return;
- u.active=!isActiveUser(u);saveUsers();closeModal();renderManagerTabs();openManageAccounts();
+ u.active=!isActiveUser(u);touchUser(u);saveUsers();closeModal();renderManagerTabs();openManageAccounts();
 }
 function promoteToManager(id){
   if(!isSuperAdmin(currentUser))return;
@@ -4842,7 +4938,7 @@ function promoteToManager(id){
 }
 function executePromote(payload){
   const u=USERS.find(x=>x.id===payload.id);if(!u)return;
-  if(u.role==='employee'){u.role='manager';saveUsers()}
+  if(u.role==='employee'){u.role='manager';touchUser(u);saveUsers()}
   closeModal();
   renderManagerTabs();
   openManageAccounts();
@@ -4859,6 +4955,7 @@ function executeDeleteAccount(payload){
   const u=USERS.find(x=>x.id===payload.id);if(!u)return;
   if(u.role==='superadmin')return;
   const isSelf=u.id===currentUser.id;
+  __markUserDeleted(u.id);
   USERS=USERS.filter(x=>x.id!==payload.id);saveUsers();
   if(isSelf){closeModal();logout();return}
   closeModal();
@@ -4943,9 +5040,9 @@ async function executeFactoryReset(){
     if(GAS_URL){
       let res;
       try{
-        res=await gasCall('saveAll',{users:[],donors:[],companies:[],projects:[],channels:[],intentions:[],managerCategories:[],companyConfig:null});
+        res=await gasCall('saveAll',{users:[],donors:[],companies:[],projects:[],channels:[],intentions:[],managerCategories:[],companyConfig:null,__wipeAllUsers:true});
       }catch(e){
-        res=await gasFormPost('saveAll',{users:[],donors:[],projects:[],channels:[],intentions:[],managerCategories:[]});
+        res=await gasFormPost('saveAll',{users:[],donors:[],projects:[],channels:[],intentions:[],managerCategories:[],__wipeAllUsers:true});
       }
       if(!res || res.error) throw new Error(res&&res.error||'تعذر تفريغ بيانات Google Sheets');
     }
@@ -4953,10 +5050,10 @@ async function executeFactoryReset(){
     // إعادة الحالة الداخلية إلى الحالة الابتدائية.
     USERS=[];donors=[];companies=[];projects=[];channels=[];intentions=[];managerCategories=[];currentUser=null;
     managerEmployee='all';currentFilter='all';searchTerm='';currentView='donors';
-    GAS_URL='';lastSyncAt='';
+    GAS_URL='';lastSyncAt='';__deletedUserIds=[];
 
     // إزالة مفاتيح النظام فقط، مع ترك localStorage الخاص بأي تطبيق آخر دون مساس.
-    [UKEY,DKEY,COMPANYKEY,COMPANYCONFIGKEY,PKEY,CKEY,IKEY,MCKEY,SESSION,GASKEY,SYNCKEY].forEach(k=>{
+    [UKEY,DKEY,COMPANYKEY,COMPANYCONFIGKEY,PKEY,CKEY,IKEY,MCKEY,SESSION,GASKEY,SYNCKEY,DELUSERKEY,BASE_SYNC_KEY,PENDING_SYNC_KEY].forEach(k=>{
       safeRemove(localStorage,k);
       safeRemove(sessionStorage,k);
     });
@@ -4968,6 +5065,44 @@ async function executeFactoryReset(){
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='تصفير السيستم / إعادة ضبط مصنع'}
     alert('تعذر تنفيذ إعادة ضبط المصنع بالكامل. لم يتم حذف البيانات المحلية حتى لا تفقد بياناتك. تأكد من اتصال Google Sheets ثم حاول مرة أخرى.');
+  }
+}
+
+/* ---------- تصفير الحسابات فقط (بدء نظام جديد من ناحية المستخدمين) ----------
+   خلافًا لإعادة ضبط المصنع (التي تحذف كل شيء)، هذا الخيار يحذف حسابات المستخدمين
+   فقط — محليًا وعلى الشيت المربوط إن وُجد — ويُبقي المتبرعين والشركات والمشاريع
+   والتبرعات وإعدادات النظام وربط الشيت نفسه دون أي تغيير. يُستخدم لبدء النظام
+   "من ناحية المستخدمين" بشكل نظيف، دون فقد بيانات التبرعات التشغيلية. */
+function requestUsersOnlyReset(){
+  if(!currentUser || !isSuperAdmin(currentUser)){
+    alert('حذف جميع الحسابات متاح للمدير الرئيسي للنظام فقط.');
+    return;
+  }
+  const first=confirm('تحذير: سيتم حذف جميع حسابات المستخدمين (بما فيها حسابك الحالي كمدير رئيسي) من هذا الجهاز، ومن الشيت المربوط إن وُجد، ليصبح النظام جديدًا من ناحية الحسابات فقط. لن يتأثر المتبرعون أو الشركات أو المشاريع أو حركات التبرعات أو ربط الشيت. هل تريد المتابعة؟');
+  if(!first)return;
+  const second=confirm('تأكيد نهائي: بعد التنفيذ سيتم تسجيل خروجك فورًا، وستظهر شاشة إنشاء حساب مدير رئيسي جديد. لا يمكن التراجع عن حذف الحسابات القديمة. هل أنت متأكد؟');
+  if(!second)return;
+  executeUsersOnlyReset();
+}
+async function executeUsersOnlyReset(){
+  const btn=document.getElementById('usersOnlyResetBtn');
+  if(btn){btn.disabled=true;btn.textContent='جارِ حذف الحسابات...'}
+  try{
+    if(GAS_URL){
+      const payload={users:[],donors,companies,projects,channels,intentions,managerCategories,companyConfig,donationResetVersion:DONATION_RESET_VERSION,__wipeAllUsers:true};
+      let res;
+      try{res=await gasCall('saveAll',payload)}catch(e){res=await gasFormPost('saveAll',payload)}
+      if(!res||res.error)throw new Error(res&&res.error||'تعذر حذف الحسابات من Google Sheets');
+      if(res.data)__setBaseSnapshot(res.data);
+    }
+    USERS=[];currentUser=null;__deletedUserIds=[];
+    safeRemove(localStorage,UKEY);safeRemove(localStorage,SESSION);safeRemove(localStorage,DELUSERKEY);
+    safeRemove(sessionStorage,SESSION);
+    alert('تم حذف جميع حسابات المستخدمين بنجاح. سيبدأ النظام الآن من شاشة إنشاء حساب المدير الرئيسي، مع بقاء بيانات المتبرعين والتبرعات كما هي.');
+    window.location.reload();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='حذف جميع الحسابات وبدء نظام جديد للمستخدمين'}
+    alert('تعذر حذف الحسابات على Google Sheets. لم يتم حذف أي بيانات محليًا حتى لا تُقفَل خارج حسابك. تأكد من الاتصال ثم حاول مرة أخرى.'+(e&&e.message?('\nالسبب: '+e.message):''));
   }
 }
 
