@@ -2055,7 +2055,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbx9bCzuN2FgaXXdi4TycbXMGGF9YcPj9xoO97D250W1nQNXOcwkA1o3BmPuT7_nhPa9/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzWyBhJDpIAz1DDzUWTXbT7K7XMDe1XOqJK16DWd0eB0yyFbr_HcxT8A1SaNvwACkg2/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2251,6 +2251,12 @@ function prepareActivationScreen(){
     document.getElementById('activationUser').value=user.username;
     document.getElementById('loginSubtitle').textContent=reset?'تعيين كلمة المرور الجديدة':'إنشاء كلمة المرور لأول مرة';
     const btn=box?.querySelector('button.btn-primary'); if(btn)btn.textContent=reset?'حفظ كلمة المرور وتسجيل الدخول':'تفعيل الحساب';
+    /* تأكّد فعلي: تطابق اسم المستخدم مع رمز تفعيل/إعادة تعيين صالح ضمن بيانات
+       حقيقية تم جلبها بنجاح من الرابط المرمَّز. الآن فقط نحفظ رابط الشيت في هذا
+       المتصفح ليبقى مرتبطًا ومتزامنًا تلقائيًا في المرات القادمة. */
+    if(user&&__gasUrlPendingConfirm&&GAS_URL){
+      safeSet(localStorage,GASKEY,GAS_URL);
+    }
   }else{
     normal?.classList.remove('hidden'); box?.classList.add('hidden');
     document.getElementById('loginSubtitle').textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
@@ -2332,10 +2338,6 @@ function stripGasParamsFromAddressBar(){
     url.searchParams.delete('gas');url.searchParams.delete('k');
     history.replaceState({},document.title,url.pathname+(url.search||'')+(url.hash||''));
   }catch(e){}
-}
-function rememberGasFromUrl(){
-  /* معطّل: لا يُقبل أي رابط ربط خارجي. نمسح الباراميتر من شريط العنوان فقط. */
-  stripGasParamsFromAddressBar();
 }
 
 /* ---------- Google Apps Script code (Code.gs) shown/copyable from the settings page ---------- */
@@ -2983,11 +2985,45 @@ const DONATION_RESET_VERSION='2026-09-20-v4'; let __pendingDonationReset=false;
 let USERS=[], donors=[], companies=[], projects=[], channels=[], intentions=[], managerCategories=[], companyConfig=null, currentUser=null, managerEmployee='all', companyManagerEmployee='all', currentFilter='all', companyFilter='all', searchTerm='', companySearchTerm='', currentView='donors', companySubView='list', pendingReset=null;
 let projFrom='',projTo='',donFrom='',donTo='',chanFrom='',chanTo='';
 let donorsCustomRange=false, donorsFrom='', donorsTo='';
-/* هذه النسخة بلا أي ربط خارجي. نمسح أي رابط ربط قديم محفوظ بالمتصفح عند كل تشغيل،
-   ونتجاهل أي رابط يُمرَّر عبر ?gas أو ?k، وشاشة المزامنة متاحة للمدير الرئيسي فقط (canModule). */
-safeRemove(localStorage,GASKEY);
-safeRemove(sessionStorage,GASKEY);
-let GAS_URL=DEFAULT_GAS_URL;
+/* ---------- تحميل/تهيئة رابط Google Sheets (إصلاح) ----------
+   المشكلة السابقة: كان الكود يمسح الرابط المحفوظ محليًا (GASKEY) ويعيد GAS_URL
+   للقيمة الفارغة في *كل* مرة تُفتح فيها الصفحة، حتى لو كان المدير الرئيسي قد أدخل
+   الرابط وحفظه بنجاح من قبل. النتيجة: أي إغلاق/فتح أو Refresh للصفحة كان يعطّل
+   المزامنة بالكامل ويجعل "إعادة مزامنة بيانات الدخول" بلا أثر حقيقي (تعمل محليًا
+   فقط دون أي اتصال فعلي بالشيت)، كما كان يمنع أي متصفح جديد (متصفح موظف تم
+   تكويده حديثًا) من معرفة رابط الشيت إطلاقًا فيبقى عالقًا على شاشة "تعذّر تحميل
+   بيانات النظام" بلا أي وسيلة لتفعيل حسابه أو تسجيل الدخول. الآن: نحتفظ بالرابط
+   المحفوظ محليًا كما هو بين مرات الفتح، وشاشة المزامنة تبقى كما كانت متاحة
+   للمدير الرئيسي فقط (canModule) للتعديل عليه.
+
+   بالإضافة لذلك: روابط التفعيل/تعيين كلمة المرور (?portal=user&activate=1... أو
+   ?portal=user&reset=1...) التي يرسلها مدير النظام للموظف الجديد تحمل نسخة
+   مرمَّزة من رابط الشيت (k=) خصيصًا لتمكين متصفح/جهاز جديد لم يُفتح عليه النظام
+   من قبل من إحضار حساب هذا الموظف تحديدًا وتفعيله. هذا الباراميتر كان يُقرأ
+   ويُحذف من شريط العنوان فقط دون أن يُستخدم فعليًا (rememberGasFromUrl لم تكن
+   تفعل شيئًا)، فكانت روابط التفعيل تفشل دائمًا على أي جهاز جديد. الآن نستخدمه
+   *فقط* عندما لا يوجد رابط محفوظ محليًا، و*فقط* ضمن رابط تفعيل/إعادة تعيين
+   حقيقي (activate=1 أو reset=1) — ولا يُعتمد بشكل نهائي (لا يُحفظ في هذا
+   المتصفح) إلا بعد أن يتطابق اسم المستخدم مع رمز تفعيل/إعادة تعيين صالح فعليًا
+   ضمن البيانات التي تم جلبها (انظر prepareActivationScreen)، بحيث لا يكفي مجرد
+   معرفة أو تخمين رابط شيت لإظهار أي بيانات دون رمز تفعيل صحيح. */
+function bootstrapGasUrlCandidate(){
+  const saved=safeGet(localStorage,GASKEY);
+  if(saved)return saved;
+  if(!isUserPortalLink())return '';
+  const activate=getQueryParam('activate')==='1', reset=getQueryParam('reset')==='1';
+  if(!activate&&!reset)return '';
+  const kParam=getQueryParam('k');
+  if(kParam){const d=decodeGasParam(kParam);if(d)return d;}
+  const gasParam=getQueryParam('gas'); // توافق مع روابط قديمة كانت تحمل الرابط صراحة
+  if(gasParam)return gasParam;
+  return '';
+}
+let GAS_URL=bootstrapGasUrlCandidate()||DEFAULT_GAS_URL;
+/* يُستخدم في prepareActivationScreen لمعرفة هل الرابط الحالي جاء من رابط تفعيل
+   (وبالتالي يحتاج تأكيدًا بمطابقة الرمز قبل حفظه بشكل دائم) أم كان محفوظًا
+   بالفعل في هذا المتصفح من قبل (فلا حاجة لإعادة التأكيد). */
+const __gasUrlPendingConfirm=!safeGet(localStorage,GASKEY)&&!!GAS_URL;
 stripGasParamsFromAddressBar();
 let lastSyncAt=safeGet(localStorage,SYNCKEY)||'';
 
