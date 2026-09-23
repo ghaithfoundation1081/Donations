@@ -2071,7 +2071,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby8g85HhT-BMVAoa1b3ZY-llXGI1y5zFHvh0hZiyD3IbCidIPd6jCACWjdMaU7taCFbhg/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyhJ4or6b8dMs6vP5BTOgX-_i52BpOokEd_7HXTCqCWBVEcYLzOX4qDUfcO4a_L2P-gzg/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -4028,13 +4028,37 @@ function gasJsonpGet(){
   });
 }
 function gasFormPost(action,payload){
+  /* هذا المسار البديل (iframe + form POST) يُستخدم فقط عندما يفشل fetch العادي
+     (gasCall) — وهو ما يحدث غالبًا عند فتح الملف مباشرة من الجهاز (file://) بسبب
+     قيود المتصفح على طلبات fetch عبر النطاقات من صفحة محلية. المشكلة أن نتيجة
+     الإرسال عبر iframe غير مقروءة أبدًا من جافاسكريبت (قيود الأمان بين النطاقات)،
+     فكان الكود القديم "يفترض" النجاح بمجرد أن الـ iframe انتهى من التحميل أو مرّت
+     2.5 ثانية — حتى لو لم يصل التعديل/الحذف فعليًا إلى جوجل شيت أو فشل هناك.
+     هذا هو سبب ظهور بيانات في الشيت لم تعد موجودة في النظام بعد الحذف: كانت عملية
+     الحذف "تنجح" في واجهة المستخدم محليًا دون أي تأكيد حقيقي من الخادم.
+     الإصلاح: بعد إرسال النموذج، نتحقق فعليًا من الحالة الحالية على جوجل شيت عبر
+     طلب getAll بأسلوب JSONP (يعمل حتى من file:// لأنه script tag وليس fetch)،
+     ونُرجع البيانات الحقيقية المؤكدة من الخادم بدل افتراض النجاح. لو تعذّر التحقق
+     نرفض الطلب بخطأ واضح بدل الإبلاغ الكاذب بالنجاح. */
   return new Promise((resolve,reject)=>{
     let iframe=document.getElementById('__gasPostFrame');
     if(!iframe){iframe=document.createElement('iframe');iframe.id='__gasPostFrame';iframe.name='__gasPostFrame';iframe.style.display='none';document.body.appendChild(iframe)}
     const form=document.createElement('form');form.method='POST';form.action=GAS_URL;form.target='__gasPostFrame';form.style.display='none';
     const add=(name,value)=>{const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input)};
     add('action',action);add('payload',JSON.stringify(payload||{}));if(GAS_ACCESS_KEY)add('key',GAS_ACCESS_KEY);document.body.appendChild(form);
-    let done=false;const finish=ok=>{if(done)return;done=true;setTimeout(()=>form.remove(),0);ok?resolve({ok:true}):reject(new Error('تعذر إرسال البيانات إلى جوجل شيت'))};
+    let done=false;
+    const finish=async(sent)=>{
+      if(done)return;done=true;setTimeout(()=>form.remove(),0);
+      if(!sent){reject(new Error('تعذر إرسال البيانات إلى جوجل شيت'));return}
+      /* تأخير بسيط لإعطاء الخادم فرصة لإنهاء التنفيذ قبل التحقق. */
+      await new Promise(r=>setTimeout(r,600));
+      try{
+        const verified=await gasJsonpGet();
+        resolve({data:verified});
+      }catch(verifyErr){
+        reject(new Error('تم إرسال التعديلات لكن تعذّر تأكيد وصولها فعليًا إلى جوجل شيت. سيُعاد التحقق تلقائيًا عند عودة الاتصال.'));
+      }
+    };
     iframe.onload=()=>finish(true);try{form.submit();setTimeout(()=>finish(true),2500)}catch(e){finish(false)}
   });
 }
