@@ -2085,7 +2085,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxuS9chwCr1wP1p0wHzoOwCuxKWkFBJ0fd_ELNdWY0SHITECPOcgLT8ddU6G8ZgqMx0Lw/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxYgM94itbvUtPd9GOJCATscV0jmAIrvjv-oEIRi5hzUS1LJNnM3ET1xTsPmgzJREloog/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -3496,12 +3496,13 @@ function saveUsers(){USERS=normalizeUsersLocal(USERS);safeSet(localStorage,UKEY,
 /* used for account-lifecycle changes (create/reset/setup) where we must be sure the save reached
    the server before the user might close the tab — avoids the "user not found" bug on next login */
 async function saveUsersReliable(){
+  USERS=normalizeUsersLocal(USERS);
   safeSet(localStorage,UKEY,JSON.stringify(USERS));
   showSaveToast('تم الحفظ');
   if(!GAS_URL)return true;
   clearTimeout(pushTimer);
   const ok=await syncPushNow();
-  if(!ok)alert('تم الحفظ محليًا، لكن تعذر رفع التغيير إلى جوجل شيت الآن (تأكد من الاتصال بالإنترنت). ابقَ على الصفحة حتى تُستعاد المزامنة، أو أعد المحاولة لاحقًا من صفحة الإعدادات، حتى لا يضيع هذا التغيير.');
+  if(!ok)alert('تم حفظ التغيير محليًا، لكن تعذر تأكيده على Google Sheets الآن. سيبقى التغيير محفوظًا محليًا ولن تُستعاد الحسابات المحذوفة تلقائيًا.');
   return ok;
 }
 /* ---------- سجل فوري ودائم لحركات التبرعات على Google Sheets ----------
@@ -3727,11 +3728,6 @@ function canModule(moduleKey,action='view',u=currentUser){
  if(moduleKey==='financeReview' && isFinance(u)) return action==='view' || action==='edit' || action==='delete';
  const p=getPermissions(u); return !!(p.modules&&p.modules[moduleKey]&&p.modules[moduleKey][action]);
 }
-function canBasicDonorActions(u=currentUser){
- if(!u)return false;
- if(isManagerRole(u))return canModule('donors','edit',u);
- return true;
-}
 function canDonorContact(u=currentUser){
  if(!u)return false;
  if(isManagerRole(u))return canModule('donors','edit',u);
@@ -3953,7 +3949,7 @@ let __localDirty=false;
    البيانات. */
 let __bgSyncInFlight=false;
 let __lastBgSyncAt=0;
-const __BG_SYNC_MIN_INTERVAL=3000; // مزامنة شبه فورية بين المستخدمين (3 ثوانٍ كحد أدنى)
+const __BG_SYNC_MIN_INTERVAL=15000; // مزامنة خلفية خفيفة؛ العودة للنافذة/التركيز تنفذ فحصًا فوريًا
 
 async function __backgroundFreshnessSync(force=false){
   if(__bgSyncInFlight||!GAS_URL||!currentUser)return;
@@ -3974,7 +3970,7 @@ async function __backgroundFreshnessSync(force=false){
 /* فحص خفيف عند العودة للنافذة بدل polling مستمر. */
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)__backgroundFreshnessSync(true)});
 window.addEventListener('focus',()=>__backgroundFreshnessSync(true));
-setInterval(()=>{if(!document.hidden)__backgroundFreshnessSync(false)},3000);
+setInterval(()=>{if(!document.hidden)__backgroundFreshnessSync(false)},15000);
 
 /* ---------- Google Sheets sync ---------- */
 function gasCall(action,payload){
@@ -4298,13 +4294,24 @@ async function syncPushNow(options){
   try{
     setConnStatus('connecting');
     let res;
+    let serverDeletionConflict=false;
     try{res=await gasCall('saveAll',payload)}catch(e){res=await gasFormPost('saveAll',payload)}
     if(!res||res.error)throw new Error(res&&res.error||'فشل الحفظ');
     if(res.data){
       __setBaseSnapshot(res.data);
       if(res.data.catalogTombstones){__deletedCatalog=res.data.catalogTombstones;safeSet(localStorage,DELCATKEY,JSON.stringify(__deletedCatalog));}
       __recreatedCatalog={projects:{},channels:{}};
-      USERS=normalizeUsersLocal(Array.isArray(res.data.users)?res.data.users:USERS);
+      USERS=normalizeUsersLocal(Array.isArray(res.data.users)?res.data.users:USERS)
+        .filter(u=>u&&__deletedUserIds.indexOf(String(u.id))===-1);
+      /* إذا أعاد الخادم حسابًا سبق حذفُه صراحةً، لا نسمح بعودته إلى الواجهة المحلية.
+         يبقى tombstone في __deletedUserIds حتى تنفّذ نسخة GAS الحذف فعليًا في المحاولة التالية. */
+      if(Array.isArray(res.data.users)){
+        const returnedDeleted=res.data.users.some(u=>u&&__deletedUserIds.indexOf(String(u.id))>-1);
+        if(returnedDeleted){
+          serverDeletionConflict=true;
+          __lastPushError='الخادم لم يؤكد حذف أحد الحسابات بعد؛ ستتم إعادة المحاولة تلقائيًا.';
+        }
+      }
       donors=Array.isArray(res.data.donors)?res.data.donors:donors;
       companies=Array.isArray(res.data.companies)?res.data.companies:companies;
       projects=mergeProjectListsNoLoss_(Array.isArray(res.data.projects)?normalizeProjects(res.data.projects):[],projects);
@@ -4324,6 +4331,12 @@ async function syncPushNow(options){
     }else{
       __localDirty=true;__queueDurableSnapshot();
       clearTimeout(pushTimer);pushTimer=setTimeout(()=>syncPushNow({silent:true}),400);
+    }
+    if(serverDeletionConflict){
+      __localDirty=true;
+      __queueDurableSnapshot();
+      setConnStatus('off');
+      return false;
     }
     __lastPushError='';
     setConnStatus('on');return true;
@@ -4555,7 +4568,7 @@ function showApp(){
   const isFin=isFinance(currentUser);
   const financeOnly=isFin&&!isSuper;
   // تطبيق صلاحيات المديولات على واجهة المستخدم
-  const navMap={home:'sideHomeBtn',accounts:'sideManageAccountsBtn',donors:'tabDonorsBtn',companies:'tabCompaniesBtn',projects:'tabProjectsBtn',donations:'tabDonationsBtn',donationCounts:'tabDonationCountsBtn',donorRatings:'tabDonorRatingsBtn',channels:'tabChannelsBtn',reports:'tabReportsBtn',financeReview:'financeTabBtn',settings:'sideSettingsBtn',syncData:'sideSyncBtn',backup:'sideBackupBtn'};
+  const navMap={home:'sideHomeBtn',donationModule:'tabDonationModuleBtn',accounts:'sideManageAccountsBtn',donors:'tabDonorsBtn',companies:'tabCompaniesBtn',projects:'tabProjectsBtn',donations:'tabDonationsBtn',donationCounts:'tabDonationCountsBtn',donorRatings:'tabDonorRatingsBtn',channels:'tabChannelsBtn',reports:'tabReportsBtn',financeReview:'financeTabBtn',settings:'sideSettingsBtn',syncData:'sideSyncBtn',backup:'sideBackupBtn'};
   Object.entries(navMap).forEach(([k,id])=>{
     const allowed=k==='accounts'?isSuperAdmin(currentUser):
       k==='donationModule'?canAccessDonationModule(currentUser):
@@ -4573,13 +4586,6 @@ function showApp(){
   document.getElementById('factoryResetSection')?.classList.toggle('hidden',!isSuper);
   document.getElementById('usersOnlyResetSection')?.classList.toggle('hidden',!isSuper);
   document.getElementById('addProjectBtn')?.classList.toggle('hidden',!isSuper);
-  // لا تسمح قواعد الدور القديمة بإظهار أي مديول يخالف الصلاحيات التي حددها المدير الرئيسي.
-  Object.entries(navMap).forEach(([k,id])=>{
-    const allowed=k==='accounts'?isSuperAdmin(currentUser):
-      k==='donationModule'?canAccessDonationModule(currentUser):
-      canModule(k,'view',currentUser);
-    document.getElementById(id)?.classList.toggle('hidden',!allowed);
-  });
   document.getElementById('donorExcelExportBtn')?.classList.toggle('hidden',!canModule('donors','view',currentUser));
   document.getElementById('deleteAllDonorsBtn')?.classList.toggle('hidden',!isSuper);
   document.getElementById('reportExcelExportBtn')?.classList.toggle('hidden',!isSuper);
@@ -4970,7 +4976,11 @@ function renderHomeDashboard(){
     {key:'settings',label:'الإعدادات',desc:'إعدادات القنوات والنيات والصلاحيات',icon:'⚙',tone:'slate',count:''},
     {key:'policy',label:'الخصوصية وحقوق الملكية',desc:'سياسة حماية البيانات وحقوق النظام',icon:'ⓘ',tone:'slate',count:''}
   ];
-  grid.innerHTML=modules.filter(m=>canModule(m.key==='accounts'?'accounts':m.key,'view',currentUser) || (m.key==='accounts'&&isSuperAdmin(currentUser))).map(m=>{
+  grid.innerHTML=modules.filter(m=>{
+    if(m.key==='accounts')return isSuperAdmin(currentUser);
+    if(m.key==='donationModule')return canAccessDonationModule(currentUser);
+    return canModule(m.key,'view',currentUser);
+  }).map(m=>{
     const action=m.key==='accounts'?'openManageAccounts()':m.key==='importData'?'openImport()':m.key==='policy'?'openPolicy()':`setView('${m.key}')`;
     const safeAction=action;
     return `<button type="button" class="odoo-module-card tone-${m.tone}" onclick="${safeAction}"><span class="odoo-module-icon">${m.icon}</span><span class="odoo-module-main"><b>${escapeHtml(m.label)}</b><small>${escapeHtml(m.desc)}</small></span><span class="odoo-module-count">${escapeHtml(m.count||'')}</span></button>`;
@@ -4982,8 +4992,13 @@ function setView(v){
   /* حاجز إضافي: لا يمكن فتح شاشة وحدة سيادية بالاستدعاء المباشر لغير المدير الرئيسي. */
   if(isSovereignModule(v)&&!isSuperAdmin(currentUser)){denySovereign('غير مصرح: هذه الشاشة متاحة للمدير الرئيسي للنظام فقط.');v='home';}
   if(v==='newdonors'||v==='monthlydonors') v='donors';
-  if(!canModule(v,'view',currentUser)){
-    const fallback=PERMISSION_MODULES.find(m=>canModule(m.key,'view',currentUser));
+  const requestedAllowed=v==='donationModule'
+    ? canAccessDonationModule(currentUser)
+    : canModule(v,'view',currentUser);
+  if(!requestedAllowed){
+    const fallback=PERMISSION_MODULES.find(m=>m.key!=='donationModule'
+      ? canModule(m.key,'view',currentUser)
+      : canAccessDonationModule(currentUser));
     v=fallback?fallback.key:'home';
   }
   currentView=v;
@@ -5281,16 +5296,22 @@ function deleteUserAccount(id){
   const warn=assignedDonors?(' يوجد '+assignedDonors+' متبرع مسجل تحت هذا الحساب، وسيبقون في النظام بدون تغيير.'):'';
   requireSuperAdminConfirm('deleteAccount',{id},'حذف حساب "'+u.fullName+'" ('+userRoleLabel(u)+').'+warn);
 }
-function executeDeleteAccount(payload){
-  const u=USERS.find(x=>x.id===payload.id);if(!u)return;
-  if(u.role==='superadmin')return;
-  const isSelf=u.id===currentUser.id;
-  __markUserDeleted(u.id);
-  USERS=USERS.filter(x=>x.id!==payload.id);saveUsers();
-  if(isSelf){closeModal();logout();return}
+async function executeDeleteAccount(payload){
+  if(!isSuperAdmin(currentUser)||!payload)return;
+  const u=USERS.find(x=>String(x.id)===String(payload.id));if(!u)return;
+  if(u.role==='superadmin'){alert('لا يمكن حذف حساب المدير الرئيسي للنظام.');return}
+  const deletedId=String(u.id);
+  __markUserDeleted(deletedId);
+  USERS=USERS.filter(x=>String(x.id)!==deletedId);
+  safeSet(localStorage,UKEY,JSON.stringify(USERS));
   closeModal();
   renderManagerTabs();
   openManageAccounts();
+  const ok=await saveUsersReliable();
+  if(!USERS.some(x=>String(x.id)===deletedId)){
+    if(ok) alert('تم حذف الحساب نهائيًا من النظام وحفظ الحذف على Google Sheets.');
+    else alert('تم حذف الحساب من هذا الجهاز، وتعذر تأكيد الحذف على Google Sheets حاليًا. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.');
+  }
 }
 
 
@@ -8259,12 +8280,12 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
     const c=companies.find(x=>x.id===id),t=c?.tasks?.find(x=>x.id===tid);if(!c||!t)return;t.status='done';t.completedAt=new Date().toISOString();t.completedBy=currentUser?.fullName||'—';c.history=c.history||[];c.history.push({type:'followup_completed',hid:uid(),date:todayStr(),action:'تم تنفيذ المتابعة',followUpDate:t.dueDate,taskId:t.id,notes:t.title||'',by:currentUser?.fullName||'—',createdBy:currentUser?.id||'system'});c.nextFollowUp=(c.tasks||[]).filter(x=>x.status!=='done').sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''))[0]?.dueDate||'';persistCompanies();closeModal();updateBell();if(typeof openCompanyRecord==='function')openCompanyRecord(id);};
   /* Extend donor contact form: every scheduled next contact is saved in the donor record. */
   window.openContact=function(id){
-    if(typeof canBasicDonorActions==='function'&&!canBasicDonorActions(currentUser)){alert('يجب تسجيل الدخول أولًا.');return}
+    if(!currentUser){alert('يجب تسجيل الدخول أولًا.');return}
     const d=donors.find(x=>x.id===id);if(!d)return;if(currentUser?.role==='employee'&&d.employeeId!==currentUser.id){alert('هذا المتبرع غير تابع لحسابك.');return}
     openModal(`<h3>تسجيل تواصل مع ${esc(d.name)}</h3><div class="grid2"><div class="field"><label>التاريخ</label><input id="c_date" type="date" max="2050-12-31" value="${todayStr()}"></div><div class="field"><label>نوع الإجراء</label><select id="c_action">${CONTACT_ACTIONS.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>موعد التواصل/المتابعة القادمة</label><input id="c_next" type="date" max="2050-12-31" value="${esc(d.nextFollowUp||'')}"></div><div class="field"><label>مكان الحركة</label><input id="c_location" list="locationsDatalist" placeholder="مقر المؤسسة / بازار / مول ..."></div></div><div class="field"><label>ملاحظات</label><textarea id="c_notes"></textarea></div><div class="followup-notice">إذا حددت موعدًا قادمًا سيظهر تلقائيًا في 🔔 تنبيهات النظام مع عدد الأيام المتبقية، وإذا مر الموعد سيظهر كمتابعة متأخرة.</div><div class="modal-actions"><button class="btn-gold" onclick="saveContact('${id}')">حفظ</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
   };
   window.saveContact=function(id){
-    if(typeof canBasicDonorActions==='function'&&!canBasicDonorActions(currentUser)){alert('يجب تسجيل الدخول أولًا.');return}
+    if(!currentUser){alert('يجب تسجيل الدخول أولًا.');return}
     const d=donors.find(x=>x.id===id);if(!d)return;const date=document.getElementById('c_date')?.value||todayStr(),action=document.getElementById('c_action')?.value||'',location=document.getElementById('c_location')?.value.trim()||'',notes=document.getElementById('c_notes')?.value.trim()||'',next=document.getElementById('c_next')?.value||'';
     d.history=d.history||[];d.history.push({type:'contact',hid:uid(),date,action,location,notes,nextFollowUp:next,followUpStatus:next?statusFor(next):'none',by:currentUser.fullName,createdBy:currentUser.id});d.nextFollowUp=next;persist();closeModal();render();updateBell();
   };
@@ -9316,7 +9337,6 @@ window.deleteCompanyDonation=async function(id,hid){
  if(GAS_URL){await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});const freshC=(companies||[]).find(x=>String(x.id)===String(id));const freshE=freshC&&(freshC.history||[]).find(x=>x&&x.hid===hid&&x.type==='donation');if(!freshE){alert('تعذر الحذف: الحركة غير موجودة في آخر نسخة متزامنة.');render();return}if(!canEditDeleteDonationEntry(freshE,'delete')){alert('تعذر الحذف: تغيرت حالة الحركة على جهاز آخر.');render();return}c=freshC;e=freshE}
  c.history=(c.history||[]).filter(x=>x.hid!==hid);persistCompanies();if(GAS_URL)await syncPushNow({silent:false});closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();
 };
-let lastRealtimeSync=0;async function realtimeSyncTick(){if(!GAS_URL||!currentUser||document.hidden||document.getElementById('overlay')||__localDirty||__bgSyncInFlight)return;const now=Date.now();if(now-lastRealtimeSync<2500)return;lastRealtimeSync=now;__bgSyncInFlight=true;try{const changed=await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});if(changed){render();if(currentView==='financeReview')renderFinanceReview();if(currentView==='donations')renderDonations();if(currentView==='channels')renderChannels();if(currentView==='projects')renderProjects();if(currentView==='companies')renderCompanies();if(currentView==='reports')renderReports();if(currentView==='donationModule'&&typeof renderModuleDonationRecords==='function')renderModuleDonationRecords()}}catch(e){}finally{__bgSyncInFlight=false}}setInterval(realtimeSyncTick,1000);
 const css=document.createElement('style');css.id='final-requested-layout-fixes-v3';css.textContent=`
 #app>.top-tabs~#donationModuleView,#app>.top-tabs~#donorsView,#app>.top-tabs~#companiesView,#app>.top-tabs~#donationsView,#app>.top-tabs~#projectsView,#app>.top-tabs~#donorRatingsView,#app>.top-tabs~#donationCountsView,#app>.top-tabs~#channelsView{height:calc(100vh - 122px)!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding-bottom:34px!important;box-sizing:border-box!important}
 @media(max-width:760px){#app>.top-tabs~#donationModuleView,#app>.top-tabs~#donorsView,#app>.top-tabs~#companiesView,#app>.top-tabs~#donationsView,#app>.top-tabs~#projectsView,#app>.top-tabs~#donorRatingsView,#app>.top-tabs~#donationCountsView,#app>.top-tabs~#channelsView{height:calc(100vh - 96px)!important;max-height:none!important;overflow-y:auto!important;padding-bottom:24px!important}}
@@ -9421,7 +9441,7 @@ window.openChannelDetails=function(name){const rows=channelContributions(name),t
     openModal('<h3>سجل المتبرع — '+escapeHtml(d.name)+(filter?' — '+title:'')+'</h3><div class="meta" style="margin-bottom:10px"><b>'+escapeHtml(d.phone||'—')+'</b> · عدد الحركات المعروضة: <b>'+rows.length+'</b></div><div class="hist">'+items+'</div><div class="modal-actions"><button class="btn-primary btn-small" onclick="exportDonorRecordExcel('+safeArg(d.id)+')">تصدير سجل المتبرع إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>');
   }
   window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=>String(x.id)===String(id));if(d)openDonorHistory(d,filter)};
-  window.openRecord=function(id){if(!currentUser||!canBasicDonorActions(currentUser)){alert('يجب تسجيل الدخول أولًا.');return}const d=(donors||[]).find(x=>String(x.id)===String(id));if(!d)return;if(currentUser.role==='employee'&&d.employeeId!==currentUser.id){alert('هذا المتبرع غير تابع لحسابك.');return}if(ensureHid(d))persist();openDonorHistory(d,'');};
+  window.openRecord=function(id){if(!canOpenDonorRecord(currentUser)){alert('ليس لديك صلاحية عرض سجل المتبرع.');return}const d=(donors||[]).find(x=>String(x.id)===String(id));if(!d)return;if(currentUser.role==='employee'&&d.employeeId!==currentUser.id){alert('هذا المتبرع غير تابع لحسابك.');return}if(ensureHid(d))persist();openDonorHistory(d,'');};
 
   window.render=function(){
     renderManagerTabs();renderStats();renderChips();
@@ -9439,3 +9459,145 @@ window.openChannelDetails=function(name){const rows=channelContributions(name),t
 
 </body>
 </html>
+
+
+<style id="erp-final-clean-layout-v1">
+/* ERP workspace cleanup: one visual language, one active state, compact module navigation. */
+#app{--erp-primary:var(--primary,#0B8F70);--erp-primary-dark:var(--primary-dark,#086A55);--erp-soft:var(--primary-light,#EAF7F2);--erp-line:#DCE8E3;--erp-text:#20312D;--erp-muted:#6B7B76}
+#app>.top-tabs{
+  background:#0B5F50!important;
+  border-left:1px solid rgba(255,255,255,.10)!important;
+  padding:12px 10px 18px!important;
+  gap:5px!important;
+  scrollbar-width:thin!important;
+}
+#app>.top-tabs>.top-tab{
+  min-height:46px!important;
+  border:1px solid transparent!important;
+  border-radius:9px!important;
+  background:transparent!important;
+  color:#EAF7F2!important;
+  margin:0!important;
+  box-shadow:none!important;
+  transition:background .15s ease,border-color .15s ease,transform .15s ease!important;
+}
+#app>.top-tabs>.top-tab:hover{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.10)!important}
+#app>.top-tabs>.top-tab.active{
+  background:var(--erp-primary)!important;
+  color:#fff!important;
+  border-color:rgba(255,255,255,.12)!important;
+  box-shadow:0 3px 10px rgba(0,0,0,.12)!important;
+}
+#app>.top-tabs>.top-tab.hidden{display:none!important}
+#app>.top-tabs>.top-tab:nth-child(2),
+#app>.top-tabs>.top-tab:nth-child(10),
+#app>.top-tabs>.top-tab:nth-child(14),
+#app>.top-tabs>.top-tab:nth-child(17){
+  margin-top:10px!important;
+  padding-top:10px!important;
+  border-top:1px solid rgba(255,255,255,.14)!important;
+}
+#app .nav-icon{opacity:.95!important}
+#app>.top-tabs~#homeView,
+#app>.top-tabs~#donorsView,
+#app>.top-tabs~#companiesView,
+#app>.top-tabs~#donationModuleView,
+#app>.top-tabs~#projectsView,
+#app>.top-tabs~#donationsView,
+#app>.top-tabs~#donationCountsView,
+#app>.top-tabs~#donorRatingsView,
+#app>.top-tabs~#channelsView,
+#app>.top-tabs~#reportsView,
+#app>.top-tabs~#financeReviewView,
+#app>.top-tabs~#settingsView,
+#app>.top-tabs~#backupView,
+#app>.top-tabs~#syncDataView{
+  background:#F6F8F7!important;
+}
+#app>.top-tabs~#donorsView,
+#app>.top-tabs~#companiesView,
+#app>.top-tabs~#donationModuleView,
+#app>.top-tabs~#projectsView,
+#app>.top-tabs~#donationsView,
+#app>.top-tabs~#donationCountsView,
+#app>.top-tabs~#donorRatingsView,
+#app>.top-tabs~#channelsView,
+#app>.top-tabs~#reportsView,
+#app>.top-tabs~#financeReviewView,
+#app>.top-tabs~#settingsView{
+  padding:18px 20px 30px!important;
+}
+#app .donor-module-tabs,
+#app .donation-module-tabs,
+#app .company-subnav,
+#app .report-chips{
+  display:flex!important;
+  align-items:center!important;
+  gap:6px!important;
+  flex-wrap:wrap!important;
+  background:#fff!important;
+  border:1px solid var(--erp-line)!important;
+  border-radius:11px!important;
+  padding:5px!important;
+  margin:0 0 14px!important;
+  box-shadow:0 2px 8px rgba(25,55,48,.045)!important;
+}
+#app .donor-module-tab,
+#app .donation-module-tab,
+#app .company-subtab,
+#app .report-chips .chip{
+  border:1px solid transparent!important;
+  border-radius:8px!important;
+  background:transparent!important;
+  color:var(--erp-muted)!important;
+  padding:9px 13px!important;
+  font-weight:700!important;
+  white-space:nowrap!important;
+}
+#app .donor-module-tab:hover,
+#app .donation-module-tab:hover,
+#app .company-subtab:hover,
+#app .report-chips .chip:hover{background:var(--erp-soft)!important;color:var(--erp-primary-dark)!important}
+#app .donor-module-tab.active,
+#app .donation-module-tab.active,
+#app .company-subtab.active,
+#app .report-chips .chip.active{
+  color:#fff!important;
+  background:var(--erp-primary)!important;
+  border-color:var(--erp-primary)!important;
+  box-shadow:0 2px 7px rgba(11,143,112,.18)!important;
+}
+#app .toolbar{
+  background:#fff!important;
+  border:1px solid var(--erp-line)!important;
+  border-radius:11px!important;
+  padding:9px!important;
+  margin-bottom:10px!important;
+  box-shadow:0 1px 5px rgba(25,55,48,.035)!important;
+}
+#app .donation-module-panel,
+#app .settings-section,
+#app .manager-tabs-panel,
+#app .project-card{
+  border:1px solid var(--erp-line)!important;
+  border-radius:11px!important;
+  box-shadow:0 2px 9px rgba(25,55,48,.04)!important;
+}
+#app .stats{gap:10px!important}
+#app .stat{border:1px solid var(--erp-line)!important;border-radius:11px!important;box-shadow:none!important}
+#app .data-table,
+#app .donation-record-table,
+#app .company-table{border:1px solid var(--erp-line)!important;border-radius:10px!important;overflow:hidden!important}
+#app .data-table th,#app .donation-record-table th,#app .company-table th{
+  background:#EFF6F3!important;color:var(--erp-primary-dark)!important;
+  font-weight:800!important;
+}
+#app .data-table tbody tr:hover td,
+#app .donation-record-table tbody tr:hover td,
+#app .company-table tbody tr:hover td{background:#F6FBF9!important}
+#app .finance-status-group{gap:6px!important}
+#app .finance-search-inline{min-width:260px!important}
+@media(max-width:900px){
+  #app>.top-tabs~#donorsView,#app>.top-tabs~#companiesView,#app>.top-tabs~#donationModuleView,#app>.top-tabs~#projectsView,#app>.top-tabs~#donationsView,#app>.top-tabs~#donationCountsView,#app>.top-tabs~#donorRatingsView,#app>.top-tabs~#channelsView,#app>.top-tabs~#reportsView,#app>.top-tabs~#financeReviewView,#app>.top-tabs~#settingsView{padding:12px 10px 24px!important}
+}
+</style>
