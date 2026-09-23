@@ -1622,9 +1622,8 @@ body{
       <div class="field"><label>تأكيد كلمة المرور</label><input id="activationPass2" type="password" autocomplete="new-password"></div>
       <button class="btn-primary" style="width:100%" onclick="activateAccount()">تفعيل الحساب</button>
     </div>
-    <!-- خيارات المدير (استعادة الحساب، السياسة) مخفية عن المستخدمين العاديين،
-         ولا تظهر إلا بعد الضغط على العنوان أعلاه 5 مرات متتالية -->
-    <div id="loginMoreOptions" class="login-links hidden" style="justify-content:center;margin-top:10px;flex-direction:column;gap:6px;align-items:center">
+    <!-- خيارات بوابة المدير: تظهر مباشرة في بوابة المدير فقط، ولا تظهر في روابط المستخدمين العاديين. -->
+    <div id="loginMoreOptions" class="login-links" style="justify-content:center;margin-top:10px;flex-direction:column;gap:6px;align-items:center">
       <a onclick="openSetupCode()">إنشاء / استعادة حساب مدير النظام</a>
       <a onclick="openPolicy()">سياسة الخصوصية وحماية البيانات وحقوق الملكية</a>
     </div>
@@ -1696,11 +1695,6 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
     <button type="button" class="donor-module-tab" id="donorModuleMonthlyTab" onclick="selectDonorModuleTab('monthly')">المتبرعون الشهريون</button>
   </div>
   <div id="donorModuleAllPanel" class="donor-module-panel">
-  <div id="managerArea" class="hidden">
-    <div class="manager-box"><b>لوحة المدير:</b> يمكنك متابعة جميع الموظفين، وعدد المتبرعين، والتواصل والتبرعات المسجلة. اختر موظفًا لعرض قائمته.</div>
-    <div class="employee-tabs" id="employeeTabs"></div>
-  </div>
-
   <div class="stats" id="statsRow"></div>
   <div class="toolbar">
     <input id="searchBox" type="search" placeholder="ابحث بالاسم أو رقم الهاتف">
@@ -1740,15 +1734,6 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 </div>
 
 <div id="companiesView" class="hidden">
-  <div id="companyManagerArea" class="hidden">
-    <div class="manager-tabs-panel">
-      <div class="manager-tabs-head">
-        <div><b>لوحة مدير الشركات</b><span class="small-note">اختر الموظف لمتابعة الشركات المسندة إليه.</span></div>
-        <button class="user-chip" id="companyManagerAllBtn" onclick="companyManagerEmployee='all';renderCompanies()">كل الموظفين</button>
-      </div>
-      <div class="manager-people" id="companyEmployeeTabs"></div>
-    </div>
-  </div>
   <div class="company-subnav">
     <button class="company-subtab active" id="companySubListBtn" onclick="setCompanySubView('list')">الشركات</button>
     <button class="company-subtab" id="companySubPipelineBtn" onclick="setCompanySubView('pipeline')">مسار الشراكات</button>
@@ -1968,7 +1953,8 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
   </div>
   <div class="settings-section">
     <h4>أماكن الحركات والتبرعات</h4>
-    <p class="small-note">الأماكن المستخدمة في تسجيل الحركات تظهر تلقائيًا هنا، ويمكن اختيارها في شاشة التقارير لتصفية العمليات حسب المكان مثل مقر المؤسسة أو البازارات أو المولات.</p>
+    <p class="small-note">يمكنك إضافة أو تعديل أو حذف أماكن الحركات والتبرعات. تعديل المكان يعيد تسمية المكان في السجلات المرتبطة به، وحذف المكان يزيله من قائمة الاختيارات فقط.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="newLocationInput" placeholder="اسم مكان جديد" style="flex:1;min-width:180px"><button class="btn-primary btn-small" onclick="addLocation()">إضافة</button></div>
     <div class="tag-list" id="locationsTagList"></div>
   </div>
   <div class="settings-section">
@@ -2085,7 +2071,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxYgM94itbvUtPd9GOJCATscV0jmAIrvjv-oEIRi5hzUS1LJNnM3ET1xTsPmgzJREloog/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby8g85HhT-BMVAoa1b3ZY-llXGI1y5zFHvh0hZiyD3IbCidIPd6jCACWjdMaU7taCFbhg/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2302,6 +2288,9 @@ function prepareActivationScreen(){
     document.getElementById('loginResyncLink')?.remove();
     document.getElementById('loginChromeRecoveryLink')?.remove();
   }else{
+    const more=document.getElementById('loginMoreOptions');
+    more?.classList.remove('hidden');
+    if(more) more.style.display='flex';
     document.getElementById('loginResyncLink')?.classList.remove('hidden');
     document.getElementById('loginChromeRecoveryLink')?.classList.remove('hidden');
   }
@@ -2608,7 +2597,7 @@ function getSheet(name) {
 function readAll() {
   var sh = getSheet(SHEET_DATA);
   var lastRow = sh.getLastRow();
-  var empty = { users: [], donors: [], companies: [], projects: [], channels: [], intentions: [], managerCategories: [], companyConfig: null, catalogTombstones:{projects:{},channels:{}} };
+  var empty = { users: [], donors: [], companies: [], projects: [], channels: [], intentions: [], managerCategories: [], locations: [], companyConfig: null, catalogTombstones:{projects:{},channels:{}} };
   if (lastRow < 1) {
     var mirrored = readMirrorSheets();
     return mirrored || empty;
@@ -2735,7 +2724,7 @@ function normalizeServerCatalog_(data) {
   var channelSeen={};
   var channels=[];
   (Array.isArray(data.channels)?data.channels:[]).forEach(function(c){var v=String(c==null?'':c).trim(),k=v.toLowerCase();if(v&&k&&!channelSeen[k]){channelSeen[k]=1;channels.push(v)}});
-  data.users=users;data.projects=projects;data.channels=channels;
+  data.users=users;data.projects=projects;data.channels=channels;data.locations=Array.isArray(data.locations)?data.locations.map(function(x){return String(x||'').trim();}).filter(Boolean):[];
   return data;
 }
 function projectMatchesTombstone_(p,bucket){
@@ -2762,17 +2751,13 @@ function indexById_(list) {
   });
   return m;
 }
-function mergeHistoryByHid_(remoteHistory, incomingHistory) {
-  var m = {};
-  (Array.isArray(remoteHistory) ? remoteHistory : []).forEach(function(h) {
-    if (h && h.hid != null) m[String(h.hid)] = cloneJson_(h);
-  });
-  (Array.isArray(incomingHistory) ? incomingHistory : []).forEach(function(h) {
-    if (h && h.hid != null) m[String(h.hid)] = cloneJson_(h);
-  });
-  return Object.keys(m).map(function(k){ return m[k]; });
+function mergeHistoryByHid_(remoteHistory, incomingHistory, deletedHistory) {
+  var m={},deleted={};(Array.isArray(deletedHistory)?deletedHistory:[]).forEach(function(hid){deleted[String(hid)]=true;});
+  (Array.isArray(remoteHistory)?remoteHistory:[]).forEach(function(h){if(h&&h.hid!=null&&!deleted[String(h.hid)])m[String(h.hid)]=cloneJson_(h);});
+  (Array.isArray(incomingHistory)?incomingHistory:[]).forEach(function(h){if(h&&h.hid!=null&&!deleted[String(h.hid)])m[String(h.hid)]=cloneJson_(h);});
+  return Object.keys(m).map(function(k){return m[k];});
 }
-function mergeEntityListForConflict_(remoteList, incomingList, deletedIds, mergeHistory) {
+function mergeEntityListForConflict_(remoteList, incomingList, deletedIds, mergeHistory, deletedHistory) {
   var r = indexById_(remoteList);
   var inc = indexById_(incomingList);
   var deleted = {};
@@ -2784,7 +2769,7 @@ function mergeEntityListForConflict_(remoteList, incomingList, deletedIds, merge
     if (!iv) out.push(cloneJson_(rv));
     else {
       var merged = cloneJson_(iv);
-      if (mergeHistory) merged.history = mergeHistoryByHid_(rv.history || [], iv.history || []);
+      if (mergeHistory) merged.history = mergeHistoryByHid_(rv.history || [], iv.history || [], (deletedHistory||{})[String(id)]||[]);
       out.push(merged);
     }
   });
@@ -2827,13 +2812,9 @@ function mergeUsersSafe_(remoteList, incomingList, deletedIds) {
   });
   return out;
 }
-function mergeSimpleArrayForConflict_(remoteList, incomingList) {
-  var seen = {}, out = [];
-  (Array.isArray(remoteList) ? remoteList : []).concat(Array.isArray(incomingList) ? incomingList : []).forEach(function(x) {
-    var k = String(x);
-    if (!seen[k]) { seen[k] = true; out.push(x); }
-  });
-  return out;
+function mergeSimpleArrayForConflict_(remoteList,incomingList,deletedValues){
+ var deleted={};(Array.isArray(deletedValues)?deletedValues:[]).forEach(function(x){deleted[String(x).trim().toLowerCase()]=true});
+ var seen={},out=[];(Array.isArray(remoteList)?remoteList:[]).concat(Array.isArray(incomingList)?incomingList:[]).forEach(function(x){var k=String(x).trim().toLowerCase();if(!k||deleted[k]||seen[k])return;seen[k]=true;out.push(x)});return out;
 }
 function mergeServerSnapshot_(old, incoming) {
   old = normalizeServerCatalog_(old || {});
@@ -2843,6 +2824,7 @@ function mergeServerSnapshot_(old, incoming) {
   var sameBase = !oldUpdatedAt || (!!baseUpdatedAt && baseUpdatedAt === oldUpdatedAt);
   var explicitDeletedUsers = Array.isArray(incoming.__deletedUsers) ? incoming.__deletedUsers
     : ((incoming.__deleted && incoming.__deleted.users) || []);
+  var deletedHistory=incoming.__deletedHistory||{individual:{},company:{}};
   var mergedUsers = incoming.__wipeAllUsers === true
     ? (incoming.users || [])
     : mergeUsersSafe_(old.users, incoming.users, explicitDeletedUsers);
@@ -2855,15 +2837,16 @@ function mergeServerSnapshot_(old, incoming) {
   var mergedProjects;
   var mergedChannels;
   mergedProjects=mergeSimpleArrayForConflict_(old.projects||[],incoming.projects||[]);
-  mergedChannels=mergeSimpleArrayForConflict_(old.channels||[],incoming.channels||[]);
+  mergedChannels=mergeSimpleArrayForConflict_(old.channels||[],incoming.channels||[],(incoming.__deleted&&incoming.__deleted.channels)||[]);
   var result={
     users: mergedUsers,
-    donors: sameBase ? (incoming.donors||[]) : mergeEntityListForConflict_(old.donors,incoming.donors,(incoming.__deleted&&incoming.__deleted.donors)||[],true),
-    companies: sameBase ? (incoming.companies||[]) : mergeEntityListForConflict_(old.companies,incoming.companies,(incoming.__deleted&&incoming.__deleted.companies)||[],true),
+    donors: sameBase ? (incoming.donors||[]) : mergeEntityListForConflict_(old.donors,incoming.donors,(incoming.__deleted&&incoming.__deleted.donors)||[],true,deletedHistory.individual),
+    companies: sameBase ? (incoming.companies||[]) : mergeEntityListForConflict_(old.companies,incoming.companies,(incoming.__deleted&&incoming.__deleted.companies)||[],true,deletedHistory.company),
     projects: mergedProjects,
     channels: mergedChannels,
-    intentions: mergeSimpleArrayForConflict_(old.intentions,incoming.intentions),
-    managerCategories: sameBase ? (incoming.managerCategories||[]) : mergeSimpleArrayForConflict_(old.managerCategories,incoming.managerCategories),
+    intentions: mergeSimpleArrayForConflict_(old.intentions,incoming.intentions,(incoming.__deleted&&incoming.__deleted.intentions)||[]),
+    managerCategories: mergeSimpleArrayForConflict_(old.managerCategories,incoming.managerCategories,(incoming.__deleted&&incoming.__deleted.managerCategories)||[]),
+    locations: mergeSimpleArrayForConflict_(old.locations||[],incoming.locations||[],(incoming.__deleted&&incoming.__deleted.locations)||[]),
     companyConfig: incoming.companyConfig || old.companyConfig || null,
     donationResetVersion: incoming.donationResetVersion || old.donationResetVersion || '',
     catalogTombstones:tombs
@@ -2883,6 +2866,7 @@ function writeAll(payload) {
     channels: merged.channels || [],
     intentions: merged.intentions || [],
     managerCategories: merged.managerCategories || [],
+    locations: merged.locations || [],
     companies: merged.companies || [],
     companyConfig: merged.companyConfig || null,
     catalogTombstones: merged.catalogTombstones || {projects:{},channels:{}},
@@ -3118,12 +3102,14 @@ function jsonOut(obj) {
 }
 `;
 
-const UKEY='donors_users_v3', DKEY='donors_donors_v3', COMPANYKEY='donors_companies_v1', COMPANYCONFIGKEY='donors_company_config_v1', PKEY='donors_projects_v3', CKEY='donors_channels_v1', IKEY='donors_intentions_v1', MCKEY='donors_manager_categories_v1', SESSION='donors_session_v3', GASKEY='donors_gas_url_v1', SYNCKEY='donors_last_sync_v1', CHCODEKEY='donors_channel_codes_v1', INCODEKEY='donors_intention_codes_v1', PENDING_SYNC_KEY='donors_pending_sync_v2', BASE_SYNC_KEY='donors_base_sync_v2';
+const UKEY='donors_users_v3', DKEY='donors_donors_v3', COMPANYKEY='donors_companies_v1', COMPANYCONFIGKEY='donors_company_config_v1', PKEY='donors_projects_v3', CKEY='donors_channels_v1', IKEY='donors_intentions_v1', MCKEY='donors_manager_categories_v1', LOCATIONSKEY='donors_locations_v1', DELETED_SYNC_KEY='donors_deleted_sync_v1', SESSION='donors_session_v3', GASKEY='donors_gas_url_v1', SYNCKEY='donors_last_sync_v1', CHCODEKEY='donors_channel_codes_v1', INCODEKEY='donors_intention_codes_v1', PENDING_SYNC_KEY='donors_pending_sync_v2', BASE_SYNC_KEY='donors_base_sync_v2';
 const DONATION_RESET_VERSION='2026-09-20-v4'; let __pendingDonationReset=false;
 
-let USERS=[], donors=[], companies=[], projects=[], channels=[], intentions=[], managerCategories=[], companyConfig=null, currentUser=null, managerEmployee='all', companyManagerEmployee='all', currentFilter='all', companyFilter='all', searchTerm='', companySearchTerm='', currentView='donors', companySubView='list', pendingReset=null;
+let USERS=[], donors=[], companies=[], projects=[], channels=[], intentions=[], managerCategories=[], locations=[], companyConfig=null, currentUser=null, managerEmployee='all', companyManagerEmployee='all', currentFilter='all', companyFilter='all', searchTerm='', companySearchTerm='', currentView='donors', companySubView='list', pendingReset=null;
 let projFrom='',projTo='',donFrom='',donTo='',chanFrom='',chanTo='';
 let donorsCustomRange=false, donorsFrom='', donorsTo='';
+let __syncDeleted={donors:[],companies:[],projects:[],channels:[],intentions:[],managerCategories:[],locations:[],history:{individual:{},company:{}}};try{const z=JSON.parse(safeGet(localStorage,DELETED_SYNC_KEY)||'null');if(z&&typeof z==='object')__syncDeleted={...__syncDeleted,...z,history:{...__syncDeleted.history,...(z.history||{})}}}catch(e){}
+try{const z=JSON.parse(safeGet(localStorage,LOCATIONSKEY)||'[]');if(Array.isArray(z))locations=z.map(String).filter(Boolean)}catch(e){}
 /* ---------- تحميل/تهيئة رابط Google Sheets (إصلاح) ----------
    المشكلة السابقة: كان الكود يمسح الرابط المحفوظ محليًا (GASKEY) ويعيد GAS_URL
    للقيمة الفارغة في *كل* مرة تُفتح فيها الصفحة، حتى لو كان المدير الرئيسي قد أدخل
@@ -3231,6 +3217,30 @@ async function sha256Hex(value){
   if(!window.crypto?.subtle)throw new Error('هذا المتصفح لا يدعم تشفير كلمات المرور الآمن. استخدم Chrome أو Edge حديثًا.');
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(value||'')));
   return bytesToHex(new Uint8Array(digest));
+}
+
+/* SHA-256 fallback for local/file:// deployments. Some browsers expose crypto.subtle
+   only in secure contexts; the setup-code gate must still work when this HTML is opened
+   directly from a file or a host that does not expose Web Crypto. */
+function sha256HexSync(value){
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const bytes=new TextEncoder().encode(String(value??''));
+  const bitLen=bytes.length*8;
+  const total=((bytes.length+9+63)>>6)<<6;
+  const data=new Uint8Array(total); data.set(bytes); data[bytes.length]=0x80;
+  const dv=new DataView(data.buffer);
+  dv.setUint32(total-8,Math.floor(bitLen/0x100000000)>>>0); dv.setUint32(total-4,bitLen>>>0);
+  const rotr=(x,n)=>(x>>>n)|(x<<(32-n));
+  for(let off=0;off<total;off+=64){
+    const W=new Uint32Array(64);
+    for(let i=0;i<16;i++)W[i]=dv.getUint32(off+i*4,false);
+    for(let i=16;i<64;i++){const x=W[i-15],y=W[i-2];const s0=rotr(x,7)^rotr(x,18)^(x>>>3);const s1=rotr(y,17)^rotr(y,19)^(y>>>10);W[i]=(W[i-16]+s0+W[i-7]+s1)>>>0;}
+    let [a,b,c,d,e,f,g,h]=H;
+    for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^((~e)&g);const t1=(h+S1+ch+K[i]+W[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b)^(a&c)^(b&c);const t2=(S0+maj)>>>0;h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}
+    H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+d)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;
+  }
+  return H.map(x=>x.toString(16).padStart(8,'0')).join('');
 }
 /* New format: pbkdf2$<iterations>$<saltHex>$<hashHex> — salted + iterated, resistant to
    offline dictionary/rainbow-table attacks unlike a bare unsalted SHA-256 digest. */
@@ -3560,7 +3570,8 @@ function persistCompanyConfig(){companyConfig=normalizeCompanyConfig(companyConf
 function saveProjects(){projects=dedupeProjectsLocal(projects);ensureProjectCodes();safeSet(localStorage,PKEY,JSON.stringify(projects));syncPushDebounced();showSaveToast('تم الحفظ')}
 function saveChannels(){channels=normalizeChannelsLocal(channels);safeSet(localStorage,CKEY,JSON.stringify(channels));syncPushDebounced();showSaveToast('تم الحفظ')}
 function saveIntentions(){safeSet(localStorage,IKEY,JSON.stringify(intentions));syncPushDebounced();showSaveToast('تم الحفظ')}
-function saveManagerCategories(){safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));syncPushDebounced();showSaveToast('تم الحفظ')}
+function saveManagerCategories(){safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));safeSet(localStorage,LOCATIONSKEY,JSON.stringify(locations));syncPushDebounced();showSaveToast('تم الحفظ')}
+function saveLocations(){locations=[...new Set((locations||[]).map(x=>String(x||'').trim()).filter(Boolean))];safeSet(localStorage,LOCATIONSKEY,JSON.stringify(locations));syncPushDebounced();showSaveToast('تم الحفظ')}
 
 /* ---------- أكواد الاستيراد (مشاريع/قنوات/نوايا/حالة الحركة) ----------
    الهدف: بدل كتابة اسم المشروع أو القناة أو النية كاملة يدويًا في شيت الاستيراد
@@ -3857,19 +3868,43 @@ async function loadAll(){
   normalizeDonationWorkflow();
   __syncReadyForUsers=false;
   if(GAS_URL){
-    if(hadPendingSnapshot){__localDirty=true;await syncPushNow({silent:true});}
+    if(hadPendingSnapshot){__localDirty=true;syncPushNow({silent:true}).catch(()=>{});}
     const sub=document.getElementById('loginSubtitle');
-    if(sub)sub.textContent='جارِ مزامنة البيانات مع Google Sheets...';
-    lockNonAdminLogin('جارٍ الربط الفعلي مع Google Sheets...');
-    const localHadData=hasLocalData();
-    const pulled=await syncPull({preserveLocalIfRemoteEmpty:true});
-    try{const authoritative=await gasCall('getAll');if(authoritative&&!authoritative.error)__setBaseSnapshot(authoritative);}catch(e){}
-    if(__lastPullSuccess)unlockNonAdminLogin();
-    else lockNonAdminLogin('تعذر الربط الفعلي مع Google Sheets — لن يُسمح للمستخدمين بالدخول حتى ينجح الربط.');
-    if(!pulled && localHadData) setConnStatus('off');
-    if(sub)sub.textContent=__syncReadyForUsers?'تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.':'يرجى انتظار اكتمال المزامنة الفعلية مع Google Sheets.';
+    const hasCachedUsers=Array.isArray(USERS)&&USERS.length>0;
+    /* قراءة محلية فورية: لا ننتظر Google Sheets كي تظهر شاشة الدخول أو كي يبدأ
+       المدير الرئيسي في العمل. الاتصال بالشيت يعمل بالتوازي في الخلفية. */
+    if(hasCachedUsers || isAdminPortal()){
+      unlockNonAdminLogin();
+      if(sub)sub.textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
+      /* مزامنة خلفية صامتة — لا شاشة تحميل ولا طلب getAll إضافي. */
+      Promise.resolve().then(async()=>{
+        const localHadData=hasLocalData();
+        const pulled=await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});
+        if(!pulled && localHadData) setConnStatus('off');
+        if(__lastPullSuccess){
+          unlockNonAdminLogin();
+          if(sub && !currentUser)sub.textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
+        }
+      }).catch(()=>{});
+    }else{
+      /* جهاز جديد بلا أي حساب محلي: لا توجد طريقة آمنة للتحقق من المستخدم قبل
+         قراءة الحسابات من المصدر، لذلك ننتظر أول قراءة فقط في هذه الحالة. */
+      lockNonAdminLogin('جارٍ تحميل بيانات الحساب لأول مرة...');
+      try{
+        const localHadData=hasLocalData();
+        const pulled=await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});
+        if(__lastPullSuccess)unlockNonAdminLogin();
+        else lockNonAdminLogin('تعذر الاتصال ببيانات النظام — أعد المحاولة.');
+        if(!pulled && localHadData) setConnStatus('off');
+      }catch(e){
+        lockNonAdminLogin('تعذر الاتصال ببيانات النظام — أعد المحاولة.');
+      }
+    }
   }else{
-    lockNonAdminLogin('النظام غير مرتبط بـ Google Sheets — حسابات المستخدمين مقفلة حتى يتم الربط الفعلي.');
+    /* المدير الرئيسي يستطيع فتح النظام من الكاش المحلي حتى قبل ربط Google Sheets.
+       المستخدمون العاديون على جهاز بلا كاش يظلون مقفولين حتى يتم الربط. */
+    if(isAdminPortal() && Array.isArray(USERS)&&USERS.length) unlockNonAdminLogin();
+    else lockNonAdminLogin('النظام غير مرتبط بـ Google Sheets — حسابات المستخدمين مقفلة حتى يتم الربط الفعلي.');
   }
   __lastDonationSnapshot=__snapshotDonationState(); /* نقطة انطلاق السجل الفوري: لا نسجّل الحركات الموجودة مسبقًا كـ"جديدة" */
   USERS.forEach(u=>{if(typeof u.active==='undefined')u.active=true;if(!u.followScope)u.followScope='both';if(!u.permissions)u.permissions=defaultPermissionsFor(u);});
@@ -4022,15 +4057,31 @@ function mergeEntityHistories(remoteList, localList){
 }
 function mergeCollaborativeData(remote){
   const data=remote||{};
+  const deleted=__syncDeleted||{};
+  const deletedDonors=new Set((deleted.donors||[]).map(String));
+  const deletedCompanies=new Set((deleted.companies||[]).map(String));
+  const deletedHistory=(deleted.history||{});
+  const deletedValueSet=(key)=>new Set((deleted[key]||[]).map(v=>String(v).trim().toLowerCase()));
+  const deletedIndividualHistory=deletedHistory.individual||{};
+  const deletedCompanyHistory=deletedHistory.company||{};
+  const mergeWithTombstones=(remoteList,localList,entityDeleted,historyDeleted)=>{
+    const merged=mergeEntityHistories(remoteList,localList);
+    return (Array.isArray(merged)?merged:[]).filter(x=>x&&x.id!=null&&!entityDeleted.has(String(x.id))).map(x=>{
+      const blocked=new Set((historyDeleted[String(x.id)]||[]).map(String));
+      if(!blocked.size)return x;
+      return {...x,history:(Array.isArray(x.history)?x.history:[]).filter(h=>h&&(!h.hid||!blocked.has(String(h.hid))))};
+    });
+  };
   return {
     ...data,
     users:normalizeUsersLocal(mergeEntityHistories(data.users,USERS)),
-    donors:mergeEntityHistories(data.donors,donors),
-    companies:mergeEntityHistories(data.companies,companies),
-    projects:mergeProjectListsNoLoss_(normalizeProjects(data.projects),projects),
-    channels:normalizeChannelsLocal([...(Array.isArray(data.channels)?data.channels:[]),...(Array.isArray(channels)?channels:[])]),
-    intentions:[...new Set([...(Array.isArray(data.intentions)?data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).filter(Boolean))],
-    managerCategories:[...new Set([...(Array.isArray(data.managerCategories)?data.managerCategories:[]),...(Array.isArray(managerCategories)?managerCategories:[])].map(String).filter(Boolean))],
+    donors:mergeWithTombstones(data.donors,donors,deletedDonors,deletedIndividualHistory),
+    companies:mergeWithTombstones(data.companies,companies,deletedCompanies,deletedCompanyHistory),
+    projects:mergeProjectListsNoLoss_(normalizeProjects(data.projects),projects).filter(p=>p&&!((deleted.projects||[]).map(String).includes(String(p.id)))),
+    channels:normalizeChannelsLocal([...(Array.isArray(data.channels)?data.channels:[]),...(Array.isArray(channels)?channels:[])]).filter(x=>!deletedValueSet('channels').has(String(x).trim().toLowerCase())),
+    intentions:[...new Set([...(Array.isArray(data.intentions)?data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).filter(Boolean))].filter(x=>!deletedValueSet('intentions').has(String(x).trim().toLowerCase())),
+    managerCategories:[...new Set([...(Array.isArray(data.managerCategories)?data.managerCategories:[]),...(Array.isArray(managerCategories)?managerCategories:[])].map(String).filter(Boolean))].filter(x=>!deletedValueSet('managerCategories').has(String(x).trim().toLowerCase())),
+    locations:[...new Set([...(Array.isArray(data.locations)?data.locations:[]),...(Array.isArray(locations)?locations:[])].map(String).filter(Boolean))].filter(x=>!deletedValueSet('locations').has(String(x).trim().toLowerCase())),
     companyConfig:data.companyConfig||companyConfig
   };
 }
@@ -4163,7 +4214,7 @@ let __pushQueued=false;
 let __localRevision=0;
 
 function __currentSyncState(){
-  return {users:USERS,donors,companies,projects,channels,intentions,managerCategories,companyConfig,
+  return {users:USERS,donors,companies,projects,channels,intentions,managerCategories,locations,companyConfig,
     donationResetVersion:DONATION_RESET_VERSION};
 }
 function __safeClone(v){try{return JSON.parse(JSON.stringify(v))}catch(e){return v}}
@@ -4176,31 +4227,29 @@ function __setBaseSnapshot(data){
     updatedAt:data.updatedAt||'',users:data.users||[],donors:data.donors||[],
     companies:data.companies||[],projects:data.projects||[],channels:data.channels||[],
     intentions:data.intentions||[],managerCategories:data.managerCategories||[],
-    companyConfig:data.companyConfig||null,catalogTombstones:data.catalogTombstones||{projects:{},channels:{}},donationResetVersion:data.donationResetVersion||''
+    companyConfig:data.companyConfig||null,locations:Array.isArray(data.locations)?data.locations:[],catalogTombstones:data.catalogTombstones||{projects:{},channels:{}},donationResetVersion:data.donationResetVersion||''
   }));
 }
+function __saveSyncDeleted(){try{safeSet(localStorage,DELETED_SYNC_KEY,JSON.stringify(__syncDeleted))}catch(e){}}
+function __markSyncEntityDeleted(type,id){if(!type||id==null)return;__syncDeleted[type]=Array.isArray(__syncDeleted[type])?__syncDeleted[type]:[];const v=String(id);if(!__syncDeleted[type].includes(v))__syncDeleted[type].push(v);__saveSyncDeleted()}
+function __clearSyncEntityDeleted(type,id){if(!type||id==null)return;const v=String(id);if(Array.isArray(__syncDeleted[type]))__syncDeleted[type]=__syncDeleted[type].filter(x=>String(x)!==v);__saveSyncDeleted()}
+function __markSyncHistoryDeleted(kind,id,hid){const h=__syncDeleted.history||(__syncDeleted.history={individual:{},company:{}});h[kind]=h[kind]||{};h[kind][String(id)]=h[kind][String(id)]||[];if(!h[kind][String(id)].includes(String(hid)))h[kind][String(id)].push(String(hid));__saveSyncDeleted()}
 function __deletedIdsAgainstBase(){
-  const base=__getBaseSnapshot()||{}, cur=__currentSyncState(), out={};
-  const findDeleted=(bk,ck)=>{
-    const b=Array.isArray(base[bk])?base[bk]:[], c=Array.isArray(cur[ck||bk])?cur[ck||bk]:[];
-    const ids=new Set(c.filter(x=>x&&x.id!=null).map(x=>String(x.id)));
-    return b.filter(x=>x&&x.id!=null&&!ids.has(String(x.id))).map(x=>String(x.id));
-  };
-  /* المستخدمون مستثنون عمدًا من هذا الاستنتاج التلقائي — انظر __deletedUserIds أعلاه؛
-     حذف حساب لا يُرسل للخادم إلا عبر القائمة الصريحة __deletedUsers. */
-  /* لا نستنتج حذف المتبرعين أو الشركات من اختلاف لقطة المتصفح؛ هذا قد يمحو
-     حركة تبرع بسبب جهاز قديم أو مزامنة متزامنة. */
-  out.donors=[]; out.companies=[];
-  out.projects=findDeleted('projects');
-  return out;
+ const base=__getBaseSnapshot()||{},cur=__currentSyncState(),out={};
+ const find=(k)=>{const b=Array.isArray(base[k])?base[k]:[],c=Array.isArray(cur[k])?cur[k]:[],ids=new Set(c.filter(x=>x&&x.id!=null).map(x=>String(x.id)));return b.filter(x=>x&&x.id!=null&&!ids.has(String(x.id))).map(x=>String(x.id))};
+ ['donors','companies'].forEach(k=>out[k]=(__syncDeleted[k]||[]).slice());
+ out.projects=[...new Set((__syncDeleted.projects||[]).concat(find('projects')))];
+ ['channels','intentions','managerCategories','locations'].forEach(k=>out[k]=(__syncDeleted[k]||[]).slice());
+ return out;
 }
+function __deletedHistoryPayload(){return __syncDeleted.history||{individual:{},company:{}};}
 function __makeDurablePayload(){
   const base=__getBaseSnapshot()||{};
   return {...__safeClone(__currentSyncState()),
-    __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),
+    __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),__deletedHistory:__deletedHistoryPayload(),
     __deletedUsers:__deletedUserIds.slice(),
     __catalogTombstones:__catalogTombstonesPayload(),
-    __catalogRecreated:__catalogRecreatedPayload(),
+    __catalogRecreated:__catalogRecreatedPayload(),locations,
     __queuedAt:new Date().toISOString()};
 }
 function __queueDurableSnapshot(){
@@ -4258,7 +4307,7 @@ function __restorePendingSnapshot(){
     if(Array.isArray(p.channels))channels=normalizeChannelsLocal([...channels,...p.channels]);
     if(Array.isArray(p.intentions))intentions=[...new Set([...intentions,...p.intentions].map(String).filter(Boolean))];
     if(Array.isArray(p.managerCategories))managerCategories=[...new Set([...managerCategories,...p.managerCategories].map(String).filter(Boolean))];
-    if(p.companyConfig!==undefined && !companyConfig)companyConfig=normalizeCompanyConfig(p.companyConfig);
+    if(p.companyConfig!==undefined && !companyConfig)companyConfig=normalizeCompanyConfig(p.companyConfig);if(Array.isArray(p.locations))locations=[...new Set([...locations,...p.locations].map(String).filter(Boolean))];
     safeSet(localStorage,UKEY,JSON.stringify(USERS));safeSet(localStorage,DKEY,JSON.stringify(donors));
     safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));safeSet(localStorage,PKEY,JSON.stringify(projects));
     safeSet(localStorage,CKEY,JSON.stringify(channels));safeSet(localStorage,IKEY,JSON.stringify(intentions));
@@ -4285,7 +4334,7 @@ async function syncPushNow(options){
   const pendingAtStart=safeGet(localStorage,PENDING_SYNC_KEY)||'';
   const base=__getBaseSnapshot()||{};
   const payload={...__safeClone(__currentSyncState()),
-    __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),
+    __baseServerUpdatedAt:base.updatedAt||'',__deleted:__deletedIdsAgainstBase(),__deletedHistory:__deletedHistoryPayload(),
     __deletedUsers:__deletedUserIds.slice(),
     __catalogTombstones:__catalogTombstonesPayload(),
     __catalogRecreated:__catalogRecreatedPayload(),
@@ -4386,7 +4435,7 @@ async function manualSync(){
 
 /* ---------- local cache recovery ---------- */
 async function openInitialAdminSetup(){
-  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
+  if(!isAdminPortal() && !isSuperAdmin(currentUser)){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   /* شاشة الإعداد متاحة كمدخل بصري من ملف HTML نفسه، لكن لا تمنح صلاحيات
      إدارية لمجرد فتح الرابط؛ الإنشاء الفعلي مقيد داخل openRegister/submitRegister. */
   try{
@@ -4408,7 +4457,8 @@ function returnToNormalLogin(){
      يبقى متاحًا للجميع؛ رابطا الصيانة (إعادة المزامنة / إصلاح المتصفح) كانا قد
      أُزيلا نهائيًا من الشجرة لغير بوابة المدير في prepareActivationScreen، فلا
      خطر من إظهار الحاوية نفسها هنا بلا شرط. */
-  document.getElementById('loginMoreOptions')?.classList.add('hidden');
+  if(isAdminPortal() || isSuperAdmin(currentUser)) document.getElementById('loginMoreOptions')?.classList.remove('hidden');
+  else document.getElementById('loginMoreOptions')?.classList.add('hidden');
   document.getElementById('loginNormalLinks')?.classList.remove('hidden');
   const title=document.getElementById('loginSubtitle');
   if(title)title.textContent='تسجيل الدخول لإدارة بيانات المتبرعين والتواصل والتبرعات.';
@@ -4418,30 +4468,22 @@ function returnToNormalLogin(){
    ولا يوجد ربط في هذه النسخة، فكان الحذف نهائيًا.) الآن يُنهيان الجلسة الحالية فقط. */
 let setupActionAfterVerify='';
 function clearTemporarySystemData(){
-  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
+  if(!isAdminPortal() && !isSuperAdmin(currentUser)){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   /* لا نسمح بإعادة مزامنة بيانات الدخول بدون رمز الإعداد، ولا نمسح أي بيانات. */
   setupActionAfterVerify='resyncLogin';
   openSetupCode();
 }
 function clearSystemCacheAndReload(){clearTemporarySystemData()}
 function requestChromeLoginRecovery(){
-  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
+  if(!isAdminPortal() && !isSuperAdmin(currentUser)){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   setupActionAfterVerify='browserRecovery';
   openSetupCode();
 }
 
 /* ---------- login screen ---------- */
-let loginTitleClickCount=0, loginTitleClickTimer=null;
-function loginTitleClicked(){
-  if(!isAdminPortal())return;
-  loginTitleClickCount++;
-  clearTimeout(loginTitleClickTimer);
-  loginTitleClickTimer=setTimeout(()=>{loginTitleClickCount=0},1500);
-  if(loginTitleClickCount>=5){
-    loginTitleClickCount=0;
-    document.getElementById('loginMoreOptions')?.classList.remove('hidden');
-  }
-}
+/* رابط إنشاء / استعادة حساب مدير النظام ظاهر مباشرة في بوابة المدير.
+   لا يعتمد على الضغط 5 مرات أو على أي تفاعل مخفي. */
+function loginTitleClicked(){}
 function showLogin(){
   document.getElementById('loginScreen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
@@ -4575,7 +4617,7 @@ function showApp(){
       canModule(k,'view',currentUser);
     document.getElementById(id)?.classList.toggle('hidden',!allowed);
   });
-  document.getElementById('managerArea').classList.toggle('hidden',!isManager);
+  document.getElementById('managerArea')?.classList.toggle('hidden',!isManager);
   document.getElementById('manageAccountsBtn')?.classList.toggle('hidden',!isSuper);
   document.getElementById('sideImportBtn')?.classList.toggle('hidden',!canModule('importData','view',currentUser));
   document.getElementById('sideAddDonorBtn')?.classList.toggle('hidden',!canModule('addDonor','view',currentUser));
@@ -4591,55 +4633,124 @@ function showApp(){
   document.getElementById('reportExcelExportBtn')?.classList.toggle('hidden',!isSuper);
   document.getElementById('pdfExportBtn')?.classList.toggle('hidden',!isReportAllowed(currentUser));
   refreshFinanceBadge();
-  const firstView=financeOnly&&canModule('financeReview','view',currentUser)?'financeReview':
-    (canModule('home','view',currentUser)?'home':
-      (PERMISSION_MODULES.find(m=>m.key!=='home'&&(
-        m.key==='donationModule'?canAccessDonationModule(currentUser):canModule(m.key,'view',currentUser)
-      ))||{key:'donors'}).key);
+  const firstView=canModule('home','view',currentUser)?'home':
+    (PERMISSION_MODULES.find(m=>m.key!=='home'&&(
+      m.key==='donationModule'?canAccessDonationModule(currentUser):canModule(m.key,'view',currentUser)
+    ))||{key:'donors'}).key;
   setView(firstView);
 }
 
 /* ---------- first-time setup (hidden behind a secret code) ---------- */
 function openSetupCode(){
-  if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
-  /* لا يوجد شرط "لازم تكون مسجل دخول بالفعل" هنا عمدًا: الغرض الأساسي من هذه
-     الشاشة هو استرجاع الوصول بالضبط في الحالة اللي فيها المستخدم مش قادر
-     يسجّل دخول. البوابة الأمنية الحقيقية هي معرفة SETUP_CODE في verifySetupCode. */
+  if(!isAdminPortal() && !isSuperAdmin(currentUser)){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
+  /* هذه الشاشة هي البوابة الوحيدة لإنشاء/استعادة المدير الرئيسي. */
   openModal(`<h3>إنشاء / استعادة حساب المدير الرئيسي للنظام</h3>
-  <p class="small-note">استخدم هذا الخيار عند بدء النظام لأول مرة، أو إذا فقدت الوصول إلى حساب المدير الرئيسي بعد ربط Google Sheets. أدخل رمز الإعداد السري.</p>
-  <div class="field"><label>رمز الإعداد</label><input id="setupCodeInput" type="password" autocomplete="off"></div>
-  <div class="modal-actions"><button class="btn-primary" onclick="verifySetupCode()">متابعة</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
+  <p class="small-note">استخدم هذا الخيار عند بدء النظام لأول مرة، أو إذا فقدت الوصول إلى حساب المدير الرئيسي بعد ربط Google Sheets. أدخل رمز الإعداد السري ثم اضغط «متابعة».</p>
+  <div class="field"><label>رمز الإعداد</label><input id="setupCodeInput" type="password" autocomplete="off" inputmode="text"></div>
+  <div id="setupCodeError" class="small-note hidden" style="color:#b42318;margin-top:6px"></div>
+  <div class="modal-actions"><button type="button" class="btn-primary" id="setupCodeConfirmBtn" onclick="verifySetupCode()">متابعة</button><button type="button" class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
+  const input=document.getElementById('setupCodeInput');
+  input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();verifySetupCode();}});
+  setTimeout(()=>input?.focus(),50);
 }
 let setupCodeFailCount=0, setupCodeLockedUntil=0;
 async function verifySetupCode(){
+  const input=document.getElementById('setupCodeInput');
+  const errorEl=document.getElementById('setupCodeError');
+  const btn=document.getElementById('setupCodeConfirmBtn');
+  const showError=msg=>{if(errorEl){errorEl.textContent=msg;errorEl.classList.remove('hidden')}else alert(msg)};
   if(setupCodeLockedUntil>Date.now()){
-    alert('محاولات كثيرة خاطئة. يرجى الانتظار قليلًا ثم إعادة المحاولة.');
+    showError('محاولات كثيرة خاطئة. يرجى الانتظار حتى انتهاء الحظر المؤقت ثم إعادة المحاولة.');
     return;
   }
-  const v=(document.getElementById('setupCodeInput').value||'').trim();
-  let hash='';
-  try{hash=await sha256Hex(v);}catch(e){alert('تعذر التحقق من الرمز في هذا المتصفح.');return}
-  if(!v || hash!==SETUP_CODE_HASH){
-    setupCodeFailCount++;
-    if(setupCodeFailCount>=5){setupCodeLockedUntil=Date.now()+5*60000;setupCodeFailCount=0;}
-    alert('رمز الإعداد غير صحيح.');
-    return;
-  }
-  setupCodeFailCount=0;
-  setupCodeVerified=true;
-  const action=setupActionAfterVerify;
-  setupActionAfterVerify='';
-  closeModal();
+  const v=String(input?.value||'').trim();
+  if(!v){showError('يرجى إدخال رمز الإعداد.');input?.focus();return}
+  if(btn){btn.disabled=true;btn.textContent='جارٍ التحقق...'}
+  let verified=false;
+  try{
+    let hash='';
+    try{hash=await sha256Hex(v)}catch(_cryptoError){hash=sha256HexSync(v)}
+    if(hash!==SETUP_CODE_HASH){
+      setupCodeFailCount++;
+      if(setupCodeFailCount>=5){setupCodeLockedUntil=Date.now()+5*60000;setupCodeFailCount=0}
+      showError('رمز الإعداد غير صحيح. تأكد من الرمز ثم حاول مرة أخرى.');
+      return;
+    }
 
-  if(action==='resyncLogin'){
-    await resyncLoginData();
-    return;
+    setupCodeFailCount=0;
+    setupCodeVerified=true;
+    verified=true;
+    if(errorEl)errorEl.classList.add('hidden');
+    const action=setupActionAfterVerify;
+    setupActionAfterVerify='';
+
+    /* بعد نجاح التحقق ننتقل مباشرةً في نفس دورة التنفيذ.
+       لا نستخدم setTimeout هنا حتى لا تتعطل شاشة إعداد المدير بسبب أي تعارض
+       مع دورة أحداث المتصفح أو إزالة الـ overlay. openModal نفسها تزيل أي نافذة
+       سابقة قبل إنشاء النافذة الجديدة. */
+    if(action==='resyncLogin'){
+      closeModal();
+      Promise.resolve(resyncLoginData()).catch(e=>alert('تعذر إعادة مزامنة بيانات الدخول: '+(e?.message||e)));
+      return;
+    }
+    if(action==='browserRecovery'){
+      closeModal();
+      Promise.resolve(chromeLoginRecovery()).catch(e=>alert('تعذر إصلاح الدخول للمتصفح: '+(e?.message||e)));
+      return;
+    }
+
+    /* فتح شاشة إعداد المدير مباشرة من نفس مسار التحقق.
+       لا نعتمد هنا على openRegister() حتى لا يمنعها أي شرط آخر أو تهيئة
+       متأخرة للصفحة؛ setupCodeVerified أصبح true بالفعل في هذه اللحظة. */
+    try{
+      const isFirst=USERS.length===0;
+      const html=`<h3>إنشاء حساب المدير الرئيسي للنظام</h3>
+      <div class="field"><label>نوع الحساب</label>
+       <div class="role-radios">
+        <label><input type="radio" name="r_role" value="employee" disabled checked> موظف</label>
+        <label><input type="radio" name="r_role" value="manager" disabled> مدير</label>
+        <label><input type="radio" name="r_role" value="finance" disabled> الإدارة المالية</label>
+       </div>
+      </div>
+      <div class="field hidden" id="r_categoryField"><label>فئة المدير</label><select id="r_category">${managerCategoryOptions('')}</select></div>
+      <div class="field"><label>الاسم</label><input id="r_name"></div>
+      <div class="grid2">
+       <div class="field"><label>رقم الهاتف</label><input id="r_phone" type="tel"></div>
+       <div class="field"><label>الإيميل</label><input id="r_email" type="email" autocomplete="email"></div>
+      </div>
+      <div class="grid2">
+       <div class="field"><label>الإدارة</label><input id="r_department" placeholder="مثال: إدارة تنمية الموارد المالية"></div>
+       <div class="field"><label>اسم المستخدم</label><input id="r_username"></div>
+      </div>
+      <div class="grid2">
+       <div class="field"><label>كلمة المرور</label><input id="r_pass" type="password" minlength="8" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
+       <div class="field"><label>تأكيد كلمة المرور</label><input id="r_pass2" type="password"></div>
+      </div>
+      <p class="small-note" style="margin-top:2px">هذه هي بيانات حسابك الشخصي كمدير رئيسي للنظام فقط. يمكنك إنشاء حساب جديد الآن، أو استخدام خيار الاستعادة أدناه إذا كان حساب المدير محفوظًا في Google Sheets.</p>
+      <div class="settings-section" style="margin-top:10px">
+        <b style="display:block;margin-bottom:6px;color:var(--primary-dark)">استعادة حساب المدير من Google Sheets</b>
+        <p class="small-note">إذا كان النظام مرتبطًا مسبقًا بنفس Google Sheets، يمكنك استعادة حساب المدير الموجود دون حذف بيانات النظام.</p>
+        <button class="btn-outline btn-small" id="restoreSuperAdminBtn" onclick="restoreSuperAdminFromSheet()">استعادة حساب المدير من الشيت</button>
+      </div>
+      <div class="modal-actions"><button class="btn-primary" onclick="submitRegister(true)">إنشاء / إعادة تهيئة الحساب</button><button class="btn-outline" onclick="returnToNormalLogin()">الدخول بحساب موجود</button></div>`;
+      openModal(html);
+      const overlay=document.getElementById('overlay');
+      if(!overlay) throw new Error('overlay was not created');
+      const firstField=document.getElementById('r_name');
+      if(firstField) setTimeout(()=>firstField.focus(),30);
+    }catch(e){
+      console.error('direct admin setup open failed',e);
+      setupCodeVerified=false;
+      try{openRegister(true)}catch(_e){}
+      if(!document.getElementById('overlay')) alert('تم التحقق من رمز الإعداد، لكن تعذر فتح شاشة إعداد المدير.');
+    }
+  }catch(e){
+    console.error('setup code verification failed',e);
+    showError('تعذر التحقق من رمز الإعداد في هذا المتصفح. أعد المحاولة.');
+  }finally{
+    /* عند النجاح لا نعيد فتح/تغيير زر نافذة أُغلقت بالفعل. */
+    if(btn && !verified){btn.disabled=false;btn.textContent='متابعة'}
   }
-  if(action==='browserRecovery'){
-    await chromeLoginRecovery();
-    return;
-  }
-  openRegister(true);
 }
 
 async function resyncLoginData(){
@@ -4677,6 +4788,36 @@ async function resyncLoginData(){
 /* ---------- account registration: adding accounts is restricted to the super admin ---------- */
 function managerCategoryOptions(selected){
   return `<option value="">بدون فئة (مدير)</option>`+managerCategories.map(c=>`<option value="${escapeHtml(c)}" ${c===selected?'selected':''}>${escapeHtml(c)}</option>`).join('');
+}
+async function restoreSuperAdminFromSheet(){
+  if(!setupCodeVerified){alert('يرجى التحقق من رمز إعداد النظام أولًا.');return}
+  if(!GAS_URL){alert('لا يوجد رابط Google Sheets محفوظ في هذا المتصفح. أدخل رابط الشيت من شاشة المزامنة ثم أعد المحاولة.');return}
+  const btn=document.getElementById('restoreSuperAdminBtn');
+  if(btn){btn.disabled=true;btn.textContent='جارٍ الاستعادة...'}
+  try{
+    /* preserveLocalIfRemoteEmpty يمنع استبدال البيانات المحلية إذا كان الشيت فارغًا. */
+    await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});
+    const admins=USERS.filter(u=>u && u.role==='superadmin' && u.active!==false);
+    if(!admins.length){
+      alert('لم يتم العثور على حساب مدير رئيسي في Google Sheets. يمكنك إنشاء حساب جديد من النموذج.');
+      return;
+    }
+    const admin=admins.sort((a,b)=>{
+      const at=Date.parse(a.updatedAt||''),bt=Date.parse(b.updatedAt||'');
+      return (isNaN(bt)?0:bt)-(isNaN(at)?0:at);
+    })[0];
+    currentUser=admin;
+    safeSet(localStorage,UKEY,JSON.stringify(USERS));
+    safeSet(sessionStorage,SESSION,admin.id);
+    setupCodeVerified=false;
+    closeModal();
+    showApp();
+    alert('تمت استعادة حساب المدير الرئيسي بنجاح. لم يتم حذف بيانات النظام.');
+  }catch(e){
+    alert('تعذر استعادة حساب المدير من Google Sheets حاليًا. لم يتم حذف أي بيانات. يمكنك إنشاء الحساب محليًا أو المحاولة مرة أخرى.');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='استعادة حساب المدير من الشيت'}
+  }
 }
 function openRegister(forceSuper){
   const isFirst=USERS.length===0;
@@ -4716,8 +4857,13 @@ function openRegister(forceSuper){
    <div class="field"><label>كلمة المرور</label><input id="r_pass" type="password" minlength="8" placeholder="8 خانات على الأقل، تحتوي حرفًا ورقمًا"></div>
    <div class="field"><label>تأكيد كلمة المرور</label><input id="r_pass2" type="password"></div>
   </div>
-  <p class="small-note" style="margin-top:2px">هذه هي بيانات حسابك الشخصي كمدير رئيسي للنظام فقط. ربط Google Sheets خطوة منفصلة واختيارية يمكنك عملها بعد الدخول، من شاشة "مزامنة البيانات" — النظام يعمل محليًا في هذا المتصفح بدون ربط، وتقدر تربطه في أي وقت لاحق.</p>
-  <div class="modal-actions"><button class="btn-primary" onclick="submitRegister(true)">إنشاء الحساب</button><button class="btn-outline" onclick="returnToNormalLogin()">الدخول بحساب موجود</button></div>`)
+  <p class="small-note" style="margin-top:2px">هذه هي بيانات حسابك الشخصي كمدير رئيسي للنظام فقط. يمكنك إنشاء حساب جديد الآن، أو استخدام خيار الاستعادة أدناه إذا كان حساب المدير محفوظًا في Google Sheets.</p>
+  <div class="settings-section" style="margin-top:10px">
+    <b style="display:block;margin-bottom:6px;color:var(--primary-dark)">استعادة حساب المدير من Google Sheets</b>
+    <p class="small-note">إذا كان النظام مرتبطًا مسبقًا بنفس Google Sheets، يمكنك استعادة حساب المدير الموجود دون حذف بيانات النظام.</p>
+    <button class="btn-outline btn-small" id="restoreSuperAdminBtn" onclick="restoreSuperAdminFromSheet()">استعادة حساب المدير من الشيت</button>
+  </div>
+  <div class="modal-actions"><button class="btn-primary" onclick="submitRegister(true)">إنشاء / إعادة تهيئة الحساب</button><button class="btn-outline" onclick="returnToNormalLogin()">الدخول بحساب موجود</button></div>`)
 }
 function openRegisterDetails(prefill){
   const phone=(prefill&&prefill.phone)||'';
@@ -4810,10 +4956,27 @@ async function submitRegister(locked){
       USERS.push(payload);
     }
     touchUser(payload);
+    /* الحفظ المحلي فوري ولا ينتظر الشبكة. المزامنة مع Google Sheets تعمل بالخلفية
+       حتى لا تتجمد شاشة الإنشاء/الاستعادة إذا كان /exec بطيئًا أو غير متاح مؤقتًا. */
     safeSet(localStorage,UKEY,JSON.stringify(USERS));
-    await saveUsersReliable(); currentUser=payload; safeSet(sessionStorage,SESSION,payload.id);
+    currentUser=payload;
+    safeSet(sessionStorage,SESSION,payload.id);
     setupCodeVerified=false;
-    closeModal(); showApp(); alert('تم إنشاء حساب المدير الرئيسي للنظام بنجاح. يمكنك الآن ربط Google Sheets متى شئت من شاشة "مزامنة البيانات" — الخطوة اختيارية وليست شرطًا لاستخدام النظام.'); return;
+    closeModal();
+    showApp();
+    showSaveToast('تم إنشاء/استعادة حساب المدير محليًا');
+    if(GAS_URL){
+      Promise.resolve().then(async()=>{
+        try{
+          const ok=await syncPushNow();
+          if(!ok)showSaveToast('تم الحفظ محليًا — ستتم المزامنة تلقائيًا عند عودة الاتصال');
+        }catch(e){
+          showSaveToast('تم الحفظ محليًا — تعذرت المزامنة الآن');
+        }
+      });
+    }
+    alert('تم إنشاء/استعادة حساب المدير الرئيسي بنجاح. تم حفظ الحساب فورًا على هذا الجهاز، وتعمل مزامنته مع Google Sheets في الخلفية دون تعطيل النظام.');
+    return;
   }
   payload={id:uid(),fullName:name,phone,email,department,username,passwordHash:'',role,managerCategory,followScope,active:true,permissions:defaultPermissionsFor({role}),securityQuestion:'',securityAnswer:'',activated:false,activationToken:genSecureToken(24),phoneVerified:false};
   touchUser(payload);
@@ -5254,7 +5417,7 @@ function saveManagerCategoryFor(id){
  if(!isSuperAdmin(currentUser))return;
  const u=USERS.find(x=>x.id===id);if(!u||u.role!=='manager')return;
  u.managerCategory=document.getElementById('mc_category')?.value||'';
- saveUsers();closeModal();renderManagerTabs();openManageAccounts();
+ saveUsers();closeModal();openManageAccounts();
 }
 function demoteToEmployee(id){
  if(!isSuperAdmin(currentUser))return;
@@ -5264,7 +5427,7 @@ function demoteToEmployee(id){
 function executeDemote(payload){
  const u=USERS.find(x=>x.id===payload.id);if(!u)return;
  if(u.role==='manager'){u.role='employee';u.managerCategory='';touchUser(u);saveUsers()}
- closeModal();renderManagerTabs();openManageAccounts();
+ closeModal();openManageAccounts();
 }
 function toggleUserActive(id){
  if(!isSuperAdmin(currentUser))return;
@@ -5273,7 +5436,7 @@ function toggleUserActive(id){
 }
 function executeToggleActive(payload){
  const u=USERS.find(x=>x.id===payload.id);if(!u)return;
- u.active=!isActiveUser(u);touchUser(u);saveUsers();closeModal();renderManagerTabs();openManageAccounts();
+ u.active=!isActiveUser(u);touchUser(u);saveUsers();closeModal();openManageAccounts();
 }
 function promoteToManager(id){
   if(!isSuperAdmin(currentUser))return;
@@ -5285,7 +5448,7 @@ function executePromote(payload){
   const u=USERS.find(x=>x.id===payload.id);if(!u)return;
   if(u.role==='employee'){u.role='manager';touchUser(u);saveUsers()}
   closeModal();
-  renderManagerTabs();
+  
   openManageAccounts();
 }
 function deleteUserAccount(id){
@@ -5305,7 +5468,7 @@ async function executeDeleteAccount(payload){
   USERS=USERS.filter(x=>String(x.id)!==deletedId);
   safeSet(localStorage,UKEY,JSON.stringify(USERS));
   closeModal();
-  renderManagerTabs();
+  
   openManageAccounts();
   const ok=await saveUsersReliable();
   if(!USERS.some(x=>String(x.id)===deletedId)){
@@ -5562,84 +5725,13 @@ function statusBadge(s){
 
 /* ---------- render: donors ---------- */
 function render(){
-  renderManagerTabs();renderStats();renderChips();
+  renderStats();renderChips();
   let list=donorsFilteredList();
   if(searchTerm.trim()){let t=searchTerm.trim();list=list.filter(d=>d.name.includes(t)||(d.phone||'').includes(t))}
   if(currentFilter!=='all')list=list.filter(d=>status(d)===currentFilter);
   list.sort((a,b)=>normName(a.name).localeCompare(normName(b.name),'ar'));
   document.getElementById('listArea').innerHTML=list.length?list.map(card).join(''):'<div class="empty">لا توجد نتائج. جرّب تغيير البحث أو الفلتر أو إضافة متبرع.</div>'
 }
-function renderManagerTabs(){
-  if(!isManagerRole(currentUser))return;
-
-  const box=document.getElementById('employeeTabs');
-  if(!box)return;
-
-  // المدير الرئيسي يرى كل الموظفين والمديرين.
-  // المدير (غير الرئيسي) يرى الموظفين فقط، ولا يرى بيانات مديرين آخرين.
-  const people = isSuperAdmin(currentUser)
-    ? USERS.filter(u=>u.role==='employee'||u.role==='manager')
-    : USERS.filter(u=>u.role==='employee');
-
-  const employees = people.filter(u=>u.role==='employee');
-  const managers  = people.filter(u=>u.role==='manager');
-
-  const personButton = (u) => {
-    const count = donors.filter(d=>d.employeeId===u.id).length;
-    const active = isActiveUser(u);
-    const roleText = u.role==='manager' ? userRoleLabel(u) : 'موظف';
-    const roleClass = u.role==='manager' ? 'manager' : 'employee';
-
-    return `<button class="manager-person-chip ${managerEmployee===u.id?'selected':''} ${!active?'inactive':''}"
-      onclick="managerEmployee='${u.id}';render()">
-      <span class="manager-person-main">
-        <span class="manager-person-name">${escapeHtml(u.fullName)}</span>
-        <span class="manager-person-role ${roleClass}">${escapeHtml(roleText)}</span>
-        ${!active?'<span class="manager-person-status">غير نشط</span>':''}
-      </span>
-      <span class="manager-person-count">${count}</span>
-    </button>`;
-  };
-
-  const employeeButtons = employees.length
-    ? employees.map(personButton).join('')
-    : '<span class="small-note">لا يوجد موظفون.</span>';
-
-  const managerButtons = managers.length
-    ? managers.map(personButton).join('')
-    : '<span class="small-note">لا يوجد مديرون مسجلون.</span>';
-
-  box.innerHTML = `
-    <div class="manager-tabs-panel">
-      <div class="manager-tabs-head">
-        <div>
-          <b>لوحة المدير</b>
-          <span class="small-note">${isSuperAdmin(currentUser)?'اختر الموظف أو المدير لعرض المتبرعين التابعين له':'اختر الموظف لعرض المتبرعين التابعين له'}</span>
-        </div>
-        <button class="user-chip ${managerEmployee==='all'?'btn-primary':''}"
-          onclick="managerEmployee='all';render()">
-          ${isSuperAdmin(currentUser)?'كل الموظفين والمديرين':'كل الموظفين'} (${visibleDonors().length})
-        </button>
-      </div>
-
-      <div class="manager-group">
-        <div class="manager-group-title">
-          <span>الموظفون</span>
-          <span class="manager-group-count">${employees.length}</span>
-        </div>
-        <div class="manager-people">${employeeButtons}</div>
-      </div>
-
-      ${isSuperAdmin(currentUser)?`<div class="manager-group">
-        <div class="manager-group-title">
-          <span>مديرو الإدارات</span>
-          <span class="manager-group-count">${managers.length}</span>
-        </div>
-        <div class="manager-people">${managerButtons}</div>
-      </div>`:''}
-    </div>`;
-}
-
 function donorsFilteredList(){
   let list=visibleDonors();
   if(donorsCustomRange)list=list.filter(d=>inRange(d.registeredDate,donorsFrom,donorsTo||todayStr()));
@@ -5658,27 +5750,7 @@ function clearDonorsRange(){
   document.getElementById('donorsToInput').value='';
   render();
 }
-function renderStats(){
-  const list=donorsFilteredList();
-  const totalPersons=list.length;
-  const donorsWithDonation=list.filter(d=>donationEntries(d).length>0).length;
-  const totalDonationsSum=list.reduce((sum,d)=>sum+donationEntries(d).reduce((s,h)=>s+(Number(String(h.amount).replace(/,/g,''))||0),0),0);
-  const today=list.filter(d=>status(d)==='today').length, month=list.filter(d=>status(d)==='month').length;
-  const available=list.filter(d=>status(d)==='available').length;
-  const contactedDonors=list.filter(d=>contactCount(d)>0).length;
-  const repliedDonors=list.filter(d=>contactEntries(d).some(x=>REPLIED_ACTIONS.includes(x.action))).length;
-  const rejectedDonors=list.filter(d=>contactEntries(d).some(x=>x.action===REJECTED_ACTION)).length;
-  document.getElementById('statsRow').innerHTML=`
-   <div class="stat"><div class="num">${totalPersons}</div><div class="lbl">عدد الأفراد المسجّلين</div></div>
-   <div class="stat amber"><div class="num">${contactedDonors}</div><div class="lbl">عدد تم التواصل معهم</div></div>
-   <div class="stat green"><div class="num">${repliedDonors}</div><div class="lbl">عدد تم الرد</div></div>
-   <div class="stat red"><div class="num">${rejectedDonors}</div><div class="lbl">عدد الرافضين</div></div>
-   <div class="stat gold"><div class="num">${donorsWithDonation}</div><div class="lbl">عدد المتبرعين الفعليين</div></div>
-   <div class="stat"><div class="num">${totalDonationsSum.toLocaleString('ar-EG')}</div><div class="lbl">إجمالي التبرعات (جنيه)</div></div>
-   <div class="stat green"><div class="num">${available}</div><div class="lbl">متاح للتواصل</div></div>
-   <div class="stat amber"><div class="num">${month}</div><div class="lbl">تم التواصل هذا الشهر</div></div>
-   <div class="stat red"><div class="num">${today}</div><div class="lbl">تم التواصل اليوم</div></div>`
-}
+function renderStats(){const list=donorsFilteredList(),rows=[];list.forEach(d=>donationEntries(d).forEach(h=>{if(h&&h.type==='donation')rows.push(h)}));const sum=a=>a.reduce((s,h)=>s+(Number(String(h.amount||0).replace(/,/g,''))||0),0),total=sum(rows),approved=sum(rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='approved')),pending=sum(rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='pending')),rejected=sum(rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='rejected'));document.getElementById('statsRow').innerHTML=`<div class="stat gold"><div class="num">${total.toLocaleString('ar-EG')}</div><div class="lbl">إجمالي التبرعات (قيمة)</div></div><div class="stat green"><div class="num">${approved.toLocaleString('ar-EG')}</div><div class="lbl">التبرعات المعتمدة (قيمة)</div></div><div class="stat amber"><div class="num">${pending.toLocaleString('ar-EG')}</div><div class="lbl">التبرعات بانتظار الاعتماد (قيمة)</div></div><div class="stat red"><div class="num">${rejected.toLocaleString('ar-EG')}</div><div class="lbl">التبرعات المرفوضة (قيمة)</div></div>`}
 function renderChips(){
  const cs=[['all','الكل'],['available','متاح للتواصل'],['month','تم التواصل هذا الشهر'],['today','تم التواصل اليوم']];
  document.getElementById('filterChips').innerHTML=cs.map(x=>`<button class="chip ${currentFilter===x[0]?'active':''}" onclick="currentFilter='${x[0]}';render()">${x[1]}</button>`).join('')
@@ -5735,7 +5807,8 @@ function renderNewDonors(){
   }
   list=list.sort((a,b)=>(b.registeredDate||'').localeCompare(a.registeredDate||''));
   document.getElementById('newDonorsStats').innerHTML=`<div class="stat gold"><div class="num">${list.length}</div><div class="lbl">عدد المتبرعين الجدد</div></div>`;
-  document.getElementById('newDonorsList').innerHTML=list.length?list.map(card).join(''):'<div class="empty">لا يوجد متبرعون جدد ضمن هذه الفترة.</div>';
+  const rows=list.map((d,i)=>{const es=donationEntries(d).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))),last=es[0]?.date||d.registeredDate||'';return `<tr onclick="openRecord('${String(d.id).replace(/'/g,"\\'")}')" style="cursor:pointer"><td>${i+1}</td><td><b>${escapeHtml(d.name||'—')}</b></td><td>${escapeHtml(d.phone||'—')}</td><td>${last?fmtDate(last):'—'}</td><td>${es.length}</td></tr>`}).join('');
+document.getElementById('newDonorsList').innerHTML=list.length?`<div class="donation-record-table-wrap"><table class="donation-record-table"><thead><tr><th>رقم</th><th>الاسم</th><th>رقم تليفون</th><th>تاريخ آخر حركة</th><th>عدد التبرعات</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty">لا يوجد متبرعون جدد ضمن هذه الفترة.</div>';
 }
 
 /* ---------- monthly donors (detected from donation notes) ---------- */
@@ -5825,22 +5898,7 @@ function renderDonorRatings(){
 }
 
 /* ---------- reports (periodic) ---------- */
-function refreshLocationsDatalist(){
- const el=document.getElementById('locationsDatalist');if(!el)return;
- const set=new Map();
- donors.forEach(d=>(d.history||[]).forEach(h=>{const loc=String(h.location||'').trim();if(loc&&!set.has(normName(loc)))set.set(normName(loc),loc)}));
- el.innerHTML=Array.from(set.values()).sort((a,b)=>a.localeCompare(b,'ar')).map(loc=>`<option value="${escapeHtml(loc)}"></option>`).join('');
-}
 
-/* Global list of ALL donor names (regardless of which employee owns them) so any
-   employee typing a donation can pick the existing spelling instead of retyping it
-   and accidentally creating a near-duplicate donor. */
-function refreshAllDonorNamesDatalist(){
- const el=document.getElementById('allDonorNamesDatalist');if(!el)return;
- const set=new Map();
- donors.forEach(d=>{const nm=String(d.name||'').trim();if(nm&&!set.has(normName(nm)))set.set(normName(nm),nm)});
- el.innerHTML=Array.from(set.values()).sort((a,b)=>a.localeCompare(b,'ar')).map(nm=>`<option value="${escapeHtml(nm)}"></option>`).join('');
-}
 
 function periodRange(key){
  const to=new Date();
@@ -5899,14 +5957,7 @@ function reportBaseDonors(){
  }
  return [];
 }
-function allReportLocations(){
- const set=new Map();
- reportBaseDonors().forEach(d=>reportHistoryForDonor(d).forEach(h=>{
-   const loc=String(h.location||'').trim();
-   if(loc&&!set.has(normName(loc)))set.set(normName(loc),loc);
- }));
- return Array.from(set.values()).sort((a,b)=>a.localeCompare(b,'ar'));
-}
+function allReportLocations(){const set=new Map();ensureLocationsCatalog();locations.forEach(loc=>{const v=String(loc||'').trim();if(v&&!set.has(normName(v)))set.set(normName(v),v)});reportBaseDonors().forEach(d=>reportHistoryForDonor(d).forEach(h=>{const loc=String(h.location||'').trim();if(loc&&!set.has(normName(loc)))set.set(normName(loc),loc)}));return Array.from(set.values()).sort((a,b)=>a.localeCompare(b,'ar'))}
 function locationMatches(row){
  if(reportLocation==='all')return true;
  return normName(row&&row.location)===normName(reportLocation);
@@ -6440,7 +6491,9 @@ document.addEventListener('click',e=>{const b=e.target?.closest?.('#overlay .mod
 
 /* ---------- privacy, data protection & IP rights policy ---------- */
 function openPolicy(){
- if(!canModule('policy','view',currentUser))return;
+ /* السياسة وثيقة عامة داخل النظام: يجب أن تكون متاحة قبل تسجيل الدخول أيضًا،
+    وليس فقط بعد وجود currentUser. */
+ if(currentUser && !canModule('policy','view',currentUser))return;
  openModal(`<h3>سياسة الخصوصية وحماية البيانات وحقوق الملكية</h3>
  <div class="policy-body">
   <p class="small-note">مؤسسة غيث للتنمية المجتمعية — نظام إدارة تنمية الموارد المالية (أفراد) · آخر تحديث: ${escapeHtml(fmtDate(todayStr()))}</p>
@@ -6480,7 +6533,50 @@ function openPolicy(){
 
   <p class="small-note" style="margin-top:14px">هذه السياسة وثيقة استرشادية داخلية لتنظيم استخدام النظام، وليست بديلاً عن استشارة قانونية متخصصة إن رغبت المؤسسة في اعتمادها كسياسة رسمية موثّقة أو مطابقتها لأي تشريعات محلية لحماية البيانات.</p>
  </div>
- <div class="modal-actions"><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)
+ <div class="modal-actions">
+   <button class="btn-outline" onclick="printPolicy()">طباعة السياسة</button>
+   <button class="btn-outline" onclick="downloadPolicy()">تنزيل السياسة</button>
+   <button class="btn-primary" onclick="closeModal()">إغلاق</button>
+ </div>`)
+}
+function getPolicyPlainText(){
+ return `سياسة الخصوصية وحماية البيانات وحقوق الملكية
+مؤسسة غيث للتنمية المجتمعية — نظام إدارة تنمية الموارد المالية
+
+أولًا: خصوصية البيانات
+يجمع النظام البيانات اللازمة لإدارة المتبرعين والتواصل والتبرعات والمشاريع.
+لا تتم مشاركة بيانات المتبرعين مع جهة خارج المؤسسة دون سند قانوني أو موافقة صريحة.
+يقتصر الاطلاع على البيانات بحسب صلاحيات المستخدم.
+تستخدم بيانات حسابات المستخدمين لأغراض الدخول واستعادة الحساب.
+
+ثانيًا: حماية البيانات
+تُحفظ البيانات محليًا ويمكن مزامنتها مع Google Sheets الخاص بالمؤسسة.
+تُحمى الحسابات باسم مستخدم وكلمة مرور وصلاحيات مختلفة.
+إجراءات إدارة الحسابات والحذف الحساسة مقيدة بالمدير الرئيسي.
+يجب على المستخدم المحافظة على سرية بيانات الدخول وتسجيل الخروج من الأجهزة المشتركة.
+
+ثالثًا: حقوق الملكية
+النظام وتصميمه وشيفرته وهيكلته مملوكة لمؤسسة غيث للتنمية المجتمعية ومخصصة للاستخدام الداخلي.
+بيانات المتبرعين والتبرعات والمشاريع ملك للمؤسسة.
+لا يجوز نسخ النظام أو توزيعه أو إعادة استخدامه خارج نطاق المؤسسة دون إذن كتابي.
+
+رابعًا: مسؤوليات المستخدم
+الحفاظ على سرية بيانات الدخول.
+عدم إدخال بيانات لا تخص عمل المؤسسة.
+الإبلاغ فورًا عن أي اشتباه في اختراق أو تسريب بيانات.
+
+آخر تحديث: ${fmtDate(todayStr())}`;
+}
+function downloadPolicy(){
+ const blob=new Blob([getPolicyPlainText()],{type:'text/plain;charset=utf-8'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='سياسة_الخصوصية_وحماية_البيانات_وحقوق_الملكية.txt';
+ document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function printPolicy(){
+ const w=window.open('','_blank','width=900,height=800');
+ if(!w){alert('يرجى السماح بالنوافذ المنبثقة للطباعة.');return}
+ w.document.write('<html dir="rtl"><head><meta charset="UTF-8"><title>سياسة الخصوصية وحماية البيانات وحقوق الملكية</title><style>body{font-family:Tahoma,Arial,sans-serif;line-height:2;padding:32px;color:#17302E}h1{text-align:center;font-size:24px}pre{white-space:pre-wrap;font-family:inherit;font-size:15px}</style></head><body><h1>سياسة الخصوصية وحماية البيانات وحقوق الملكية</h1><pre>'+escapeHtml(getPolicyPlainText())+'</pre></body></html>');
+ w.document.close();w.focus();setTimeout(()=>w.print(),250);
 }
 
 /* ---------- add / edit donor (name+phone only) ---------- */
@@ -6580,7 +6676,10 @@ async function confirmDeleteDonor(id){
  const d=donors.find(x=>x.id===id);if(!d)return;
  if(allDonationEntries(d).length>0){alert('لا يمكن حذف هذا المتبرع لوجود حركات تبرع مسجلة عليه. احذفها أولًا.');closeModal();return}
  if(!confirm('تأكيد نهائي: هل تريد حذف المتبرع «'+d.name+'» وجميع سجلاته؟'))return;
- donors=donors.filter(x=>x.id!==id);persist();closeModal();render();
+ donors=donors.filter(x=>x.id!==id);__markSyncEntityDeleted('donors',id);persist();
+ const syncDeleteOk=GAS_URL?await syncPushNow({silent:false}):true;
+ closeModal();render();
+ if(GAS_URL&&!syncDeleteOk)alert('تم حذف المتبرع محليًا، لكن تعذر تأكيد الحذف على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.');
 }
 
 /* ---------- projects datalist ---------- */
@@ -6777,16 +6876,16 @@ function renderCompanyPipeline(){const list=companyFilteredList(),stages=company
 function renderCompanyTasksDashboard(){const rows=[];companyFilteredList().forEach(c=>(c.tasks||[]).forEach(t=>{if(t.status!=='done')rows.push({c,t})}));rows.sort((a,b)=>(a.t.dueDate||'').localeCompare(b.t.dueDate||''));return `<div class="company-report-section"><h4>المتابعات المفتوحة والمتأخرة</h4>${rows.length?rows.map(({c,t})=>`<div class="company-task ${t.dueDate&&t.dueDate<todayStr()?'overdue':''}"><div><b>${escapeHtml(t.title)}</b><div class="small-note">${escapeHtml(c.name)} · ${t.dueDate?fmtDate(t.dueDate):'بدون تاريخ'} · أولوية ${escapeHtml(t.priority||'متوسطة')}</div></div><button class="btn-primary btn-small" onclick="completeCompanyTask('${c.id}','${t.id}')">تم التنفيذ</button></div>`).join(''):'<div class="empty">لا توجد متابعات مفتوحة.</div>'}</div>`}
 function setCompanySubView(v){companySubView=['list','pipeline','tasks','report'].includes(v)?v:'list';['companySubListBtn','companySubPipelineBtn','companySubTasksBtn','companySubReportBtn','companySubConfigBtn'].forEach(id=>document.getElementById(id)?.classList.remove('active'));const map={list:'companySubListBtn',pipeline:'companySubPipelineBtn',tasks:'companySubTasksBtn',report:'companySubReportBtn'};document.getElementById(map[companySubView])?.classList.add('active');document.getElementById('companyListPanel')?.classList.remove('hidden');document.getElementById('companyReportPanel')?.classList.add('hidden');renderCompanies()}
 function renderCompanies(){
-  companyConfigPro();companies=companies.map(companyNormalize);renderCompanyManagerTabs();
+  companyConfigPro();companies=companies.map(companyNormalize);
   if(companySubView==='pipeline'){document.getElementById('companyKpis').innerHTML='';document.getElementById('companyFilterChips').innerHTML='';document.getElementById('companiesListArea').innerHTML=renderCompanyPipeline();return}
   if(companySubView==='tasks'){document.getElementById('companyKpis').innerHTML='';document.getElementById('companyFilterChips').innerHTML='';document.getElementById('companiesListArea').innerHTML=renderCompanyTasksDashboard();return}
   if(companySubView==='report'){document.getElementById('companyListPanel').classList.add('hidden');document.getElementById('companyReportPanel').classList.remove('hidden');renderCompanyGeneralReport();return}
   document.getElementById('companyListPanel').classList.remove('hidden');renderCompanyKpis();renderCompanyFilters();const list=companyFilteredList();document.getElementById('companiesListArea').innerHTML=list.length?list.map(companyCard).join(''):'<div class="empty">لا توجد شركات مطابقة للبحث أو الفلاتر الحالية. أضف أول شركة لبدء CRM الشركات.</div>';
-  const add=document.getElementById('addCompanyBtn');if(add)add.classList.toggle('hidden',!companyCan('add'));const exp=document.getElementById('companyExcelExportBtn');if(exp)exp.classList.toggle('hidden',!isSuperAdmin(currentUser));
+  const add=document.getElementById('addCompanyBtn');if(add)add.classList.toggle('hidden',!companyCan('add'));const exp=document.getElementById('companyExcelExportBtn');if(exp)exp.classList.toggle('hidden',!isSuperAdmin(currentUser));bindCompanyAddButton();
 }
 /* Reliable add-company fallback: bind the button directly after every render so a stale inline handler cannot block the form. */
 function bindCompanyAddButton(){const b=document.getElementById('addCompanyBtn');if(!b||b.dataset.boundPro)return;if(!companyCan('add'))return;b.dataset.boundPro='1';b.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openCompanyForm('')})}
-const _renderCompaniesBase=renderCompanies;renderCompanies=function(){_renderCompaniesBase();bindCompanyAddButton()};
+
 function legacy_saveCompanyConfig(){if(!isSuperAdmin(currentUser)){alert('إعدادات الشركات متاحة للمدير الرئيسي فقط.');return}companyConfigPro();const keys=Object.keys(COMPANY_PRO_DEFAULT);keys.forEach(k=>{const el=document.getElementById('ccfg_'+k);if(el){const vals=el.value.split(/\n/).map(x=>x.trim()).filter(Boolean);if(vals.length)companyConfig[k]=[...new Set(vals)]}});persistCompanyConfig();closeModal();renderCompanies()}
 function legacy_openCompanyConfig(){if(!isSuperAdmin(currentUser)){alert('إعدادات الشركات متاحة للمدير الرئيسي فقط.');return}companyConfigPro();const section=(key,label)=>`<div class="company-form-section"><h4>${label}</h4><textarea id="ccfg_${key}" rows="5">${escapeHtml((companyConfig[key]||[]).join('\n'))}</textarea><div class="small-note">كل سطر = اختيار مستقل. يمكنك الإضافة أو التعديل أو الحذف.</div></div>`;openModal(`<h3>إعدادات CRM الشركات والشراكات</h3>${Object.keys(COMPANY_PRO_DEFAULT).map(k=>section(k,({categories:'فئات الشركات',classifications:'تصنيفات العلاقة',stages:'مراحل الشراكة',activityTypes:'أنواع الإجراءات',companyTypes:'أنواع الشركات / العلاقة',sectors:'قطاعات الشركات',sources:'مصادر الشركات',interests:'مجالات اهتمام الشركة',partnershipTypes:'أنواع الشراكات'})[k]||k)).join('')}<div class="modal-actions"><button class="btn-primary" onclick="saveCompanyConfig()">حفظ الإعدادات</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)}
 
@@ -6910,7 +7009,7 @@ function addCompanyContactPerson(id){
 }
 function saveCompanyContactPerson(id){const c=companies.find(x=>x.id===id);if(!c||!canModule('companies','edit',currentUser))return;const name=document.getElementById('cp_name').value.trim();if(!name){alert('يرجى إدخال اسم جهة الاتصال.');return}c.contacts=c.contacts||[];c.contacts.push({id:uid(),name,role:document.getElementById('cp_role').value.trim(),phone:document.getElementById('cp_phone').value.trim(),email:document.getElementById('cp_email').value.trim()});persistCompanies();closeModal();openCompanyRecord(id)}
 function deleteCompany(id){const c=companies.find(x=>x.id===id);if(!c||!canModule('companies','delete',currentUser))return;if(!isSuperAdmin(currentUser)){alert('حذف الشركات متاح للمدير الرئيسي فقط.');return}openModal(`<h3>حذف الشركة</h3><div class="manager-box"><b>تنبيه:</b> سيتم حذف «${escapeHtml(c.name)}» وجميع جهات الاتصال وسجل النشاط الخاص بها. هذه العملية لا يمكن التراجع عنها.</div><div class="field"><label>كلمة مرور المدير الرئيسي</label><input id="deleteCompanyPass" type="password"></div><div class="modal-actions"><button class="btn-danger" onclick="confirmDeleteCompany('${id}')">تأكيد الحذف</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)}
-async function confirmDeleteCompany(id){if(!isSuperAdmin(currentUser))return;const pass=document.getElementById('deleteCompanyPass')?.value||'';if(!(await verifyPassword(currentUser,pass))){alert('كلمة مرور المدير الرئيسي غير صحيحة.');return}companies=companies.filter(c=>c.id!==id);persistCompanies();closeModal();renderCompanies();}
+async function confirmDeleteCompany(id){if(!isSuperAdmin(currentUser))return;const pass=document.getElementById('deleteCompanyPass')?.value||'';if(!(await verifyPassword(currentUser,pass))){alert('كلمة مرور المدير الرئيسي غير صحيحة.');return}companies=companies.filter(c=>c.id!==id);__markSyncEntityDeleted('companies',id);persistCompanies();closeModal();renderCompanies();}
 function legacy_exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير الشركات متاح للمدير الرئيسي للنظام فقط.');return}const rows=[['اسم الشركة','الاسم القانوني','مجال النشاط','الحالة','الأولوية','الهاتف','البريد','السجل التجاري','الرقم الضريبي','العنوان','جهات الاتصال','عدد التبرعات','إجمالي التبرعات','الموظف المسؤول']];visibleCompanies().forEach(c=>rows.push([c.name,c.legalName||'',c.industry||'',companyStatusLabel(companyStatus(c)),companyPriorityLabel(companyPriority(c)),c.phone||'',c.email||'',c.commercialReg||'',c.taxId||'',c.address||'',(c.contacts||[]).length,companyDonationEntries(c).filter(h=>h.status!=='pending').length,companyTotal(c),USERS.find(u=>u.id===c.employeeId)?.fullName||'']));const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,'الشركات');XLSX.writeFile(wb,'CRM_الشركات.xlsx')}
 
 /* ---------- new donation (separate action) ---------- */
@@ -6980,7 +7079,7 @@ function moduleDonationRows(){
       rows.push({entityType:'individual',entityLabel:'فرد',donor:d.name||'—',phone:d.phone||'',donorId:d.id||'',...h});
     });
   });
-  (Array.isArray(companies)?companies:[]).forEach(c=>{
+  visibleCompanies().forEach(c=>{
     (Array.isArray(c.history)?c.history:[]).filter(h=>h&&h.type==='donation').forEach(h=>{
       if(currentUser?.role==='employee' && !movementCreatedByCurrentUser(h))return;
       rows.push({entityType:'company',entityLabel:'شركة',donor:c.name||h.companyName||'—',phone:c.phone||'',donorId:'company:'+String(c.id||''),companyId:c.id||'',...h});
@@ -7037,36 +7136,7 @@ function renderModuleDonationRecords(){
     <div class="stat"><div class="num">${rejectedMovement}</div><div class="lbl">حركات مرفوضة</div></div>
     <div class="stat"><div class="num">${inProgress}</div><div class="lbl">قيد التنفيذ</div></div>`;
 
-  const groups=new Map();
-  rows.forEach(r=>{
-    const key=(r.entityType||'individual')+'::'+normName(r.donor);
-    if(!groups.has(key))groups.set(key,{name:r.donor,phone:r.phone,entityType:r.entityType||'individual',rows:[]});
-    groups.get(key).rows.push(r);
-  });
-  const grouped=[...groups.values()].sort((a,b)=>normName(a.name).localeCompare(normName(b.name),'ar'));
-
-  document.getElementById('moduleDonationRecords').innerHTML=grouped.length?grouped.map(g=>{
-    const sum=g.rows.reduce((s,r)=>s+(Number(String(r.amount||0).replace(/,/g,''))||0),0);
-    return `<div class="donation-summary-card">
-      <div class="summary-head">
-        <div><div class="summary-name">${escapeHtml(g.name)}</div><div class="small-note">${g.entityType==='company'?'الجهة: شركة':'الجهة: فرد'} · الهاتف: ${escapeHtml(g.phone||'—')} · عدد التبرعات: ${g.rows.length}</div></div>
-        <div class="summary-total">الإجمالي: ${money(sum)}</div>
-      </div>
-      <div class="donation-record-table-wrap" style="margin-top:10px">
-        <table class="donation-record-table">
-          <thead><tr><th>التاريخ</th><th>القيمة</th><th>المشروع</th><th>النية</th><th>المكان</th><th>القناة</th><th>الموظف المسؤول</th><th>حالة الحركة</th><th>الاعتماد المالي</th><th>الإيصال</th></tr></thead>
-          <tbody>${g.rows.map(r=>{
-            const fs=normalizeFinanceStatus(r.financeStatus);
-            const badge=fs==='approved'?(donationLinkedToFinance(r)?'<span class="badge green">معتمد ماليًا</span>':'<span class="badge green">معتمد</span>'):fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>';
-            return `<tr onclick="openUnifiedDonationDetail('${r.entityType||'individual'}','${r.entityType==='company'?r.companyId:r.donorId}','${r.hid}')" style="cursor:pointer">
-              <td>${fmtDate(r.date)}</td><td><b>${money(r.amount)}</b></td><td>${escapeHtml(r.project||'—')}</td><td>${escapeHtml(r.intention||'—')}</td><td>${escapeHtml(r.location||'—')}</td><td>${escapeHtml(r.method||'—')}</td><td>${escapeHtml(r.responsibleEmployeeName||r.by||'—')}</td><td><span class="badge">${escapeHtml(movementStatusLabel(r.movementStatus))}</span></td><td>${badge}</td>
-              <td>${r.attachmentData?'<span class="donation-attachment">📎 موجود</span>':'—'}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table>
-      </div>
-    </div>`;
-  }).join(''):'<div class="empty">لا توجد سجلات تبرعات مطابقة للبحث أو الفترة المحددة.</div>';
+  document.getElementById('moduleDonationRecords').innerHTML=rows.length?`<div class="donation-record-table-wrap"><table class="donation-record-table" style="min-width:1250px"><thead><tr><th>رقم الحركة</th><th>تاريخ</th><th>اسم</th><th>هاتف</th><th>مشروع</th><th>نية</th><th>قيمة</th><th>حالة الاعتماد</th><th>بواسطة</th><th>التواصل</th></tr></thead><tbody>${rows.map((r,i)=>{const fs=normalizeFinanceStatus(r.financeStatus),badge=fs==='approved'?'<span class="badge green">معتمد ماليًا</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>',contact=r.entityType==='company'?'—':(canDonorContact(currentUser)?`<button class="btn-gold btn-small" onclick="event.stopPropagation();openContact('${String(r.donorId)}')">تواصل</button>`:'—');return `<tr onclick="openUnifiedDonationDetail('${r.entityType||'individual'}','${r.entityType==='company'?r.companyId:r.donorId}','${r.hid}')"><td>${i+1}</td><td>${fmtDate(r.date)}</td><td>${escapeHtml(r.donor||'—')}</td><td>${escapeHtml(r.phone||'—')}</td><td>${escapeHtml(r.project||'—')}</td><td>${escapeHtml(r.intention||'—')}</td><td><b>${money(r.amount)}</b></td><td>${badge}</td><td>${escapeHtml(r.by||'—')}</td><td>${contact}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">لا توجد سجلات تبرعات مطابقة للبحث أو الفترة المحددة.</div>';
 }
 
 function openUnifiedDonationDetail(entityType,id,hid){
@@ -7305,8 +7375,11 @@ async function deleteDonation(id,hid){
    if(!canEditDeleteDonationEntry(freshEntry,'delete')){alert('تعذر الحذف: تم اعتماد هذه الحركة ماليًا للتو من الإدارة المالية. تم تحديث بياناتك تلقائيًا ولم يعد بالإمكان حذفها.');closeModal();render();if(currentView==='financeReview')renderFinanceReview();if(currentView==='donations')renderDonations();return}
    d=freshD;entry=freshEntry;
  }
- d.history=(d.history||[]).filter(h=>h.hid!==hid);
- persist();closeModal();render();
+ d.history=(d.history||[]).filter(h=>h.hid!==hid);__markSyncHistoryDeleted('individual',id,hid);
+ persist();
+ const syncDeleteOk=GAS_URL?await syncPushNow({silent:false}):true;
+ closeModal();render();
+ if(GAS_URL&&!syncDeleteOk)alert('تم حذف الحركة محليًا، لكن تعذر تأكيد حذفها على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.');
  if(currentView==='financeReview')renderFinanceReview();
  if(currentView==='donations')renderDonations();
  if(currentView==='reports')renderReports();
@@ -7651,47 +7724,25 @@ function saveEditProject(oldName){
 function projectHasMovements(name){
  return donors.some(d=>allDonationEntries(d).some(h=>normName(h.project)===normName(name)));
 }
-function deleteProject(name){
+async function deleteProject(name){
  if(!canModule('projects','delete',currentUser)){alert('ليس لديك صلاحية حذف المشاريع.');return}
  if(projectHasMovements(name)){alert('لا يمكن حذف المشروع «'+name+'» لوجود حركات تبرع مسجلة عليه. يجب حذف أو نقل حركات التبرع المرتبطة به أولًا (الحذف متاح لحساب الإدارة المالية فقط، ولا يمكن حذف الحركات المعتمدة ماليًا).');return}
  if(!confirm('حذف المشروع من قائمة المشاريع؟'))return;
- const removed=projects.find(p=>normName(p.name)===normName(name)); if(removed)__markCatalogDeleted('project',removed); projects=projects.filter(p=>normName(p.name)!==normName(name));saveProjects();renderProjects();
+ const removed=projects.find(p=>normName(p.name)===normName(name));
+ if(removed){__markCatalogDeleted('project',removed);__markSyncEntityDeleted('projects',removed.id||removed.name)}
+ projects=projects.filter(p=>normName(p.name)!==normName(name));saveProjects();renderProjects();
+ const syncDeleteOk=GAS_URL?await syncPushNow({silent:false}):true;
+ if(GAS_URL&&!syncDeleteOk)alert('تم حذف المشروع محليًا، لكن تعذر تأكيد الحذف على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.');
 }
 function projectContributions(name){
- const list=visibleDonors();
- const rows=[];
- list.forEach(d=>donationEntries(d).forEach(h=>{if(normName(h.project)===normName(name)&&inRange(h.date,projFrom,projTo))rows.push({donor:d.name,donorId:d.id,...h})}));
- return rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''))
+ const rows=[];visibleDonors().forEach(d=>donationEntries(d).forEach(h=>{if(normName(h.project)===normName(name)&&inRange(h.date,projFrom,projTo))rows.push({donor:d.name,donorId:d.id,...h})}));
+ visibleCompanies().forEach(c=>(c.history||[]).forEach(h=>{if(h&&h.type==='donation'&&normName(h.project)===normName(name)&&inRange(h.date,projFrom,projTo))rows.push({donor:c.name,donorId:'company:'+c.id,companyId:c.id,entityType:'company',...h})}));
+ return rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 }
-function renderProjects(){
- refreshProjectsDatalist();
- ensureProjectCodes();
- if(!projects.length){document.getElementById('projectsList').innerHTML='<div class="empty">لا توجد مشاريع بعد. اضغط "إضافة مشروع" للبدء.</div>';return}
- document.getElementById('projectsList').innerHTML=projects.map(p=>{
-  const rows=projectContributions(p.name);
-  const total=rows.reduce((s,r)=>s+(Number(String(r.amount).replace(/,/g,''))||0),0);
-  const donorsCount=new Set(rows.map(r=>r.donor)).size;
-  return `<div class="project-card">
-   <div><div class="name">${escapeHtml(p.name)} <span class="badge green" title="كود المشروع لاستخدامه عند الاستيراد">${escapeHtml(p.code||'')}</span>${p.intention?` <span class="badge gold">${escapeHtml(p.intention)}</span>`:''}</div><div class="small-note">عدد المتبرعين لهذا المشروع: ${donorsCount} · عدد التبرعات: ${rows.length}</div></div>
-   <div style="display:flex;align-items:center;gap:10px">
-    <div class="stat" style="padding:8px 14px"><div class="num" style="font-size:18px">${total.toLocaleString('ar-EG')}</div><div class="lbl">إجمالي التبرعات (جنيه)</div></div>
-    <button class="btn-outline btn-small" onclick="openProjectDetails('${escapeHtml(p.name).replace(/'/g,"\\'")}')">عرض التفاصيل</button>
-    ${isSuperAdmin(currentUser)?`<button class="btn-outline btn-small" onclick="editProject('${escapeHtml(p.name).replace(/'/g,"\\'")}')">تعديل</button>
-    <button class="btn-danger btn-small" onclick="deleteProject('${escapeHtml(p.name).replace(/'/g,"\\'")}')">حذف</button>`:''}
-   </div>
-  </div>`
- }).join('')
-}
-function openProjectDetails(name){
- const p=projects.find(x=>x.name===name);
- const rows=projectContributions(name);
- const total=rows.reduce((s,r)=>s+(Number(String(r.amount).replace(/,/g,''))||0),0);
- openModal(`<h3>مشروع: ${escapeHtml(name)}</h3>
- <div class="meta" style="margin-bottom:10px">${p&&p.intention?`النية: <b>${escapeHtml(p.intention)}</b> · `:''}إجمالي التبرعات: <b>${money(total)}</b> · عدد التبرعات: <b>${rows.length}</b></div>
- <div class="hist">${rows.length?rows.map(r=>`<div class="hist-item" style="cursor:pointer" onclick="openFinanceDetail('${r.donorId}','${r.hid}')" title="اضغط لعرض تفاصيل التبرع"><b>${escapeHtml(r.donor)}</b> — ${fmtDate(r.date)} — <b>${money(r.amount)}</b>${r.method?` — ${escapeHtml(r.method)}`:''}${r.location?` — ${escapeHtml(r.location)}`:''}<br><span class="small-note">بواسطة: ${escapeHtml(r.by||'—')}${r.notes?` · ${escapeHtml(r.notes)}`:''}</span></div>`).join(''):'<div class="empty">لا توجد تبرعات مسجلة لهذا المشروع ضمن الفترة المحددة.</div>'}</div>
- <div class="modal-actions"><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)
-}
-
+function projectAmountByStatus(rows){const amount=a=>a.reduce((s,r)=>s+(Number(String(r.amount||0).replace(/,/g,''))||0),0);return {approved:amount(rows.filter(r=>normalizeFinanceStatus(r.financeStatus)==='approved')),rejected:amount(rows.filter(r=>normalizeFinanceStatus(r.financeStatus)==='rejected'||normalizeMovementStatus(r.movementStatus)==='مرفوضة')),progress:amount(rows.filter(r=>normalizeMovementStatus(r.movementStatus)==='قيد التنفيذ')),total:amount(rows)}}
+function renderProjects(){refreshProjectsDatalist();ensureProjectCodes();if(!projects.length){document.getElementById('projectsList').innerHTML='<div class="empty">لا توجد مشاريع بعد. اضغط "إضافة مشروع" للبدء.</div>';return}document.getElementById('projectsList').innerHTML=projects.map(p=>{const v=projectAmountByStatus(projectContributions(p.name));return `<div class="project-card"><div style="flex:1;min-width:220px"><div class="name">${escapeHtml(p.name)} <span class="badge green">${escapeHtml(p.code||'')}</span></div></div><div style="display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px;flex:2"><div class="stat"><div class="num">${money(v.approved)}</div><div class="lbl">معتمد ماليًا</div></div><div class="stat red"><div class="num">${money(v.rejected)}</div><div class="lbl">مرفوض</div></div><div class="stat amber"><div class="num">${money(v.progress)}</div><div class="lbl">قيد التنفيذ</div></div><div class="stat gold"><div class="num">${money(v.total)}</div><div class="lbl">إجمالي</div></div></div><button class="btn-outline btn-small" onclick="openProjectDetails(${JSON.stringify(String(p.name))})">التفاصيل</button>${isSuperAdmin(currentUser)?`<button class="btn-outline btn-small" onclick="editProject(${JSON.stringify(String(p.name))})">تعديل</button><button class="btn-danger btn-small" onclick="deleteProject(${JSON.stringify(String(p.name))})">حذف</button>`:''}</div>`}).join('')}
+function exportProjectDetailsExcel(name){const rows=projectContributions(name);if(!window.XLSX){alert('مكتبة Excel غير متاحة حاليًا.');return}const data=[['تاريخ','اسم','قيمة التبرع','المشروع','النية','حالة الاعتماد','التواصل','بواسطة']];rows.forEach(r=>data.push([r.date||'',r.donor||'',Number(String(r.amount||0).replace(/,/g,''))||0,r.project||'',r.intention||'',statusLabel(normalizeFinanceStatus(r.financeStatus)),canDonorContact(currentUser)?'تواصل':'—',r.by||'']));const ws=XLSX.utils.aoa_to_sheet(data),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'سجل المشروع');XLSX.writeFile(wb,'سجل_المشروع_'+String(name).replace(/[\/:*?"<>|]/g,'_')+'_'+todayStr()+'.xlsx')}
+function openProjectDetails(name){const rows=projectContributions(name),v=projectAmountByStatus(rows),body=rows.length?rows.map(r=>`<tr onclick="openFinanceDetail('${r.donorId}','${r.hid}')" style="cursor:pointer"><td>${fmtDate(r.date)}</td><td>${escapeHtml(r.donor||'—')}</td><td><b>${money(r.amount)}</b></td><td>${escapeHtml(r.project||'—')}</td><td>${escapeHtml(r.intention||'—')}</td><td>${escapeHtml(statusLabel(normalizeFinanceStatus(r.financeStatus)))}</td><td>${canDonorContact(currentUser)&&r.entityType!=='company'?`<button class="btn-gold btn-small" onclick="event.stopPropagation();openContact('${r.donorId}')">تواصل</button>`:'—'}</td><td>${escapeHtml(r.by||'—')}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">لا توجد سجلات لهذا المشروع.</td></tr>';openModal(`<h3>تفاصيل مشروع: ${escapeHtml(name)}</h3><div class="stats" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px"><div class="stat green"><div class="num">${money(v.approved)}</div><div class="lbl">معتمد ماليًا</div></div><div class="stat red"><div class="num">${money(v.rejected)}</div><div class="lbl">مرفوض</div></div><div class="stat amber"><div class="num">${money(v.progress)}</div><div class="lbl">قيد التنفيذ</div></div><div class="stat gold"><div class="num">${money(v.total)}</div><div class="lbl">إجمالي</div></div></div><div class="donation-record-table-wrap"><table class="donation-record-table" style="min-width:1050px"><thead><tr><th>تاريخ</th><th>اسم</th><th>قيمة التبرع</th><th>المشروع</th><th>النية</th><th>حالة الاعتماد</th><th>التواصل</th><th>بواسطة</th></tr></thead><tbody>${body}</tbody></table></div><div class="modal-actions"><button class="btn-primary btn-small" onclick="exportProjectDetailsExcel(${JSON.stringify(String(name))})">تصدير السجل إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)}
 /* ---------- donations view (flat log, with date filter) ---------- */
 function applyDonFilter(){donFrom=document.getElementById('donFrom').value;donTo=document.getElementById('donTo').value;renderDonations()}
 function clearDonFilter(){document.getElementById('donFrom').value='';document.getElementById('donTo').value='';donFrom='';donTo='';renderDonations()}
@@ -7881,12 +7932,20 @@ function renderSettingsView(){
  document.getElementById('accountsPermNoteOther').classList.toggle('hidden',isSuper);
  document.getElementById('manageAccountsSettingsBtn').classList.toggle('hidden',!isSuper);
 }
-function renderSettingsLocations(){
- const el=document.getElementById('locationsTagList');if(!el)return;
- const set=new Map();
- donors.forEach(d=>(d.history||[]).forEach(h=>{const loc=String(h.location||'').trim();if(loc&&!set.has(normName(loc)))set.set(normName(loc),loc)}));
- el.innerHTML=Array.from(set.values()).sort((a,b)=>a.localeCompare(b,'ar')).map(loc=>`<span class="tag">${escapeHtml(loc)}</span>`).join('')||'<span class="small-note">لم يتم تسجيل أماكن حتى الآن.</span>';
+function ensureLocationsCatalog(){
+ const set=new Map();(locations||[]).forEach(x=>{const v=String(x||'').trim();if(v&&!set.has(normName(v)))set.set(normName(v),v)});
+ if(!locations.length){
+  donors.forEach(d=>(d.history||[]).forEach(h=>{const v=String(h.location||'').trim();if(v&&!set.has(normName(v)))set.set(normName(v),v)}));
+  companies.forEach(c=>(c.history||[]).forEach(h=>{const v=String(h.location||'').trim();if(v&&!set.has(normName(v)))set.set(normName(v),v)}));
+ }
+ locations=[...set.values()];safeSet(localStorage,LOCATIONSKEY,JSON.stringify(locations));return locations
 }
+function refreshLocationsDatalist(){ensureLocationsCatalog();const dl=document.getElementById('locationsDatalist');if(dl)dl.innerHTML=locations.map(x=>`<option value="${escapeHtml(x)}"></option>`).join('')}
+function renderSettingsLocations(){const el=document.getElementById('locationsTagList');if(!el)return;ensureLocationsCatalog();el.innerHTML=locations.slice().sort((a,b)=>a.localeCompare(b,'ar')).map(loc=>`<span class="tag"><span>${escapeHtml(loc)}</span><button onclick="editLocation('${escapeHtml(loc).replace(/'/g,"\'")}')">✎</button><button onclick="removeLocation('${escapeHtml(loc).replace(/'/g,"\'")}')">✕</button></span>`).join('')||'<span class="small-note">لم يتم تسجيل أماكن حتى الآن.</span>'}
+function addLocation(){if(!canModule('settings','add',currentUser)){alert('ليس لديك صلاحية إضافة أماكن الحركات والتبرعات.');return}const name=String(document.getElementById('newLocationInput')?.value||'').trim();if(!name)return;ensureLocationsCatalog();if(locations.some(x=>normName(x)===normName(name))){alert('هذا المكان موجود بالفعل.');return}locations.push(name);__clearSyncEntityDeleted('locations',name);saveLocations();refreshLocationsDatalist();document.getElementById('newLocationInput').value='';renderSettingsLocations()}
+function editLocation(oldName){if(!canModule('settings','edit',currentUser)){alert('ليس لديك صلاحية تعديل أماكن الحركات والتبرعات.');return}openModal(`<h3>تعديل مكان الحركة</h3><div class="field"><label>اسم المكان</label><input id="editLocationInput" value="${escapeHtml(oldName)}"></div><div class="modal-actions"><button class="btn-primary" onclick="saveEditedLocation(${JSON.stringify(String(oldName))})">حفظ</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)}
+function saveEditedLocation(oldName){const name=String(document.getElementById('editLocationInput')?.value||'').trim();if(!name)return;ensureLocationsCatalog();if(normName(name)!==normName(oldName)&&locations.some(x=>normName(x)===normName(name))){alert('المكان الجديد موجود بالفعل.');return}donors.forEach(d=>(d.history||[]).forEach(h=>{if(normName(h.location)===normName(oldName))h.location=name}));companies.forEach(c=>(c.history||[]).forEach(h=>{if(normName(h.location)===normName(oldName))h.location=name}));locations=locations.map(x=>normName(x)===normName(oldName)?name:x);__clearSyncEntityDeleted('locations',oldName);saveLocations();persist();persistCompanies();refreshLocationsDatalist();renderSettingsLocations();closeModal()}
+async function removeLocation(name){if(!canModule('settings','delete',currentUser)){alert('ليس لديك صلاحية حذف أماكن الحركات والتبرعات.');return}ensureLocationsCatalog();if(!confirm('حذف المكان "'+name+'" من قائمة الاختيارات؟ سيتم الاحتفاظ به في السجلات السابقة.'))return;locations=locations.filter(x=>normName(x)!==normName(name));__markSyncEntityDeleted('locations',name);saveLocations();refreshLocationsDatalist();renderSettingsLocations();const syncDeleteOk=GAS_URL?await syncPushNow({silent:false}):true;if(GAS_URL&&!syncDeleteOk)alert('تم حذف المكان محليًا، لكن تعذر تأكيد الحذف على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.')}
 function renderSettingsChannels(){
  document.getElementById('channelsTagList').innerHTML=channels.map(c=>`<span class="tag">${escapeHtml(c)}<button onclick="removeChannel('${escapeHtml(c).replace(/'/g,"\\'")}')">✕</button></span>`).join('');
 }
@@ -7895,13 +7954,13 @@ function addChannel(){
  const inp=document.getElementById('newChannelInput');const name=inp.value.trim();
  if(!name)return;
  if(channels.some(c=>normName(c)===normName(name))){alert('هذه القناة موجودة بالفعل.');return}
- channels.push(name);__clearCatalogDeleted('channel',name);saveChannels();ensureChannelCodes();inp.value='';renderSettingsChannels();
+ channels.push(name);__clearCatalogDeleted('channel',name);__clearSyncEntityDeleted('channels',name);saveChannels();ensureChannelCodes();inp.value='';renderSettingsChannels();
 }
 function removeChannel(name){
  if(!canModule('settings','delete',currentUser)){alert('ليس لديك صلاحية حذف قنوات التبرع.');return}
  if(channels.length<=1){alert('يجب أن تبقى قناة تبرع واحدة على الأقل.');return}
  if(!confirm('حذف قناة "'+name+'"؟ (لن يتم حذف التبرعات المسجلة عليها من قبل)'))return;
- __markCatalogDeleted('channel',name); channels=channels.filter(c=>normName(c)!==normName(name));saveChannels();renderSettingsChannels();
+ __markCatalogDeleted('channel',name);__markSyncEntityDeleted('channels',name); channels=channels.filter(c=>normName(c)!==normName(name));saveChannels();renderSettingsChannels();if(GAS_URL)syncPushNow({silent:true}).then(ok=>{if(!ok)alert('تم حذف القناة محليًا، لكن تعذر تأكيد الحذف على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.')});
 }
 function renderSettingsIntentions(){
  document.getElementById('intentionsTagList').innerHTML=intentions.map(c=>`<span class="tag">${escapeHtml(c)}<button onclick="removeIntention('${escapeHtml(c).replace(/'/g,"\\'")}')">✕</button></span>`).join('');
@@ -7911,12 +7970,12 @@ function addIntention(){
  const inp=document.getElementById('newIntentionInput');const name=inp.value.trim();
  if(!name)return;
  if(intentions.some(c=>normName(c)===normName(name))){alert('نوع النية هذا موجود بالفعل.');return}
- intentions.push(name);saveIntentions();ensureIntentionCodes();inp.value='';renderSettingsIntentions();
+ intentions.push(name);__clearSyncEntityDeleted('intentions',name);saveIntentions();ensureIntentionCodes();inp.value='';renderSettingsIntentions();
 }
 function removeIntention(name){
  if(!canModule('settings','delete',currentUser)){alert('ليس لديك صلاحية حذف أنواع النية.');return}
  if(!confirm('حذف نوع النية "'+name+'"؟ (المشاريع المخصَّصة بها بالفعل ستبقى كما هي)'))return;
- intentions=intentions.filter(c=>c!==name);saveIntentions();renderSettingsIntentions();
+ intentions=intentions.filter(c=>c!==name);__markSyncEntityDeleted('intentions',name);saveIntentions();renderSettingsIntentions();if(GAS_URL)syncPushNow({silent:true}).then(ok=>{if(!ok)alert('تم حذف نوع النية محليًا، لكن تعذر تأكيد الحذف على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.')});
 }
 function renderSettingsManagerCategories(){
  document.getElementById('managerCatTagList').innerHTML=managerCategories.map(c=>`<span class="tag">${escapeHtml(c)}<button onclick="removeManagerCategory('${escapeHtml(c).replace(/'/g,"\\'")}')">✕</button></span>`).join('');
@@ -7926,12 +7985,12 @@ function addManagerCategory(){
  const inp=document.getElementById('newManagerCatInput');const name=inp.value.trim();
  if(!name)return;
  if(managerCategories.some(c=>normName(c)===normName(name))){alert('هذه الفئة موجودة بالفعل.');return}
- managerCategories.push(name);saveManagerCategories();inp.value='';renderSettingsManagerCategories();
+ managerCategories.push(name);__clearSyncEntityDeleted('managerCategories',name);saveManagerCategories();inp.value='';renderSettingsManagerCategories();
 }
 function removeManagerCategory(name){
  if(!canModule('settings','delete',currentUser)){alert('ليس لديك صلاحية حذف فئات المديرين.');return}
  if(!confirm('حذف فئة "'+name+'"؟ (المديرون الذين لديهم هذه الفئة سيبقون بدون تغيير)'))return;
- managerCategories=managerCategories.filter(c=>c!==name);saveManagerCategories();renderSettingsManagerCategories();
+ managerCategories=managerCategories.filter(c=>c!==name);__markSyncEntityDeleted('managerCategories',name);saveManagerCategories();renderSettingsManagerCategories();if(GAS_URL)syncPushNow({silent:true}).then(ok=>{if(!ok)alert('تم حذف فئة المديرين محليًا، لكن تعذر تأكيد الحذف على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.')});
 }
 
 /* ---------- import ---------- */
@@ -9218,7 +9277,7 @@ document.addEventListener('DOMContentLoaded',function(){
  function allowed(e,a){return !!(e&&typeof canEditDeleteDonationEntry==='function'&&canEditDeleteDonationEntry(e,a,currentUser))}
  window.editCompanyDonation=function(id,hid){var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e)return;if(!allowed(e,'edit')){alert('هذه الحركة غير قابلة للتعديل حسب حالة الاعتماد والصلاحيات.');return}var b=document.createElement('button');openModal('<h3>تعديل تبرع الشركة — '+escapeHtml(c.name)+'</h3><div class="grid2"><div class="field"><label>التاريخ</label><input id="ced_date" type="date" value="'+escapeHtml(e.date||todayStr())+'"></div><div class="field"><label>القيمة</label><input id="ced_amount" type="number" min="0" step="0.01" value="'+escapeHtml(e.amount||'')+'"></div><div class="field"><label>المشروع</label><select id="ced_project">'+donationProjectOptions(e.project||'')+'</select></div><div class="field"><label>النية</label><select id="ced_intention">'+donationIntentionOptions(e.intention||projectIntention(e.project||''))+'</select></div><div class="field"><label>المكان</label><input id="ced_location" value="'+escapeHtml(e.location||'')+'"></div><div class="field"><label>القناة</label><select id="ced_method">'+channels.map(function(x){return '<option '+(normName(x)===normName(e.method||'')?'selected':'')+'>'+escapeHtml(x)+'</option>'}).join('')+'</select></div><div class="field"><label>حالة الحركة</label><select id="ced_status"><option value="">— اختر —</option>'+['ناجحة','مرفوضة','قيد التنفيذ','اخرى'].map(function(x){return '<option value="'+x+'" '+(normalizeMovementStatus(e.movementStatus)===x?'selected':'')+'>'+x+'</option>'}).join('')+'</select></div></div><div class="field"><label>ملاحظات</label><textarea id="ced_notes">'+escapeHtml(e.notes||'')+'</textarea></div><div class="modal-actions"><button class="btn-primary" id="ced_save">حفظ التعديل</button><button class="btn-outline" id="ced_cancel">إلغاء</button></div>');document.getElementById('ced_save').onclick=function(){saveCompanyDonationEdit(id,hid)};document.getElementById('ced_cancel').onclick=closeModal}
  window.saveCompanyDonationEdit=function(id,hid){var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e||!allowed(e,'edit')){alert('لم تعد هذه الحركة قابلة للتعديل.');return}var amount=document.getElementById('ced_amount').value,project=document.getElementById('ced_project').value,intention=document.getElementById('ced_intention').value,status=document.getElementById('ced_status').value;if(!(Number(String(amount).replace(/,/g,''))>0)||!project||!intention||!status){alert('يرجى استكمال القيمة والمشروع والنية وحالة الحركة.');return}e.date=document.getElementById('ced_date').value||todayStr();e.amount=amount;e.project=project;e.intention=intention;e.location=document.getElementById('ced_location').value.trim();e.method=document.getElementById('ced_method').value;e.movementStatus=normalizeMovementStatus(status);e.financeStatus=e.movementStatus==='ناجحة'?'pending':'approved';e.notes=document.getElementById('ced_notes').value.trim();e.status='confirmed';e.lastEditedBy=currentUser.fullName;e.lastEditedAt=new Date().toISOString();persistCompanies();closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();alert('تم تعديل حركة التبرع بنجاح.')}
- window.deleteCompanyDonation=function(id,hid){var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e||!allowed(e,'delete')){alert('هذه الحركة غير قابلة للحذف حسب حالة الاعتماد والصلاحيات.');return}if(!confirm('حذف حركة التبرع هذه نهائيًا؟'))return;c.history=(c.history||[]).filter(function(x){return x.hid!==hid});persistCompanies();closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();alert('تم حذف حركة التبرع بنجاح.')}
+ window.deleteCompanyDonation=function(id,hid){var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e||!allowed(e,'delete')){alert('هذه الحركة غير قابلة للحذف حسب حالة الاعتماد والصلاحيات.');return}if(!confirm('حذف حركة التبرع هذه نهائيًا؟'))return;c.history=(c.history||[]).filter(function(x){return x.hid!==hid});__markSyncHistoryDeleted('company',id,hid);persistCompanies();closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();alert('تم حذف حركة التبرع بنجاح.')}
  window.openUnifiedDonationDetail=function(type,id,hid){if(type!=='company')return openFinanceDetail(id,hid);var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e)return;var fs=normalizeFinanceStatus(e.financeStatus),badge=fs==='approved'?'<span class="badge green">معتمد ماليًا ✓</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد المالي</span>';openModal('<h3>تفاصيل تبرع الشركة — '+escapeHtml(c.name)+'</h3><div class="meta" style="margin-bottom:10px">'+badge+'</div><div class="grid2"><div class="field"><label>التاريخ</label><div>'+fmtDate(e.date)+'</div></div><div class="field"><label>القيمة</label><div><b>'+money(e.amount)+'</b></div></div><div class="field"><label>المشروع</label><div>'+escapeHtml(e.project||'—')+'</div></div><div class="field"><label>النية</label><div>'+escapeHtml(e.intention||'—')+'</div></div><div class="field"><label>المكان</label><div>'+escapeHtml(e.location||'—')+'</div></div><div class="field"><label>القناة</label><div>'+escapeHtml(e.method||'—')+'</div></div><div class="field"><label>حالة الحركة</label><div>'+escapeHtml(movementStatusLabel(e.movementStatus))+'</div></div></div>'+(e.notes?'<div class="field"><label>ملاحظات</label><div>'+escapeHtml(e.notes)+'</div></div>':'')+'<div class="modal-actions"><button class="btn-outline btn-small" id="ced_edit_btn">تعديل التبرع</button><button class="btn-danger btn-small" id="ced_delete_btn">حذف</button><button class="btn-outline btn-small" id="ced_close_btn">إغلاق</button></div>');var eb=document.getElementById('ced_edit_btn'),db=document.getElementById('ced_delete_btn');if(!allowed(e,'edit'))eb.remove();else eb.onclick=function(){closeModal();editCompanyDonation(id,hid)};if(!allowed(e,'delete'))db.remove();else db.onclick=function(){deleteCompanyDonation(id,hid)};document.getElementById('ced_close_btn').onclick=closeModal}
 })();
 </script>
@@ -9287,23 +9346,6 @@ document.addEventListener('DOMContentLoaded',function(){
 <script id="final-requested-fixes-v3">
 (function(){
 'use strict';
-async function verifySensitiveSetupCode(title,description){
- return new Promise(resolve=>{
-  document.getElementById('overlay')?.remove();
-  openModal('<h3>'+escapeHtml(title||'التحقق من رمز إعداد النظام')+'</h3><p class="small-note">'+escapeHtml(description||'هذا الإجراء حساس ومتاح فقط بعد إدخال رمز إعداد النظام.')+'</p><div class="field"><label>رمز إعداد النظام</label><input id="sensitiveSetupCodeInput" type="password" autocomplete="off"></div><div class="modal-actions"><button class="btn-primary" id="sensitiveSetupCodeConfirm">متابعة</button><button class="btn-outline" id="sensitiveSetupCodeCancel">إلغاء</button></div>');
-  const finish=ok=>{setupCodeVerified=false;closeModal();resolve(!!ok)};
-  document.getElementById('sensitiveSetupCodeCancel')?.addEventListener('click',()=>finish(false));
-  document.getElementById('sensitiveSetupCodeConfirm')?.addEventListener('click',async()=>{
-   if(setupCodeLockedUntil>Date.now()){alert('محاولات كثيرة خاطئة. يرجى الانتظار قليلًا ثم إعادة المحاولة.');return}
-   const v=(document.getElementById('sensitiveSetupCodeInput')?.value||'').trim();
-   if(!v){alert('يرجى إدخال رمز إعداد النظام.');return}
-   let hash='';try{hash=await sha256Hex(v)}catch(e){alert('تعذر التحقق من رمز الإعداد في هذا المتصفح.');return}
-   if(hash!==SETUP_CODE_HASH){setupCodeFailCount++;if(setupCodeFailCount>=5){setupCodeLockedUntil=Date.now()+5*60000;setupCodeFailCount=0}alert('رمز إعداد النظام غير صحيح.');return}
-   setupCodeFailCount=0;setupCodeVerified=true;finish(true);
-  });
-  setTimeout(()=>document.getElementById('sensitiveSetupCodeInput')?.focus(),50);
- });
-}
 window.clearSystemCacheAndReload=async function(){
   if(!isAdminPortal()){alert('غير مصرح: هذا الخيار غير متاح من رابط المستخدم. يرجى التواصل مع مدير النظام.');return}
   try{safeRemove(sessionStorage,SESSION);currentUser=null;otpContext=null;window.location.reload()}catch(e){alert('تعذر إعادة تهيئة الجلسة.')}
@@ -9388,13 +9430,8 @@ window.openChannelDetails=function(name){const rows=channelContributions(name),t
     return history.filter(h=>h&&h.type==='donation'&&movementCreatedByCurrentUser(h));
   }
   function donorCounts(d){
-    const rows=donorRowsForUser(d);
-    return {
-      all:rows.length,
-      approved:rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='approved').length,
-      pending:rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='pending').length,
-      rejected:rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='rejected').length
-    };
+    const rows=donorRowsForUser(d),sum=a=>a.reduce((s,h)=>s+(Number(String(h.amount||0).replace(/,/g,''))||0),0);
+    return {all:sum(rows),approved:sum(rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='approved')),pending:sum(rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='pending')),rejected:sum(rows.filter(h=>normalizeFinanceStatus(h.financeStatus)==='rejected'))};
   }
   function donorListForTable(){
     let list=typeof donorsFilteredList==='function'?donorsFilteredList():visibleDonors();
@@ -9418,7 +9455,7 @@ window.openChannelDetails=function(name){const rows=channelContributions(name),t
   window.exportExcel=function(){
     if(!currentUser||!canModule('donors','view',currentUser)){alert('ليس لديك صلاحية التصدير.');return}
     const list=donorListForTable();
-    const out=[['الاسم','رقم الهاتف','عدد التبرعات','التبرعات المعتمدة','التبرعات بانتظار الاعتماد','التبرعات المرفوضة']];
+    const out=[['الاسم','رقم الهاتف','إجمالي قيمة التبرعات','قيمة التبرعات المعتمدة','قيمة التبرعات بانتظار الاعتماد','قيمة التبرعات المرفوضة']];
     list.forEach(d=>{const c=donorCounts(d);out.push([d.name||'',d.phone||'',c.all,c.approved,c.pending,c.rejected]);});
     const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:28},{wch:18},{wch:16},{wch:22},{wch:28},{wch:22}];XLSX.utils.book_append_sheet(wb,ws,'ملخص المتبرعين');XLSX.writeFile(wb,'ملخص_المتبرعين_'+todayStr()+'.xlsx');
   };
@@ -9429,28 +9466,17 @@ window.openChannelDetails=function(name){const rows=channelContributions(name),t
     return rows;
   }
   function openDonorHistory(d,filter){
-    const rows=historyItems(d,filter), title=filter?('تفاصيل '+statusLabel(filter)):'السجل الكامل للمتبرع';
-    const items=rows.length?rows.map(x=>{
-      const fs=normalizeFinanceStatus(x.financeStatus);
-      const badge='<span class="badge '+(fs==='approved'?'green':fs==='rejected'?'red':'amber')+'">'+statusLabel(fs)+'</span>';
-      const financeActions=x.type==='donation'&&isFinance(currentUser)&&fs==='pending'?'<button class="btn-primary btn-small" onclick="approveFinanceDonation('+safeArg(d.id)+','+safeArg(x.hid)+')">اعتماد مالي</button><button class="btn-danger btn-small" onclick="rejectFinanceDonation('+safeArg(d.id)+','+safeArg(x.hid)+')">رفض ماليًا</button>':'';
-      const editAction=canEditDeleteDonationEntry(x,'edit')?'<button class="btn-outline btn-small" onclick="editDonation('+safeArg(d.id)+','+safeArg(x.hid)+')">تعديل التبرع</button>':'';
-      const deleteAction=canEditDeleteDonationEntry(x,'delete')?'<button class="btn-danger btn-small" onclick="deleteDonation('+safeArg(d.id)+','+safeArg(x.hid)+')">حذف</button>':'';
-      return '<div class="hist-item" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:240px;cursor:pointer" onclick="openFinanceDetail('+safeArg(d.id)+','+safeArg(x.hid)+')"><b>'+fmtDate(x.date)+'</b> — <b>'+escapeHtml(x.action||'تبرع جديد')+'</b> — قيمة التبرع: <b>'+money(x.amount)+'</b>'+(x.project?' — المشروع: '+escapeHtml(x.project):'')+(x.intention?' — النية: '+escapeHtml(x.intention):'')+' '+badge+attachmentMarkup(x)+'<br><span class="small-note">بواسطة: '+escapeHtml(x.by||'—')+(x.notes?' · '+escapeHtml(x.notes):'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap" onclick="event.stopPropagation()">'+financeActions+editAction+deleteAction+'</div></div>';
-    }).join(''):'<div class="empty">لا توجد حركات مطابقة.</div>';
-    openModal('<h3>سجل المتبرع — '+escapeHtml(d.name)+(filter?' — '+title:'')+'</h3><div class="meta" style="margin-bottom:10px"><b>'+escapeHtml(d.phone||'—')+'</b> · عدد الحركات المعروضة: <b>'+rows.length+'</b></div><div class="hist">'+items+'</div><div class="modal-actions"><button class="btn-primary btn-small" onclick="exportDonorRecordExcel('+safeArg(d.id)+')">تصدير سجل المتبرع إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>');
-  }
-  window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=>String(x.id)===String(id));if(d)openDonorHistory(d,filter)};
+ const rows=historyItems(d,filter),body=rows.length?rows.map(x=>{const fs=normalizeFinanceStatus(x.financeStatus),badge='<span class="badge '+(fs==='approved'?'green':fs==='rejected'?'red':'amber')+'">'+statusLabel(fs)+'</span>',contact=canDonorContact(currentUser)?'<button class="btn-gold btn-small" onclick="event.stopPropagation();openContact('+safeArg(d.id)+')">تواصل</button>':'—';return '<tr onclick="openFinanceDetail('+safeArg(d.id)+','+safeArg(x.hid)+')" style="cursor:pointer"><td>'+fmtDate(x.date)+'</td><td>'+escapeHtml(x.by||'—')+'</td><td><b>'+money(x.amount)+'</b></td><td>'+escapeHtml(x.project||'—')+'</td><td>'+escapeHtml(x.intention||'—')+'</td><td>'+badge+'</td><td>'+contact+'</td></tr>'}).join(''):'<tr><td colspan="7" class="empty">لا توجد حركات مطابقة.</td></tr>';
+ openModal('<h3>سجل المتبرع — '+escapeHtml(d.name)+'</h3><div class="donation-record-table-wrap"><table class="donation-record-table"><thead><tr><th>تاريخ</th><th>بواسطة</th><th>قيمة التبرع</th><th>المشروع</th><th>النية</th><th>حالة الاعتماد</th><th>التواصل</th></tr></thead><tbody>'+body+'</tbody></table></div><div class="modal-actions"><button class="btn-primary btn-small" onclick="exportDonorRecordExcel('+safeArg(d.id)+')">تصدير سجل المتبرع إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>');
+}
+window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=>String(x.id)===String(id));if(d)openDonorHistory(d,filter)};
   window.openRecord=function(id){if(!canOpenDonorRecord(currentUser)){alert('ليس لديك صلاحية عرض سجل المتبرع.');return}const d=(donors||[]).find(x=>String(x.id)===String(id));if(!d)return;if(currentUser.role==='employee'&&d.employeeId!==currentUser.id){alert('هذا المتبرع غير تابع لحسابك.');return}if(ensureHid(d))persist();openDonorHistory(d,'');};
 
   window.render=function(){
-    renderManagerTabs();renderStats();renderChips();
+    renderStats();renderChips();
     const list=donorListForTable();
-    const body=list.map(d=>{
-      const c=donorCounts(d), id=safeArg(d.id);
-      return '<tr onclick="openRecord('+id+')"><td><span class="donor-summary-name">'+escapeHtml(d.name||'—')+'</span></td><td>'+escapeHtml(d.phone||'—')+'</td><td><button class="donor-number-link" onclick="event.stopPropagation();openDonorMovementDetails('+id+',\'all\')">'+c.all+'</button></td><td><button class="donor-number-link" onclick="event.stopPropagation();openDonorMovementDetails('+id+',\'approved\')">'+c.approved+'</button></td><td><button class="donor-number-link" onclick="event.stopPropagation();openDonorMovementDetails('+id+',\'pending\')">'+c.pending+'</button></td><td><button class="donor-number-link" onclick="event.stopPropagation();openDonorMovementDetails('+id+',\'rejected\')">'+c.rejected+'</button></td></tr>';
-    }).join('');
-    document.getElementById('listArea').innerHTML='<div id="donorSummaryTableWrap"><table id="donorSummaryTable"><thead><tr><th>الاسم</th><th>رقم الهاتف</th><th>عدد التبرعات</th><th>التبرعات المعتمدة</th><th>التبرعات بانتظار الاعتماد</th><th>التبرعات المرفوضة</th></tr></thead><tbody>'+(body||'<tr><td colspan="6" class="empty">لا توجد نتائج مطابقة.</td></tr>')+'</tbody></table></div>';
+    const body=list.map(d=>{const c=donorCounts(d),id=safeArg(d.id);return '<tr onclick="openRecord('+id+')"><td><span class="donor-summary-name">'+escapeHtml(d.name||'—')+'</span></td><td>'+escapeHtml(d.phone||'—')+'</td><td>'+money(c.all)+'</td><td>'+money(c.approved)+'</td><td>'+money(c.pending)+'</td><td>'+money(c.rejected)+'</td></tr>'}).join('');
+    document.getElementById('listArea').innerHTML='<div id="donorSummaryTableWrap"><table id="donorSummaryTable"><thead><tr><th>الاسم</th><th>رقم الهاتف</th><th>إجمالي قيمة التبرعات</th><th>قيمة التبرعات المعتمدة</th><th>قيمة التبرعات بانتظار الاعتماد</th><th>قيمة التبرعات المرفوضة</th></tr></thead><tbody>'+(body||'<tr><td colspan="6" class="empty">لا توجد نتائج مطابقة.</td></tr>')+'</tbody></table></div>';
     const exp=document.getElementById('donorExcelExportBtn');if(exp)exp.textContent='تصدير جدول المتبرعين إلى Excel';
   };
   setTimeout(()=>{if(document.getElementById('donorExcelExportBtn'))document.getElementById('donorExcelExportBtn').textContent='تصدير جدول المتبرعين إلى Excel';},0);
@@ -9601,3 +9627,273 @@ window.openChannelDetails=function(name){const rows=channelContributions(name),t
   #app>.top-tabs~#donorsView,#app>.top-tabs~#companiesView,#app>.top-tabs~#donationModuleView,#app>.top-tabs~#projectsView,#app>.top-tabs~#donationsView,#app>.top-tabs~#donationCountsView,#app>.top-tabs~#donorRatingsView,#app>.top-tabs~#channelsView,#app>.top-tabs~#reportsView,#app>.top-tabs~#financeReviewView,#app>.top-tabs~#settingsView{padding:12px 10px 24px!important}
 }
 </style>
+
+
+<script id="final-account-privacy-hardening-v2">
+(function(){
+'use strict';
+
+let __adminRecoveryTargetId='';
+
+/* ---------- secure administrator recovery ---------- */
+function __adminById(id){
+  return (Array.isArray(USERS)?USERS:[]).find(u=>u&&String(u.id)===String(id))||null;
+}
+
+async function __finishAdminRecovery(){
+  if(!setupCodeVerified){alert('يرجى التحقق من رمز إعداد النظام أولًا.');return}
+  const admin=__adminById(__adminRecoveryTargetId);
+  if(!admin){alert('تعذر العثور على حساب المدير. أعد الاستعادة من Google Sheets.');return}
+
+  const pass=document.getElementById('r_pass')?.value||'';
+  const pass2=document.getElementById('r_pass2')?.value||'';
+  if(!pass||!isStrongPassword(pass)){alert(PASSWORD_POLICY_MSG);return}
+  if(pass!==pass2){alert('كلمة المرور وتأكيدها غير متطابقين.');return}
+
+  try{
+    __syncIndicatorShow('جارٍ حفظ استعادة حساب المدير...');
+    if(GAS_URL) await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});
+
+    const fresh=__adminById(__adminRecoveryTargetId);
+    if(!fresh){alert('تغيرت بيانات الحساب أثناء الاستعادة. أعد المحاولة.');return}
+
+    fresh.passwordHash=await hashPassword(pass);
+    delete fresh.password;
+    fresh.role='superadmin';
+    fresh.active=true;
+    fresh.activated=true;
+    fresh.activationToken='';
+    fresh.resetToken='';
+    fresh.resetOtpHash='';
+    fresh.resetOtpExpiresAt='';
+    fresh.resetOtpAttempts=0;
+    fresh.resetOtpToken='';
+    fresh.resetOtpTokenExpiresAt='';
+    fresh.securityQuestion='';
+    fresh.securityAnswer='';
+    fresh.updatedAt=new Date().toISOString();
+    touchUser(fresh);
+
+    USERS=normalizeUsersLocal(USERS);
+    safeSet(localStorage,UKEY,JSON.stringify(USERS));
+
+    if(GAS_URL){
+      const ok=await saveUsersReliable();
+      if(!ok){
+        alert('تم حفظ التعديل محليًا فقط ولم يتم تأكيده على Google Sheets. لم يتم تسجيل الدخول.');
+        return;
+      }
+    }
+
+    currentUser=fresh;
+    safeSet(sessionStorage,SESSION,fresh.id);
+    __adminRecoveryTargetId='';
+    setupCodeVerified=false;
+    closeModal();
+    showApp();
+    alert('تمت استعادة حساب المدير الرئيسي بنجاح وتعيين كلمة مرور جديدة.');
+  }catch(e){
+    alert('تعذر إتمام استعادة حساب المدير. لم يتم تسجيل الدخول أو حذف البيانات.');
+  }finally{
+    __syncIndicatorHide();
+  }
+}
+
+function __openAdminRecoveryForm(admin){
+  if(!admin)return;
+  __adminRecoveryTargetId=String(admin.id||'');
+  openRegister(true);
+
+  const h=document.querySelector('#overlay .modal h3');
+  if(h)h.textContent='استعادة حساب المدير الرئيسي للنظام';
+
+  ['r_name','r_phone','r_email','r_department','r_username'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+      el.value=admin[id==='r_name'?'fullName':id==='r_phone'?'phone':id==='r_email'?'email':id==='r_department'?'department':'username']||'';
+      el.readOnly=true;
+    }
+  });
+  document.getElementById('r_pass').value='';
+  document.getElementById('r_pass2').value='';
+
+  document.getElementById('restoreSuperAdminBtn')?.classList.add('hidden');
+
+  const note=document.querySelector('#overlay .modal p.small-note[style*="margin-top:2px"]');
+  if(note)note.textContent='تم العثور على الحساب في Google Sheets. بيانات الحساب للعرض والتأكيد فقط؛ يجب تعيين كلمة مرور جديدة لإتمام الاستعادة. لن يتم تسجيل الدخول تلقائيًا بالحساب.';
+
+  const btn=document.querySelector('#overlay .modal .modal-actions .btn-primary');
+  if(btn)btn.textContent='حفظ كلمة المرور واستعادة الحساب';
+}
+
+window.restoreSuperAdminFromSheet=async function(){
+  if(!setupCodeVerified){alert('يرجى التحقق من رمز إعداد النظام أولًا.');return}
+  if(!GAS_URL){alert('لا يوجد رابط Google Sheets محفوظ. أدخل الرابط ثم أعد المحاولة.');return}
+
+  const btn=document.getElementById('restoreSuperAdminBtn');
+  if(btn){btn.disabled=true;btn.textContent='جارٍ البحث...'}
+  try{
+    __syncIndicatorShow('جارٍ جلب أحدث بيانات المدير من Google Sheets...');
+    await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});
+
+    const admins=(Array.isArray(USERS)?USERS:[]).filter(u=>u&&u.role==='superadmin'&&u.active!==false);
+    if(!admins.length){
+      alert('لم يتم العثور على حساب مدير رئيسي في Google Sheets. يمكنك إنشاء حساب جديد.');
+      return;
+    }
+
+    admins.sort((a,b)=>{
+      const at=Date.parse(a.updatedAt||''),bt=Date.parse(b.updatedAt||'');
+      return (isNaN(bt)?0:bt)-(isNaN(at)?0:at);
+    });
+
+    __openAdminRecoveryForm(admins[0]);
+  }catch(e){
+    alert('تعذر قراءة حساب المدير من Google Sheets. لم يتم تسجيل الدخول أو تعديل أي بيانات.');
+  }finally{
+    __syncIndicatorHide();
+    if(btn){btn.disabled=false;btn.textContent='استعادة حساب المدير من الشيت'}
+  }
+};
+
+/* Prevent a stale browser from creating a second administrator over a newer
+   account that already exists in Google Sheets. */
+const __originalSubmitRegister=window.submitRegister;
+window.submitRegister=async function(locked){
+  if(locked && __adminRecoveryTargetId){
+    await __finishAdminRecovery();
+    return;
+  }
+
+  if(locked && GAS_URL){
+    try{
+      __syncIndicatorShow('جارٍ التحقق من أحدث حسابات المدير...');
+      await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});
+      const admins=(Array.isArray(USERS)?USERS:[]).filter(u=>u&&u.role==='superadmin'&&u.active!==false);
+      __syncIndicatorHide();
+
+      if(admins.length){
+        admins.sort((a,b)=>(Date.parse(b.updatedAt||'')||0)-(Date.parse(a.updatedAt||'')||0));
+        alert('يوجد حساب مدير رئيسي بالفعل في Google Sheets. سيتم فتح استعادة الحساب بدل إنشاء حساب ثانٍ.');
+        __openAdminRecoveryForm(admins[0]);
+        return;
+      }
+    }catch(e){
+      __syncIndicatorHide();
+      alert('تعذر التحقق من Google Sheets. لم يتم إنشاء حساب جديد لتجنب استبدال بيانات موجودة.');
+      return;
+    }
+  }
+  return __originalSubmitRegister(locked);
+};
+
+/* ---------- public policy access ---------- */
+/* Complete policy text and keep it usable before login, from the sidebar,
+   printable and downloadable. */
+window.openPolicy=function(){
+  openModal(`<h3>سياسة الخصوصية وحماية البيانات وحقوق الملكية</h3>
+  <div class="policy-body">
+  <p class="small-note">مؤسسة غيث للتنمية المجتمعية — نظام إدارة تنمية الموارد المالية · إصدار 1.1 · آخر تحديث: ${escapeHtml(fmtDate(todayStr()))}</p>
+
+  <h4>1. نطاق السياسة</h4>
+  <p>تنظم هذه السياسة التعامل مع بيانات المتبرعين والجهات والمشروعات وحسابات مستخدمي النظام، وطرق التخزين المحلي والمزامنة مع خدمات Google المستخدمة من المؤسسة.</p>
+
+  <h4>2. البيانات التي يعالجها النظام</h4>
+  <ul>
+   <li>بيانات المتبرعين والجهات وسجلات التواصل والتبرعات والمشروعات والنيات والقنوات والملاحظات المدخلة للعمل.</li>
+   <li>بيانات المستخدمين مثل الاسم والهاتف والإيميل والإدارة واسم المستخدم والدور والصلاحيات وحالة الحساب.</li>
+   <li>بيانات تقنية لازمة للجلسة والتخزين المحلي والمزامنة.</li>
+  </ul>
+
+  <h4>3. أغراض الاستخدام</h4>
+  <ul>
+   <li>إدارة التبرعات والمتبرعين والجهات والمشروعات.</li>
+   <li>إدارة الحسابات والصلاحيات والتفعيل واستعادة كلمات المرور.</li>
+   <li>التقارير والنسخ الاحتياطية والمزامنة وحماية السجلات.</li>
+  </ul>
+
+  <h4>4. التخزين والمزامنة</h4>
+  <ul>
+   <li>يستخدم النظام التخزين المحلي في المتصفح كنسخة تشغيلية محلية.</li>
+   <li>عند الربط، تتم مزامنة بيانات النظام مع Google Sheets الخاص بالمؤسسة عبر Google Apps Script.</li>
+   <li>قد تُرفع صور الإيصالات إلى Google Drive المرتبط بحساب Google الذي نُشر به Apps Script.</li>
+   <li>يجب عدم إدخال بيانات حساسة غير لازمة للعمل.</li>
+  </ul>
+
+  <h4>5. التحكم في الوصول</h4>
+  <ul>
+   <li>لكل مستخدم حساب مستقل وصلاحيات حسب دوره.</li>
+   <li>إدارة الحسابات والعمليات السيادية مقيدة بالمدير الرئيسي.</li>
+   <li>كلمات المرور لا تُعرض للمستخدمين الآخرين وتُخزن بصيغة تجزئة.</li>
+   <li>استعادة كلمة المرور تستخدم كود تحقق مؤقتًا إلى الإيميل المسجل.</li>
+   <li>استعادة حساب المدير الرئيسي تتطلب رمز إعداد ثم تعيين كلمة مرور جديدة، ولا تقوم بتسجيل الدخول تلقائيًا بالحساب.</li>
+  </ul>
+
+  <h4>6. الاحتفاظ والحذف</h4>
+  <p>تحتفظ المؤسسة بالبيانات وفق احتياجات العمل وسياساتها الداخلية والمتطلبات القانونية المطبقة عليها. عمليات الحذف الحساسة يجب أن تتم من خلال الصلاحيات المخصصة وبعد مراجعة أثرها على النسخ المتزامنة والاحتياطية.</p>
+
+  <h4>7. مشاركة البيانات</h4>
+  <p>تستخدم البيانات داخل نطاق أعمال المؤسسة. ولا ينبغي مشاركتها خارج المؤسسة إلا وفق التفويض المؤسسي أو الأساس القانوني المناسب. خدمات Google المستخدمة في التخزين والمزامنة تخضع أيضًا لشروط وسياسات Google ذات الصلة.</p>
+
+  <h4>8. أمن البيانات</h4>
+  <ul>
+   <li>استخدم كلمة مرور قوية ولا تشاركها.</li>
+   <li>سجل الخروج من الأجهزة المشتركة.</li>
+   <li>حافظ على سرية رابط Apps Script ومفتاح الوصول وإعدادات النشر.</li>
+   <li>أبلغ إدارة المؤسسة فورًا عن أي وصول غير مصرح به أو تسريب أو فقد بيانات.</li>
+  </ul>
+
+  <h4>9. حقوق الملكية الفكرية</h4>
+  <ul>
+   <li>تصميم النظام وشيفرته وهيكلته وواجهته ومواد التشغيل المخصصة للمؤسسة مملوكة لمؤسسة غيث للتنمية المجتمعية، ما لم يوجد اتفاق مكتوب بخلاف ذلك.</li>
+   <li>بيانات المؤسسة التي تُدخل أو تُنشأ أثناء التشغيل تخص المؤسسة وفق حقوقها واتفاقاتها والتزاماتها القانونية.</li>
+   <li>لا يجوز نسخ النظام أو توزيعه أو إعادة استخدامه خارج المؤسسة دون تصريح كتابي.</li>
+   <li>لا يجوز الاحتفاظ بنسخ غير مصرح بها من بيانات المؤسسة بعد انتهاء صلاحية الوصول.</li>
+  </ul>
+
+  <h4>10. مسؤوليات المستخدم</h4>
+  <ul>
+   <li>استخدام النظام لأغراض العمل المصرح بها.</li>
+   <li>الحفاظ على سرية بيانات الدخول وروابط التفعيل والاستعادة.</li>
+   <li>عدم نسخ أو تصدير بيانات المؤسسة دون تصريح.</li>
+   <li>الإبلاغ عن أي حادث أمني أو وصول غير مصرح به.</li>
+  </ul>
+
+  <h4>11. تحديث السياسة</h4>
+  <p>يجوز للمؤسسة تحديث هذه السياسة عند تغيير النظام أو طريقة التخزين أو المزامنة أو المتطلبات التشغيلية، ويظهر تاريخ آخر تحديث في أعلى الوثيقة.</p>
+
+  <p class="small-note" style="margin-top:14px">هذه وثيقة تشغيلية داخلية وليست بديلاً عن مراجعة قانونية متخصصة. إذا رغبت المؤسسة في اعتمادها كسياسة خصوصية رسمية، فينبغي مراجعتها وفق القوانين واللوائح والعقود المطبقة عليها.</p>
+  </div>
+  <div class="modal-actions">
+   <button class="btn-outline" onclick="printPolicy()">طباعة السياسة</button>
+   <button class="btn-outline" onclick="downloadPolicy()">تنزيل السياسة</button>
+   <button class="btn-primary" onclick="closeModal()">إغلاق</button>
+  </div>`);
+};
+
+window.getPolicyPlainText=function(){
+ return `سياسة الخصوصية وحماية البيانات وحقوق الملكية
+مؤسسة غيث للتنمية المجتمعية — نظام إدارة تنمية الموارد المالية
+إصدار 1.1
+آخر تحديث: ${fmtDate(todayStr())}
+
+تشمل السياسة بيانات المتبرعين والجهات والمشروعات وحسابات المستخدمين وبيانات التشغيل اللازمة للمزامنة.
+
+يستخدم النظام التخزين المحلي في المتصفح، وعند الربط تتم المزامنة مع Google Sheets الخاص بالمؤسسة عبر Google Apps Script، وقد تُرفع صور الإيصالات إلى Google Drive المرتبط بنشر Apps Script.
+
+لكل مستخدم حساب وصلاحيات مستقلة. كلمات المرور لا تُعرض للمستخدمين الآخرين وتُحفظ بصيغة تجزئة. استعادة كلمة المرور تستخدم كود تحقق مؤقتًا، واستعادة المدير الرئيسي تتطلب رمز إعداد وتعيين كلمة مرور جديدة ولا تسجل الدخول تلقائيًا.
+
+تُستخدم البيانات داخل نطاق أعمال المؤسسة ولا ينبغي مشاركتها خارج المؤسسة إلا وفق التفويض المؤسسي أو الأساس القانوني المناسب.
+
+يجب الحفاظ على سرية بيانات الدخول، وعدم نسخ أو تصدير بيانات المؤسسة دون تصريح، والإبلاغ عن أي وصول غير مصرح به أو تسريب.
+
+تصميم النظام وشيفرته وهيكلته وواجهته ومواد التشغيل المخصصة للمؤسسة مملوكة لمؤسسة غيث للتنمية المجتمعية ما لم يوجد اتفاق مكتوب بخلاف ذلك. بيانات المؤسسة تخص المؤسسة وفق حقوقها واتفاقاتها والتزاماتها القانونية. لا يجوز نسخ النظام أو توزيعه أو إعادة استخدامه خارج المؤسسة دون تصريح كتابي.
+
+يجوز تحديث السياسة عند تغيير النظام أو التخزين أو المزامنة أو المتطلبات التشغيلية.
+
+هذه وثيقة تشغيلية داخلية وليست بديلاً عن مراجعة قانونية متخصصة.
+آخر تحديث: ${fmtDate(todayStr())}`;
+};
+
+})();
+</script>
