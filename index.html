@@ -1800,6 +1800,8 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
         <label>إلى</label><input type="date" id="moduleDonationTo" max="2050-12-31">
         <button class="btn-outline btn-small" onclick="renderModuleDonationRecords()">تطبيق</button>
         <button class="btn-outline btn-small" onclick="clearModuleDonationFilters()">مسح الفلاتر</button>
+        <input id="moduleDonationUserFilter" type="text" list="moduleDonationUsersDatalist" placeholder="المستخدم (اختر أو اكتب جزءًا من الاسم)" oninput="renderModuleDonationRecords()" style="min-width:210px">
+        <datalist id="moduleDonationUsersDatalist"></datalist>
       </div>
       <button class="btn-outline btn-small" onclick="printModuleDonationRecords()">طباعة</button>
       <button class="btn-primary btn-small" onclick="exportModuleDonationExcel()">تصدير Excel</button>
@@ -2071,7 +2073,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyQgZzWJBrYPileZuWISRTfiYEmTXCJamtAUXUha5VamCOdS5_ptU2cLtctO4LAzF4sTQ/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbx315qke1-gGAkn-99AYKI5D-qSPpR8j6E44SbtgcZol_QSyPY8jx5tIytM_XW9kgQ/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -3512,7 +3514,10 @@ async function saveUsersReliable(){
   if(!GAS_URL)return true;
   clearTimeout(pushTimer);
   const ok=await syncPushNow();
-  if(!ok)alert('تم حفظ التغيير محليًا، لكن تعذر تأكيده على Google Sheets الآن. سيبقى التغيير محفوظًا محليًا ولن تُستعاد الحسابات المحذوفة تلقائيًا.');
+  if(!ok){
+    const reason=(typeof __lastPushError==='string'&&__lastPushError)?__lastPushError:'سبب غير معروف (تحقق من الاتصال بالإنترنت أو رابط Google Apps Script)';
+    alert('تم حفظ التغيير محليًا على هذا الجهاز، لكن تعذر تأكيده على Google Sheets الآن.\nالسبب: '+reason+'\nسيُعاد إرسال التغيير تلقائيًا عند عودة الاتصال، وسيبقى محفوظًا محليًا حتى ذلك الحين.');
+  }
   return ok;
 }
 /* ---------- سجل فوري ودائم لحركات التبرعات على Google Sheets ----------
@@ -4006,6 +4011,9 @@ async function __backgroundFreshnessSync(force=false){
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)__backgroundFreshnessSync(true)});
 window.addEventListener('focus',()=>__backgroundFreshnessSync(true));
 setInterval(()=>{if(!document.hidden)__backgroundFreshnessSync(false)},15000);
+/* عند عودة الاتصال بالإنترنت، إن وُجد تغيير محلي لم يُؤكَّد بعد على Google Sheets
+   (__localDirty)، أعد المحاولة فورًا بدل انتظار تعديل جديد أو إعادة تحميل الصفحة. */
+window.addEventListener('online',()=>{if(GAS_URL&&__localDirty)syncPushNow({silent:true}).catch(()=>{})});
 
 /* ---------- Google Sheets sync ---------- */
 function gasCall(action,payload){
@@ -6104,6 +6112,11 @@ function financeStatusLabel(entryOrStatus){
  if(s==='approved')return donationLinkedToFinance(entry)?'معتمد ماليًا':'معتمد تلقائي';
  return s==='rejected'?'مرفوض ماليًا':'في انتظار اعتماد المالية';
 }
+/* دالة عامة مطابقة لتسمية حالة الاعتماد المالي — كانت مُستخدمة في تفاصيل المشروع
+   (openProjectDetails / exportProjectDetailsExcel) بينما التعريف الوحيد لها كان محليًا
+   داخل IIFE منفصل، ما كان يسبب خطأ "statusLabel is not defined" ويمنع فتح شاشة
+   تفاصيل المشروع بالكامل. أضيفت هنا لتكون متاحة عالميًا. */
+function statusLabel(s){return s==='approved'?'معتمد ماليًا':s==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد المالي'}
 function reportFinancialRows(){
  const {from,to}=currentReportRange(); const rows=[];
  reportBaseDonors().forEach(d=>reportHistoryForDonor(d).forEach(h=>{
@@ -7111,7 +7124,14 @@ function moduleDonationRows(){
   });
   return rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
 }
+function refreshModuleDonationUsersDatalist(){
+  const dl=document.getElementById('moduleDonationUsersDatalist');
+  if(!dl)return;
+  const names=[...new Set((USERS||[]).map(u=>u&&u.fullName).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
+  dl.innerHTML=names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('');
+}
 function refreshModuleDonationEmployeeFilter(){
+  refreshModuleDonationUsersDatalist();
   const sel=document.getElementById('moduleDonationEmployeeFilter');
   const note=document.getElementById('moduleDonationOwnNote');
   if(!sel)return;
@@ -7133,8 +7153,10 @@ function filteredModuleDonationRows(){
   const from=document.getElementById('moduleDonationFrom')?.value||'';
   const to=document.getElementById('moduleDonationTo')?.value||'';
   const empFilter=isManagerRole(currentUser)?(document.getElementById('moduleDonationEmployeeFilter')?.value||'all'):'';
+  const userQ=normName(document.getElementById('moduleDonationUserFilter')?.value||'');
   let rows=moduleDonationRows().filter(r=>inRange(r.date,from,to));
   if(empFilter&&empFilter!=='all')rows=rows.filter(r=>(r.responsibleEmployeeId||r.createdBy||'')===empFilter);
+  if(userQ)rows=rows.filter(r=>normName(r.responsibleEmployeeName||r.by||'').includes(userQ));
   if(q)rows=rows.filter(r=>normName([r.donor,r.phone,r.project,r.intention,r.location,r.method,r.movementStatus||'قيد التنفيذ'].join(' ')).includes(q));
   return rows;
 }
@@ -7180,6 +7202,7 @@ function clearModuleDonationFilters(){
   const f=document.getElementById('moduleDonationFrom'); if(f)f.value='';
   const t=document.getElementById('moduleDonationTo'); if(t)t.value='';
   const e=document.getElementById('moduleDonationEmployeeFilter'); if(e)e.value='all';
+  const u=document.getElementById('moduleDonationUserFilter'); if(u)u.value='';
   moduleDonationSearchTerm='';renderModuleDonationRecords();
 }
 
@@ -9362,9 +9385,9 @@ document.addEventListener('DOMContentLoaded',function(){
  window.renderSettingsManagerCategories=function(){const el=document.getElementById('managerCatTagList');if(!el)return;el.innerHTML=managerCategories.map(c=>`<span class="tag">${esc(c)}<button class="settings-edit-btn btn-outline" onclick="editSettingItem('manager','${esc(c).replace(/'/g,"\\'")}')">تعديل</button><button onclick="removeManagerCategory('${esc(c).replace(/'/g,"\\'")}')">✕</button></span>`).join('')};
  window.editSettingItem=editItem;
  function rows(){return typeof filteredModuleDonationRows==='function'?filteredModuleDonationRows():[]}
- window.renderModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser))return;refreshModuleDonationEmployeeFilter();const rs=rows();const total=rs.reduce((s,r)=>s+(Number(String(r.amount||0).replace(/,/g,''))||0),0);document.getElementById('moduleDonationStats').innerHTML=`<div class="stat gold"><div class="num">${total.toLocaleString('ar-EG')}</div><div class="lbl">إجمالي التبرعات (جنيه)</div></div><div class="stat"><div class="num">${rs.length}</div><div class="lbl">عدد الحركات</div></div><div class="stat"><div class="num">${new Set(rs.map(r=>normName(r.donor))).size}</div><div class="lbl">عدد المتبرعين والجهات</div></div>`;const box=document.getElementById('moduleDonationRecords');if(!rs.length){box.innerHTML='<div class="empty">لا توجد حركات تبرع مطابقة للفلاتر الحالية.</div>';return}box.innerHTML=`<table class="donation-record-table"><thead><tr><th>المتبرع / الجهة</th><th>تاريخ</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>مكان</th><th>قناة</th><th>موظف مسؤول</th><th>حالة الحركة</th><th>الاعتماد المالي</th></tr></thead><tbody>${rs.map(r=>{const fs=normalizeFinanceStatus(r.financeStatus);const badge=fs==='approved'?'<span class="badge green">معتمد ماليًا</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>';const id=r.entityType==='company'?r.companyId:r.donorId;return `<tr data-entity="${esc(r.entityType||'individual')}" data-id="${esc(id)}" data-hid="${esc(r.hid)}"><td><b>${esc(r.donor||'—')}</b><br><span class="small-note">${esc(r.entityLabel||'فرد')}</span></td><td>${fmtDate(r.date)}</td><td><b>${money(r.amount)}</b></td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${esc(r.location||'—')}</td><td>${esc(r.method||'—')}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td><td><span class="badge">${esc(movementStatusLabel(r.movementStatus))}</span></td><td>${badge}</td></tr>`}).join('')}</tbody></table>`;box.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=function(){openUnifiedDonationDetail(this.dataset.entity,this.dataset.id,this.dataset.hid)})};
- window.exportModuleDonationExcel=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية التصدير.');return}const rs=rows(),out=[['المتبرع / الجهة','تاريخ','قيمة','مشروع','نية','مكان','قناة','موظف مسؤول','حالة الحركة','الاعتماد المالي']];rs.forEach(r=>out.push([r.donor||'',r.date||'',r.amount||'',r.project||'',r.intention||'',r.location||'',r.method||'',r.responsibleEmployeeName||r.by||'',movementStatusLabel(r.movementStatus),normalizeFinanceStatus(r.financeStatus)==='approved'?'معتمد ماليًا':normalizeFinanceStatus(r.financeStatus)==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد']));const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:24},{wch:14},{wch:14},{wch:22},{wch:18},{wch:18},{wch:18},{wch:22},{wch:18},{wch:22}];XLSX.utils.book_append_sheet(wb,ws,'سجلات التبرعات');XLSX.writeFile(wb,'سجلات_التبرعات_تفصيلي.xlsx')};
- window.printModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية الطباعة.');return}const rs=rows(),html=rs.map(r=>`<tr><td>${esc(r.donor||'—')}</td><td>${fmtDate(r.date)}</td><td>${money(r.amount)}</td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${esc(r.location||'—')}</td><td>${esc(r.method||'—')}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td><td>${esc(movementStatusLabel(r.movementStatus))}</td><td>${esc(normalizeFinanceStatus(r.financeStatus)==='approved'?'معتمد ماليًا':normalizeFinanceStatus(r.financeStatus)==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد')}</td></tr>`).join('');const w=window.open('','_blank','width=1500,height=800');if(!w){alert('يرجى السماح بالنوافذ المنبثقة للطباعة.');return}w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>سجلات التبرعات</title><style>body{font-family:Tahoma,Arial;padding:24px;color:#17302E}h2{color:#0B6B5B;text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #D8E9E2;padding:9px;text-align:right}th{background:#F4FBF8;color:#0B6B5B}</style></head><body><h2>سجلات التبرعات</h2><table><thead><tr><th>المتبرع / الجهة</th><th>تاريخ</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>مكان</th><th>قناة</th><th>موظف مسؤول</th><th>حالة الحركة</th><th>الاعتماد المالي</th></tr></thead><tbody>${html}</tbody></table></body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),250)};
+ window.renderModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser))return;refreshModuleDonationEmployeeFilter();const rs=rows();const total=rs.reduce((s,r)=>s+(Number(String(r.amount||0).replace(/,/g,''))||0),0);document.getElementById('moduleDonationStats').innerHTML=`<div class="stat gold"><div class="num">${total.toLocaleString('ar-EG')}</div><div class="lbl">إجمالي التبرعات (جنيه)</div></div><div class="stat"><div class="num">${rs.length}</div><div class="lbl">عدد الحركات</div></div><div class="stat"><div class="num">${new Set(rs.map(r=>normName(r.donor))).size}</div><div class="lbl">عدد المتبرعين والجهات</div></div>`;const box=document.getElementById('moduleDonationRecords');if(!rs.length){box.innerHTML='<div class="empty">لا توجد حركات تبرع مطابقة للفلاتر الحالية.</div>';return}box.innerHTML=`<div class="donation-record-table-wrap"><table class="donation-record-table"><thead><tr><th>رقم الحركة</th><th>تاريخ</th><th>اسم</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>حالة الاعتماد</th><th>بواسطة</th></tr></thead><tbody>${rs.map((r,i)=>{const fs=normalizeFinanceStatus(r.financeStatus);const badge=fs==='approved'?'<span class="badge green">معتمد ماليًا</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>';const id=r.entityType==='company'?r.companyId:r.donorId;return `<tr data-entity="${esc(r.entityType||'individual')}" data-id="${esc(id)}" data-hid="${esc(r.hid)}"><td>${i+1}</td><td>${fmtDate(r.date)}</td><td>${esc(r.donor||'—')}</td><td><b>${money(r.amount)}</b></td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${badge}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td></tr>`}).join('')}</tbody></table></div>`;box.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=function(){openUnifiedDonationDetail(this.dataset.entity,this.dataset.id,this.dataset.hid)})};
+ window.exportModuleDonationExcel=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية التصدير.');return}const rs=rows(),out=[['رقم الحركة','تاريخ','اسم','قيمة','مشروع','نية','حالة الاعتماد','بواسطة']];rs.forEach((r,i)=>{const fs=normalizeFinanceStatus(r.financeStatus);const st=fs==='approved'?'معتمد ماليًا':fs==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد';out.push([i+1,r.date||'',r.donor||'',r.amount||'',r.project||'',r.intention||'',st,r.responsibleEmployeeName||r.by||''])});const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:10},{wch:14},{wch:24},{wch:14},{wch:22},{wch:18},{wch:20},{wch:22}];XLSX.utils.book_append_sheet(wb,ws,'سجلات التبرعات');XLSX.writeFile(wb,'سجلات_التبرعات.xlsx')};
+ window.printModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية الطباعة.');return}const rs=rows(),html=rs.map((r,i)=>{const fs=normalizeFinanceStatus(r.financeStatus);const st=fs==='approved'?'معتمد ماليًا':fs==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد';return `<tr><td>${i+1}</td><td>${fmtDate(r.date)}</td><td>${esc(r.donor||'—')}</td><td>${money(r.amount)}</td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${esc(st)}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td></tr>`}).join('');const w=window.open('','_blank','width=1300,height=800');if(!w){alert('يرجى السماح بالنوافذ المنبثقة للطباعة.');return}w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>سجلات التبرعات</title><style>body{font-family:Tahoma,Arial;padding:24px;color:#17302E}h2{color:#0B6B5B;text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #D8E9E2;padding:9px;text-align:right}th{background:#F4FBF8;color:#0B6B5B}</style></head><body><h2>سجلات التبرعات</h2><table><thead><tr><th>رقم الحركة</th><th>تاريخ</th><th>اسم</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>حالة الاعتماد</th><th>بواسطة</th></tr></thead><tbody>${html}</tbody></table></body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),250)};
 })();
 </script>
 <script id="final-requested-fixes-v3">
