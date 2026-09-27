@@ -1800,8 +1800,6 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
         <label>إلى</label><input type="date" id="moduleDonationTo" max="2050-12-31">
         <button class="btn-outline btn-small" onclick="renderModuleDonationRecords()">تطبيق</button>
         <button class="btn-outline btn-small" onclick="clearModuleDonationFilters()">مسح الفلاتر</button>
-        <input id="moduleDonationUserFilter" type="text" list="moduleDonationUsersDatalist" placeholder="المستخدم (اختر أو اكتب جزءًا من الاسم)" oninput="renderModuleDonationRecords()" style="min-width:210px">
-        <datalist id="moduleDonationUsersDatalist"></datalist>
       </div>
       <button class="btn-outline btn-small" onclick="printModuleDonationRecords()">طباعة</button>
       <button class="btn-primary btn-small" onclick="exportModuleDonationExcel()">تصدير Excel</button>
@@ -2073,7 +2071,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbx315qke1-gGAkn-99AYKI5D-qSPpR8j6E44SbtgcZol_QSyPY8jx5tIytM_XW9kgQ/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxok9RYK8liF0BI4hHdBzfU8Hjs2Arm2Gls1ziuINosHbo8i5eCri8wsR7dkXrvsWisxA/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -3514,10 +3512,7 @@ async function saveUsersReliable(){
   if(!GAS_URL)return true;
   clearTimeout(pushTimer);
   const ok=await syncPushNow();
-  if(!ok){
-    const reason=(typeof __lastPushError==='string'&&__lastPushError)?__lastPushError:'سبب غير معروف (تحقق من الاتصال بالإنترنت أو رابط Google Apps Script)';
-    alert('تم حفظ التغيير محليًا على هذا الجهاز، لكن تعذر تأكيده على Google Sheets الآن.\nالسبب: '+reason+'\nسيُعاد إرسال التغيير تلقائيًا عند عودة الاتصال، وسيبقى محفوظًا محليًا حتى ذلك الحين.');
-  }
+  if(!ok)alert('تم حفظ التغيير محليًا، لكن تعذر تأكيده على Google Sheets الآن. سيبقى التغيير محفوظًا محليًا ولن تُستعاد الحسابات المحذوفة تلقائيًا.');
   return ok;
 }
 /* ---------- سجل فوري ودائم لحركات التبرعات على Google Sheets ----------
@@ -4011,9 +4006,6 @@ async function __backgroundFreshnessSync(force=false){
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)__backgroundFreshnessSync(true)});
 window.addEventListener('focus',()=>__backgroundFreshnessSync(true));
 setInterval(()=>{if(!document.hidden)__backgroundFreshnessSync(false)},15000);
-/* عند عودة الاتصال بالإنترنت، إن وُجد تغيير محلي لم يُؤكَّد بعد على Google Sheets
-   (__localDirty)، أعد المحاولة فورًا بدل انتظار تعديل جديد أو إعادة تحميل الصفحة. */
-window.addEventListener('online',()=>{if(GAS_URL&&__localDirty)syncPushNow({silent:true}).catch(()=>{})});
 
 /* ---------- Google Sheets sync ---------- */
 function gasCall(action,payload){
@@ -5711,8 +5703,11 @@ function visibleDonors(){
   return donors.filter(d=>d.employeeId===currentUser.id)
 }
 function findDuplicate(name,phone,excludeId){
+  /* لازم تطابق الاسم ورقم الموبايل معًا لاعتبارهما نفس المتبرع — تطابق أحدهما فقط
+     (مثلاً نفس رقم الهاتف لأشخاص مختلفين) لم يعد كافيًا لدمج الحركات على متبرع واحد. */
   const n=normName(name), ph=digitsOnly(phone);
-  return donors.find(d=>d.id!==excludeId && (normName(d.name)===n || (ph && digitsOnly(d.phone)===ph)))
+  if(!n||!ph)return null;
+  return donors.find(d=>d.id!==excludeId && normName(d.name)===n && digitsOnly(d.phone)===ph)
 }
 function isCashMethod(m){return /نقد/.test(String(m||''))}
 function allDonationEntries(d){return (d.history||[]).filter(x=>x.type==='donation')}
@@ -6112,11 +6107,6 @@ function financeStatusLabel(entryOrStatus){
  if(s==='approved')return donationLinkedToFinance(entry)?'معتمد ماليًا':'معتمد تلقائي';
  return s==='rejected'?'مرفوض ماليًا':'في انتظار اعتماد المالية';
 }
-/* دالة عامة مطابقة لتسمية حالة الاعتماد المالي — كانت مُستخدمة في تفاصيل المشروع
-   (openProjectDetails / exportProjectDetailsExcel) بينما التعريف الوحيد لها كان محليًا
-   داخل IIFE منفصل، ما كان يسبب خطأ "statusLabel is not defined" ويمنع فتح شاشة
-   تفاصيل المشروع بالكامل. أضيفت هنا لتكون متاحة عالميًا. */
-function statusLabel(s){return s==='approved'?'معتمد ماليًا':s==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد المالي'}
 function reportFinancialRows(){
  const {from,to}=currentReportRange(); const rows=[];
  reportBaseDonors().forEach(d=>reportHistoryForDonor(d).forEach(h=>{
@@ -6714,9 +6704,8 @@ async function confirmDeleteDonor(id){
  if(allDonationEntries(d).length>0){alert('لا يمكن حذف هذا المتبرع لوجود حركات تبرع مسجلة عليه. احذفها أولًا.');closeModal();return}
  if(!confirm('تأكيد نهائي: هل تريد حذف المتبرع «'+d.name+'» وجميع سجلاته؟'))return;
  donors=donors.filter(x=>x.id!==id);__markSyncEntityDeleted('donors',id);persist();
- const syncDeleteOk=GAS_URL?await syncPushNow({silent:false}):true;
  closeModal();render();
- if(GAS_URL&&!syncDeleteOk)alert('تم حذف المتبرع محليًا، لكن تعذر تأكيد الحذف على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.');
+ if(GAS_URL)syncPushNow({silent:false}).then(ok=>{if(!ok)alert('تم حذف المتبرع محليًا، لكن تعذر تأكيد الحذف على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.')});
 }
 
 /* ---------- projects datalist ---------- */
@@ -7124,14 +7113,7 @@ function moduleDonationRows(){
   });
   return rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
 }
-function refreshModuleDonationUsersDatalist(){
-  const dl=document.getElementById('moduleDonationUsersDatalist');
-  if(!dl)return;
-  const names=[...new Set((USERS||[]).map(u=>u&&u.fullName).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
-  dl.innerHTML=names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('');
-}
 function refreshModuleDonationEmployeeFilter(){
-  refreshModuleDonationUsersDatalist();
   const sel=document.getElementById('moduleDonationEmployeeFilter');
   const note=document.getElementById('moduleDonationOwnNote');
   if(!sel)return;
@@ -7153,10 +7135,8 @@ function filteredModuleDonationRows(){
   const from=document.getElementById('moduleDonationFrom')?.value||'';
   const to=document.getElementById('moduleDonationTo')?.value||'';
   const empFilter=isManagerRole(currentUser)?(document.getElementById('moduleDonationEmployeeFilter')?.value||'all'):'';
-  const userQ=normName(document.getElementById('moduleDonationUserFilter')?.value||'');
   let rows=moduleDonationRows().filter(r=>inRange(r.date,from,to));
   if(empFilter&&empFilter!=='all')rows=rows.filter(r=>(r.responsibleEmployeeId||r.createdBy||'')===empFilter);
-  if(userQ)rows=rows.filter(r=>normName(r.responsibleEmployeeName||r.by||'').includes(userQ));
   if(q)rows=rows.filter(r=>normName([r.donor,r.phone,r.project,r.intention,r.location,r.method,r.movementStatus||'قيد التنفيذ'].join(' ')).includes(q));
   return rows;
 }
@@ -7202,7 +7182,6 @@ function clearModuleDonationFilters(){
   const f=document.getElementById('moduleDonationFrom'); if(f)f.value='';
   const t=document.getElementById('moduleDonationTo'); if(t)t.value='';
   const e=document.getElementById('moduleDonationEmployeeFilter'); if(e)e.value='all';
-  const u=document.getElementById('moduleDonationUserFilter'); if(u)u.value='';
   moduleDonationSearchTerm='';renderModuleDonationRecords();
 }
 
@@ -7424,12 +7403,11 @@ async function deleteDonation(id,hid){
  }
  d.history=(d.history||[]).filter(h=>h.hid!==hid);__markSyncHistoryDeleted('individual',id,hid);
  persist();
- const syncDeleteOk=GAS_URL?await syncPushNow({silent:false}):true;
  closeModal();render();
- if(GAS_URL&&!syncDeleteOk)alert('تم حذف الحركة محليًا، لكن تعذر تأكيد حذفها على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.');
  if(currentView==='financeReview')renderFinanceReview();
  if(currentView==='donations')renderDonations();
  if(currentView==='reports')renderReports();
+ if(GAS_URL)syncPushNow({silent:false}).then(ok=>{if(!ok)alert('تم حذف الحركة محليًا، لكن تعذر تأكيد حذفها على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.')});
 }
 function rejectFinanceDonation(donorId,hid){
  if(!currentUser||!isFinance(currentUser)||!canModule('financeReview','edit',currentUser)){alert('ليس لديك صلاحية تعديل حالة الاعتماد المالي.');return}
@@ -8049,7 +8027,7 @@ function importEmployeeOptions(){
 function openImport(){
   if(!currentUser||!canModule('importData','add',currentUser)){alert('ليس لديك صلاحية استيراد البيانات.');return}
   ensureProjectCodes();ensureChannelCodes();ensureIntentionCodes();
-  openModal(`<h3>استيراد بيانات</h3><div class="small-note" style="margin-bottom:10px">الشيت القياسي الموحد مع تابة <b>تبرع جديد</b>: <b>التاريخ، قيمة التبرع، اسم المتبرع، رقم التليفون، المشروع، النية، مكان التبرع، قناة/طريقة التبرع، الموظف المسؤول، حالة الحركة، حالة الاعتماد المالي، ملاحظات</b>. <br>حالة الحركة إلزامية، وحالة الاعتماد المالي يتم تحديدها تلقائيًا: <b>ناجحة = بانتظار اعتماد الإدارة المالية</b>، وأي حالة أخرى = <b>معتمد</b>.<br><br><b>لتفادي أخطاء الكتابة اليدوية:</b> يمكنك كتابة <b>كود المشروع</b> (مثل P1) بدلًا من اسمه الكامل في عمود "المشروع"، و<b>كود القناة</b> (مثل C1) بدلًا من اسمها في عمود "قناة/طريقة التبرع"، و<b>كود النية</b> (مثل N1) بدلًا من كتابتها في عمود "النية"، و<b>كود حالة الحركة</b> (1=ناجحة، 2=مرفوضة، 3=قيد التنفيذ، 4=اخرى) بدلًا من كتابتها كاملة. الاسم الكامل ما زال يعمل أيضًا لو فضّلت كتابته يدويًا. اضغط "عرض الأكواد الحالية" لمعرفة كود كل عنصر، أو نزّل نموذج الشيت لتجدها في تبويب منفصل بداخله.</div><div class="field"><label>الموظف المسؤول عن البيانات المستوردة</label><select id="importEmployeeSelect">${importEmployeeOptions()}</select></div><div class="field"><input type="file" id="importFile" accept=".xlsx,.xls,.csv,.tsv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></div><div class="field"><textarea id="importText" style="min-height:150px" placeholder="2026-08-18\t500\tإسلام أحمد\t010...\tP1\tN1\tالقاهرة\tC1\tالموظف المسؤول\t1\tتحدد تلقائيًا\tملاحظة"></textarea></div><div class="modal-actions"><button class="btn-primary" onclick="runImport()">استيراد</button><button class="btn-outline" onclick="downloadImportTemplate()">تنزيل نموذج الشيت</button><button class="btn-outline" onclick="openImportCodesReference()">عرض الأكواد الحالية</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
+  openModal(`<h3>استيراد بيانات</h3><div class="small-note" style="margin-bottom:10px">الشيت القياسي الموحد مع تابة <b>تبرع جديد</b>: <b>التاريخ، قيمة التبرع، اسم المتبرع، رقم التليفون، المشروع، النية، مكان التبرع، قناة/طريقة التبرع، الموظف المسؤول، حالة الحركة، حالة الاعتماد المالي، ملاحظات</b>. <br>حالة الحركة إلزامية، وحالة الاعتماد المالي يتم تحديدها تلقائيًا: <b>ناجحة = بانتظار اعتماد الإدارة المالية</b>، وأي حالة أخرى = <b>معتمد</b>.<br><br><b>لتفادي أخطاء الكتابة اليدوية:</b> يمكنك كتابة <b>كود المشروع</b> (مثل P1) بدلًا من اسمه الكامل في عمود "المشروع"، و<b>كود القناة</b> (مثل C1) بدلًا من اسمها في عمود "قناة/طريقة التبرع"، و<b>كود النية</b> (مثل N1) بدلًا من كتابتها في عمود "النية"، و<b>كود حالة الحركة</b> (1=ناجحة، 2=مرفوضة، 3=قيد التنفيذ، 4=اخرى) بدلًا من كتابتها كاملة. الاسم الكامل ما زال يعمل أيضًا لو فضّلت كتابته يدويًا. اضغط "عرض الأكواد الحالية" لمعرفة كود كل عنصر، أو نزّل نموذج الشيت لتجدها في تبويب منفصل بداخله.<br><br><b>شروط القبول:</b> يُرفض السطر إن كان التاريخ غير صحيح أو بصيغة غير مدعومة (yyyy-mm-dd) أو تاريخًا مستقبليًا، أو كان المشروع/القناة/النية (لو كُتبت) غير موجودين أصلًا في النظام بنفس الاسم أو الكود.</div><div class="field"><label>الموظف المسؤول عن البيانات المستوردة</label><select id="importEmployeeSelect">${importEmployeeOptions()}</select></div><div class="field"><input type="file" id="importFile" accept=".xlsx,.xls,.csv,.tsv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></div><div class="field"><textarea id="importText" style="min-height:150px" placeholder="2026-08-18\t500\tإسلام أحمد\t010...\tP1\tN1\tالقاهرة\tC1\tالموظف المسؤول\t1\tتحدد تلقائيًا\tملاحظة"></textarea></div><div class="modal-actions"><button class="btn-primary" onclick="runImport()">استيراد</button><button class="btn-outline" onclick="downloadImportTemplate()">تنزيل نموذج الشيت</button><button class="btn-outline" onclick="openImportCodesReference()">عرض الأكواد الحالية</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
   const fileEl=document.getElementById('importFile'); fileEl.onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const ext=(f.name.split('.').pop()||'').toLowerCase();if((ext==='xlsx'||ext==='xls')&&window.XLSX){const buf=await f.arrayBuffer();const wb=XLSX.read(buf,{type:'array',cellDates:false,raw:false});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});document.getElementById('importText').value=rows.map(r=>r.map(v=>String(v??'').trim()).join('\t')).join('\n')}else{const r=new FileReader();r.onload=ev=>document.getElementById('importText').value=ev.target.result;r.readAsText(f,'UTF-8')}}catch(err){alert('تعذر قراءة ملف Excel/CSV. تأكد أن الملف سليم ثم حاول مرة أخرى.')}};
 }
 function openImportCodesReference(){
@@ -8067,9 +8045,9 @@ function openImportCodesReference(){
 }
 function downloadImportTemplate(){
   ensureProjectCodes();ensureChannelCodes();ensureIntentionCodes();
-  const firstProjectCode=projects[0]?.code||'P1', firstChannelCode=channels[0]?channelCode(channels[0]):'C1';
-  const rows=[['التاريخ','قيمة التبرع','اسم المتبرع','رقم التليفون','المشروع (اسم أو كود)','النية (نص أو كود)','مكان التبرع','قناة/طريقة التبرع (اسم أو كود)','الموظف المسؤول','حالة الحركة (نص أو كود)','حالة الاعتماد المالي','ملاحظات'],
-    [todayStr(),500,'مثال: إسلام أحمد','01000000000',firstProjectCode,'صدقة جارية','القاهرة',firstChannelCode,'يحدد من شاشة الاستيراد','1 (=ناجحة)','تلقائيًا — بانتظار اعتماد الإدارة المالية','']];
+  const firstProjectCode=projects[0]?.code||'P1', firstChannelCode=channels[0]?channelCode(channels[0]):'C1', firstIntentionCode=intentions[0]?intentionCode(intentions[0]):'N1';
+  const rows=[['التاريخ','قيمة التبرع','اسم المتبرع','رقم التليفون','المشروع (اسم أو كود)','النية (اسم أو كود)','مكان التبرع','قناة/طريقة التبرع (اسم أو كود)','الموظف المسؤول','حالة الحركة (نص أو كود)','حالة الاعتماد المالي','ملاحظات'],
+    [todayStr(),500,'مثال: إسلام أحمد','01000000000',firstProjectCode,firstIntentionCode,'القاهرة',firstChannelCode,'يحدد من شاشة الاستيراد','1 (=ناجحة)','تلقائيًا — بانتظار اعتماد الإدارة المالية','']];
   const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:14},{wch:14},{wch:24},{wch:16},{wch:24},{wch:18},{wch:18},{wch:22},{wch:24},{wch:16},{wch:28},{wch:30}];XLSX.utils.book_append_sheet(wb,ws,'بيانات الاستيراد');
   const codeRows=[['نوع العنصر','الكود','الاسم/الوصف']];
   projects.forEach(p=>codeRows.push(['مشروع',p.code||'',p.name||'']));
@@ -8079,7 +8057,21 @@ function downloadImportTemplate(){
   const wsCodes=XLSX.utils.aoa_to_sheet(codeRows);wsCodes['!cols']=[{wch:18},{wch:10},{wch:30}];XLSX.utils.book_append_sheet(wb,wsCodes,'الأكواد');
   XLSX.writeFile(wb,'نموذج_استيراد_التبرعات_الموحد.xlsx');
 }
-function normalizeImportDate(v){const s=String(v??'').trim();if(!s)return todayStr();if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){const p=s.split('-').map(Number);return `${p[0]}-${String(p[1]).padStart(2,'0')}-${String(p[2]).padStart(2,'0')}`}if(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(s)){const p=s.split(/[\/\-]/).map(Number);return `${p[2]}-${String(p[1]).padStart(2,'0')}-${String(p[0]).padStart(2,'0')}`}return s}
+function normalizeImportDate(v){
+  const s=String(v??'').trim();
+  if(!s)return todayStr();
+  let y,m,d;
+  if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){const p=s.split('-').map(Number);y=p[0];m=p[1];d=p[2]}
+  else if(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(s)){const p=s.split(/[\/\-]/).map(Number);y=p[2];m=p[1];d=p[0]}
+  else return null;
+  const dt=new Date(y,m-1,d);
+  /* يتأكد إن التاريخ حقيقي فعلاً (مش مثلاً يوم 31 في شهر فيه 30 يوم فقط أو شهر 13) */
+  if(dt.getFullYear()!==y||dt.getMonth()!==m-1||dt.getDate()!==d)return null;
+  const out=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  /* لا يقبل تاريخًا في المستقبل — يجب أن يتوافق مع تاريخ اليوم في النظام كحد أقصى */
+  if(out>todayStr())return null;
+  return out;
+}
 function parseImportRows(raw){return String(raw||'').replace(/^\uFEFF/,'').split(/\r?\n/).filter(x=>x.trim()).map(line=>{let c;if(line.includes('\t'))c=line.split('\t');else if(line.includes(';'))c=line.split(';');else c=line.split(',');return c.map(x=>String(x??'').trim().replace(/^"|"$/g,''))})}
 async function runImport(){
   const employeeId=document.getElementById('importEmployeeSelect').value;
@@ -8093,19 +8085,27 @@ async function runImport(){
     const first=String(c[0]||'').trim(), second=String(c[1]||'').trim(), third=String(c[2]||'').trim();
     if(index===0&&/^(التاريخ|date)$/i.test(first)&&/^(قيمة التبرع|amount)$/i.test(second))return;
     const date=normalizeImportDate(c[0]), amount=String(c[1]??'').replace(/,/g,'').trim(), name=third, phone=String(c[3]||'').trim(), project=String(c[4]||'').trim(), intention=String(c[5]||'').trim(), location=String(c[6]||'').trim(), method=String(c[7]||'').trim(), sheetEmployee=String(c[8]||'').trim(), rawMovementStatus=String(c[9]||'').trim(), movementStatus=normalizeMovementStatus(rawMovementStatus), notes=String(c[11]||'').trim();
+    if(date===null){skipped++;errors.push(`السطر ${index+1}: التاريخ «${c[0]||''}» غير صالح أو غير مطابق لصيغة النظام (yyyy-mm-dd) أو تاريخ مستقبلي.`);return}
     if(!name){skipped++;errors.push(`السطر ${index+1}: اسم المتبرع فارغ.`);return}
     if(!amount||isNaN(Number(amount))||Number(amount)<=0){skipped++;errors.push(`السطر ${index+1}: قيمة التبرع غير صالحة.`);return}
     if(!rawMovementStatus){skipped++;errors.push(`السطر ${index+1}: حالة الحركة مطلوبة.`);return}
     if(!project){skipped++;errors.push(`السطر ${index+1}: المشروع مطلوب.`);return}
     const projectObj=projectByCode(project)||projects.find(p=>normName(p.name)===normName(project));
     if(!projectObj){skipped++;errors.push(`السطر ${index+1}: المشروع «${project}» غير موجود أو غير مكود في النظام (اكتب اسم المشروع كاملًا أو كوده مثل P1).`);return}
-    let finalIntention=intentionByCode(intention)||intention;if(!finalIntention&&projectObj&&projectObj.intention)finalIntention=projectObj.intention;if(!finalIntention){skipped++;errors.push(`السطر ${index+1}: النية مطلوبة.`);return}
+    let finalIntention=intention?(intentionByCode(intention)||intentions.find(x=>normName(x)===normName(intention))||''):'';
+    if(!intention&&projectObj&&projectObj.intention)finalIntention=projectObj.intention;
+    if(intention&&!finalIntention){skipped++;errors.push(`السطر ${index+1}: النية «${intention}» غير موجودة في النظام (اكتب اسم النية كاملًا أو كودها مثل N1).`);return}
+    if(!finalIntention){skipped++;errors.push(`السطر ${index+1}: النية مطلوبة.`);return}
     const channel=channelByCode(method)||channels.find(ch=>normName(ch)===normName(method));if(!method||!channel){skipped++;errors.push(`السطر ${index+1}: قناة/طريقة التبرع غير موجودة في النظام (اكتب اسم القناة كاملًا أو كودها مثل C1).`);return}
     const dup=findDuplicate(name,phone,'');
     const h={type:'donation',hid:uid(),date:date||todayStr(),action:'تبرع جديد',amount,project:projectObj.name,intention:finalIntention,location,method:channel,notes,by:employee.fullName,createdBy:employee.id,responsibleEmployeeId:employee.id,responsibleEmployeeName:employee.fullName,status:'confirmed',movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved'};
     if(dup){dup.history=dup.history||[];dup.history.push(h);merged++}else{donors.push({id:uid(),name:name.trim(),phone,employeeId:employee.id,createdBy:employee.id,registeredDate:date||todayStr(),history:[h]});added++}
   });
-  persist();render();let syncMessage='';if(GAS_URL){const synced=await syncPushNow();syncMessage=synced?'\nتم حفظ البيانات على Google Sheets بنجاح ✓':'\n⚠️ تم حفظ البيانات على الجهاز، لكن تعذر رفعها إلى Google Sheets. لن يتم حذفها من الجهاز.'}closeModal();let msg=`تم الاستيراد وفق المعايير الموحدة لتابة "تبرع جديد" تحت اسم الموظف "${employee.fullName}".\nسجلات جديدة: ${added}\nتم دمجها مع متبرعين موجودين: ${merged}\nتم تجاهلها: ${skipped}`+syncMessage;if(errors.length)msg+=`\n\nأسباب التجاهل (أول 10):\n`+errors.slice(0,10).join('\n');alert(msg);
+  persist();render();closeModal();
+  let msg=`تم الاستيراد وفق المعايير الموحدة لتابة "تبرع جديد" تحت اسم الموظف "${employee.fullName}".\nسجلات جديدة: ${added}\nتم دمجها مع متبرعين موجودين: ${merged}\nتم تجاهلها: ${skipped}`;
+  if(errors.length)msg+=`\n\nأسباب التجاهل (أول 10):\n`+errors.slice(0,10).join('\n');
+  alert(msg);
+  if(GAS_URL)syncPushNow().then(synced=>{if(!synced)alert('⚠️ تم حفظ بيانات الاستيراد على الجهاز، لكن تعذر رفعها إلى Google Sheets الآن. سيُعاد الإرسال تلقائيًا عند عودة الاتصال، ولن تُحذف من الجهاز.')});
 }
 
 /* ---------- excel export ---------- */
@@ -9385,9 +9385,9 @@ document.addEventListener('DOMContentLoaded',function(){
  window.renderSettingsManagerCategories=function(){const el=document.getElementById('managerCatTagList');if(!el)return;el.innerHTML=managerCategories.map(c=>`<span class="tag">${esc(c)}<button class="settings-edit-btn btn-outline" onclick="editSettingItem('manager','${esc(c).replace(/'/g,"\\'")}')">تعديل</button><button onclick="removeManagerCategory('${esc(c).replace(/'/g,"\\'")}')">✕</button></span>`).join('')};
  window.editSettingItem=editItem;
  function rows(){return typeof filteredModuleDonationRows==='function'?filteredModuleDonationRows():[]}
- window.renderModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser))return;refreshModuleDonationEmployeeFilter();const rs=rows();const total=rs.reduce((s,r)=>s+(Number(String(r.amount||0).replace(/,/g,''))||0),0);document.getElementById('moduleDonationStats').innerHTML=`<div class="stat gold"><div class="num">${total.toLocaleString('ar-EG')}</div><div class="lbl">إجمالي التبرعات (جنيه)</div></div><div class="stat"><div class="num">${rs.length}</div><div class="lbl">عدد الحركات</div></div><div class="stat"><div class="num">${new Set(rs.map(r=>normName(r.donor))).size}</div><div class="lbl">عدد المتبرعين والجهات</div></div>`;const box=document.getElementById('moduleDonationRecords');if(!rs.length){box.innerHTML='<div class="empty">لا توجد حركات تبرع مطابقة للفلاتر الحالية.</div>';return}box.innerHTML=`<div class="donation-record-table-wrap"><table class="donation-record-table"><thead><tr><th>رقم الحركة</th><th>تاريخ</th><th>اسم</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>حالة الاعتماد</th><th>بواسطة</th></tr></thead><tbody>${rs.map((r,i)=>{const fs=normalizeFinanceStatus(r.financeStatus);const badge=fs==='approved'?'<span class="badge green">معتمد ماليًا</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>';const id=r.entityType==='company'?r.companyId:r.donorId;return `<tr data-entity="${esc(r.entityType||'individual')}" data-id="${esc(id)}" data-hid="${esc(r.hid)}"><td>${i+1}</td><td>${fmtDate(r.date)}</td><td>${esc(r.donor||'—')}</td><td><b>${money(r.amount)}</b></td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${badge}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td></tr>`}).join('')}</tbody></table></div>`;box.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=function(){openUnifiedDonationDetail(this.dataset.entity,this.dataset.id,this.dataset.hid)})};
- window.exportModuleDonationExcel=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية التصدير.');return}const rs=rows(),out=[['رقم الحركة','تاريخ','اسم','قيمة','مشروع','نية','حالة الاعتماد','بواسطة']];rs.forEach((r,i)=>{const fs=normalizeFinanceStatus(r.financeStatus);const st=fs==='approved'?'معتمد ماليًا':fs==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد';out.push([i+1,r.date||'',r.donor||'',r.amount||'',r.project||'',r.intention||'',st,r.responsibleEmployeeName||r.by||''])});const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:10},{wch:14},{wch:24},{wch:14},{wch:22},{wch:18},{wch:20},{wch:22}];XLSX.utils.book_append_sheet(wb,ws,'سجلات التبرعات');XLSX.writeFile(wb,'سجلات_التبرعات.xlsx')};
- window.printModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية الطباعة.');return}const rs=rows(),html=rs.map((r,i)=>{const fs=normalizeFinanceStatus(r.financeStatus);const st=fs==='approved'?'معتمد ماليًا':fs==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد';return `<tr><td>${i+1}</td><td>${fmtDate(r.date)}</td><td>${esc(r.donor||'—')}</td><td>${money(r.amount)}</td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${esc(st)}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td></tr>`}).join('');const w=window.open('','_blank','width=1300,height=800');if(!w){alert('يرجى السماح بالنوافذ المنبثقة للطباعة.');return}w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>سجلات التبرعات</title><style>body{font-family:Tahoma,Arial;padding:24px;color:#17302E}h2{color:#0B6B5B;text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #D8E9E2;padding:9px;text-align:right}th{background:#F4FBF8;color:#0B6B5B}</style></head><body><h2>سجلات التبرعات</h2><table><thead><tr><th>رقم الحركة</th><th>تاريخ</th><th>اسم</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>حالة الاعتماد</th><th>بواسطة</th></tr></thead><tbody>${html}</tbody></table></body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),250)};
+ window.renderModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser))return;refreshModuleDonationEmployeeFilter();const rs=rows();const total=rs.reduce((s,r)=>s+(Number(String(r.amount||0).replace(/,/g,''))||0),0);document.getElementById('moduleDonationStats').innerHTML=`<div class="stat gold"><div class="num">${total.toLocaleString('ar-EG')}</div><div class="lbl">إجمالي التبرعات (جنيه)</div></div><div class="stat"><div class="num">${rs.length}</div><div class="lbl">عدد الحركات</div></div><div class="stat"><div class="num">${new Set(rs.map(r=>normName(r.donor))).size}</div><div class="lbl">عدد المتبرعين والجهات</div></div>`;const box=document.getElementById('moduleDonationRecords');if(!rs.length){box.innerHTML='<div class="empty">لا توجد حركات تبرع مطابقة للفلاتر الحالية.</div>';return}box.innerHTML=`<table class="donation-record-table"><thead><tr><th>المتبرع / الجهة</th><th>تاريخ</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>مكان</th><th>قناة</th><th>موظف مسؤول</th><th>حالة الحركة</th><th>الاعتماد المالي</th></tr></thead><tbody>${rs.map(r=>{const fs=normalizeFinanceStatus(r.financeStatus);const badge=fs==='approved'?'<span class="badge green">معتمد ماليًا</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>';const id=r.entityType==='company'?r.companyId:r.donorId;return `<tr data-entity="${esc(r.entityType||'individual')}" data-id="${esc(id)}" data-hid="${esc(r.hid)}"><td><b>${esc(r.donor||'—')}</b><br><span class="small-note">${esc(r.entityLabel||'فرد')}</span></td><td>${fmtDate(r.date)}</td><td><b>${money(r.amount)}</b></td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${esc(r.location||'—')}</td><td>${esc(r.method||'—')}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td><td><span class="badge">${esc(movementStatusLabel(r.movementStatus))}</span></td><td>${badge}</td></tr>`}).join('')}</tbody></table>`;box.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=function(){openUnifiedDonationDetail(this.dataset.entity,this.dataset.id,this.dataset.hid)})};
+ window.exportModuleDonationExcel=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية التصدير.');return}const rs=rows(),out=[['المتبرع / الجهة','تاريخ','قيمة','مشروع','نية','مكان','قناة','موظف مسؤول','حالة الحركة','الاعتماد المالي']];rs.forEach(r=>out.push([r.donor||'',r.date||'',r.amount||'',r.project||'',r.intention||'',r.location||'',r.method||'',r.responsibleEmployeeName||r.by||'',movementStatusLabel(r.movementStatus),normalizeFinanceStatus(r.financeStatus)==='approved'?'معتمد ماليًا':normalizeFinanceStatus(r.financeStatus)==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد']));const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:24},{wch:14},{wch:14},{wch:22},{wch:18},{wch:18},{wch:18},{wch:22},{wch:18},{wch:22}];XLSX.utils.book_append_sheet(wb,ws,'سجلات التبرعات');XLSX.writeFile(wb,'سجلات_التبرعات_تفصيلي.xlsx')};
+ window.printModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية الطباعة.');return}const rs=rows(),html=rs.map(r=>`<tr><td>${esc(r.donor||'—')}</td><td>${fmtDate(r.date)}</td><td>${money(r.amount)}</td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${esc(r.location||'—')}</td><td>${esc(r.method||'—')}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td><td>${esc(movementStatusLabel(r.movementStatus))}</td><td>${esc(normalizeFinanceStatus(r.financeStatus)==='approved'?'معتمد ماليًا':normalizeFinanceStatus(r.financeStatus)==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد')}</td></tr>`).join('');const w=window.open('','_blank','width=1500,height=800');if(!w){alert('يرجى السماح بالنوافذ المنبثقة للطباعة.');return}w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>سجلات التبرعات</title><style>body{font-family:Tahoma,Arial;padding:24px;color:#17302E}h2{color:#0B6B5B;text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #D8E9E2;padding:9px;text-align:right}th{background:#F4FBF8;color:#0B6B5B}</style></head><body><h2>سجلات التبرعات</h2><table><thead><tr><th>المتبرع / الجهة</th><th>تاريخ</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>مكان</th><th>قناة</th><th>موظف مسؤول</th><th>حالة الحركة</th><th>الاعتماد المالي</th></tr></thead><tbody>${html}</tbody></table></body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),250)};
 })();
 </script>
 <script id="final-requested-fixes-v3">
@@ -9419,12 +9419,12 @@ window.deleteDonation=async function(id,hid){
  if(!canEditDeleteDonationEntry(entry,'delete')){alert(entry.financeStatus==='approved'?'هذه الحركة معتمدة ماليًا، والحذف متاح للإدارة المالية فقط.':'ليس لديك صلاحية حذف هذه الحركة.');return}
  if(!confirm('حذف هذا التبرع نهائيًا؟ سيتم حفظ الحذف على Google Sheets لمنع عودة الحركة مرة أخرى. لا يمكن التراجع عن هذا الإجراء.'))return;
  if(GAS_URL){await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});const freshD=donors.find(x=>x.id===id),freshEntry=freshD&&(freshD.history||[]).find(h=>h.hid===hid);if(!freshEntry){alert('تعذر الحذف: الحركة غير موجودة بالفعل في آخر نسخة متزامنة. تم تحديث النظام تلقائيًا.');render();return}if(!canEditDeleteDonationEntry(freshEntry,'delete')){alert('تعذر الحذف: تغيرت حالة الحركة على جهاز آخر أو تم اعتمادها ماليًا. تم تحديث بياناتك تلقائيًا.');render();if(currentView==='financeReview')renderFinanceReview();return}d=freshD;entry=freshEntry}
- d.history=(d.history||[]).filter(h=>h.hid!==hid);persist();if(GAS_URL&&!await syncPushNow({silent:false}))alert('تم حذف الحركة محليًا، لكن تعذر حفظ الحذف على Google Sheets. أعد المحاولة عند توفر الاتصال.');closeModal();render();if(currentView==='financeReview')renderFinanceReview();if(currentView==='donations')renderDonations();if(currentView==='reports')renderReports();
+ d.history=(d.history||[]).filter(h=>h.hid!==hid);persist();closeModal();render();if(currentView==='financeReview')renderFinanceReview();if(currentView==='donations')renderDonations();if(currentView==='reports')renderReports();if(GAS_URL)syncPushNow({silent:false}).then(ok=>{if(!ok)alert('تم حذف الحركة محليًا، لكن تعذر حفظ الحذف على Google Sheets. أعد المحاولة عند توفر الاتصال.')});
 };
 window.deleteCompanyDonation=async function(id,hid){
  let c=(companies||[]).find(x=>String(x.id)===String(id));let e=c&&(c.history||[]).find(x=>x&&x.hid===hid&&x.type==='donation');if(!c||!e)return;if(!canEditDeleteDonationEntry(e,'delete')){alert('هذه الحركة غير قابلة للحذف حسب حالة الاعتماد والصلاحيات.');return}if(!confirm('حذف حركة التبرع هذه نهائيًا؟ سيتم حفظ الحذف على Google Sheets فورًا.'))return;
  if(GAS_URL){await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});const freshC=(companies||[]).find(x=>String(x.id)===String(id));const freshE=freshC&&(freshC.history||[]).find(x=>x&&x.hid===hid&&x.type==='donation');if(!freshE){alert('تعذر الحذف: الحركة غير موجودة في آخر نسخة متزامنة.');render();return}if(!canEditDeleteDonationEntry(freshE,'delete')){alert('تعذر الحذف: تغيرت حالة الحركة على جهاز آخر.');render();return}c=freshC;e=freshE}
- c.history=(c.history||[]).filter(x=>x.hid!==hid);persistCompanies();if(GAS_URL)await syncPushNow({silent:false});closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();
+ c.history=(c.history||[]).filter(x=>x.hid!==hid);persistCompanies();closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();if(GAS_URL)syncPushNow({silent:false});
 };
 const css=document.createElement('style');css.id='final-requested-layout-fixes-v3';css.textContent=`
 #app>.top-tabs~#donationModuleView,#app>.top-tabs~#donorsView,#app>.top-tabs~#companiesView,#app>.top-tabs~#donationsView,#app>.top-tabs~#projectsView,#app>.top-tabs~#donorRatingsView,#app>.top-tabs~#donationCountsView,#app>.top-tabs~#channelsView{height:calc(100vh - 122px)!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding-bottom:34px!important;box-sizing:border-box!important}
