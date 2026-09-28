@@ -1961,6 +1961,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
     <h4>الإدارات (تكويد الإدارات)</h4>
     <p class="small-note">كوّد الإدارات هنا؛ يحصل كل إدارة على كود تلقائي (D1, D2...) وتظهر كقائمة اختيار عند إنشاء أو تعديل حساب أي مستخدم، وتُسجَّل إدارة المستخدم على كل تبرع يسجله. لا يمكن حذف إدارة مرتبطة بمستخدمين.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="newDepartmentInput" placeholder="اسم إدارة جديدة" style="flex:1;min-width:180px"><button class="btn-primary btn-small" onclick="addDepartment()">إضافة</button></div>
+    <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" id="departmentScopeToggle" onchange="setDepartmentScope(this.checked)"> <span>تفعيل الرؤية حسب الإدارة: يرى المستخدمون في نفس الإدارة حركات ومتبرعي بعضهم (المدير الرئيسي والإدارة المالية يرون الكل دائمًا)</span></label>
     <div class="tag-list" id="departmentsTagList"></div>
   </div>
   <div class="settings-section">
@@ -2077,7 +2078,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby9a7o4bFlgc2OJPVwSVD0YGk8FmaLmGYIol8fVnhFmvC-vTNctsMg7luiVz70VA9HJSA/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw4djPWYHYGKLHKz0lJ-oiPzzj3zUNryVzSjmYbJZCw-Qp8GSwUu0WB0EJXTqOK53KxXw/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -3170,7 +3171,7 @@ const VIEWS=['home','donors','companies','donationModule','projects','donations'
 const TAB_IDS={home:'sideHomeBtn',donors:'tabDonorsBtn',companies:'tabCompaniesBtn',donationModule:'tabDonationModuleBtn',projects:'tabProjectsBtn',donations:'tabDonationsBtn',donationCounts:'tabDonationCountsBtn',donorRatings:'tabDonorRatingsBtn',channels:'tabChannelsBtn',reports:'tabReportsBtn',financeReview:'financeTabBtn',settings:'sideSettingsBtn',syncData:'sideSyncBtn',backup:'sideBackupBtn'};
 const VIEW_IDS={home:'homeView',donors:'donorsView',companies:'companiesView',donationModule:'donationModuleView',projects:'projectsView',donations:'donationsView',donationCounts:'donationCountsView',donorRatings:'donorRatingsView',channels:'channelsView',reports:'reportsView',financeReview:'financeReviewView',settings:'settingsView',syncData:'syncDataView',backup:'backupView'};
 const COMPANY_CONFIG_DEFAULT={categories:['شركة كبرى','شركة متوسطة','شركة صغيرة','بنك / مؤسسة مالية','مصنع','تجاري','خدمي','مقاولات','أخرى'],classifications:['مفيدة جدًا','مفيدة','قيد التقييم','غير مفيدة'],stages:['جديدة','تم التواصل','اجتماع','عرض / مقترح','تفاوض','شراكة / تبرع','مغلقة - ناجحة','مغلقة - غير ناجحة'],activityTypes:['اتصال هاتفي','واتساب','بريد إلكتروني','زيارة','اجتماع','عرض / مقترح','اتفاق / تعاقد','متابعة','ملاحظة']};
-function normalizeCompanyConfig(c){c=c&&typeof c==='object'?c:{};return {categories:Array.isArray(c.categories)&&c.categories.length?c.categories.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.categories.slice(),classifications:Array.isArray(c.classifications)&&c.classifications.length?c.classifications.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.classifications.slice(),stages:Array.isArray(c.stages)&&c.stages.length?c.stages.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.stages.slice(),activityTypes:Array.isArray(c.activityTypes)&&c.activityTypes.length?c.activityTypes.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.activityTypes.slice(),departments:Array.isArray(c.departments)?c.departments.filter(d=>d&&d.name).map(d=>({id:String(d.id||''),name:String(d.name),code:String(d.code||'')})):[]};}
+function normalizeCompanyConfig(c){c=c&&typeof c==='object'?c:{};return {categories:Array.isArray(c.categories)&&c.categories.length?c.categories.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.categories.slice(),classifications:Array.isArray(c.classifications)&&c.classifications.length?c.classifications.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.classifications.slice(),stages:Array.isArray(c.stages)&&c.stages.length?c.stages.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.stages.slice(),activityTypes:Array.isArray(c.activityTypes)&&c.activityTypes.length?c.activityTypes.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.activityTypes.slice(),departmentScope:!!c.departmentScope,departments:Array.isArray(c.departments)?c.departments.filter(d=>d&&d.name).map(d=>({id:String(d.id||''),name:String(d.name),code:String(d.code||'')})):[]};}
 companyConfig=normalizeCompanyConfig(companyConfig);
 const REPORT_PERIODS=[
   {key:'weekly',label:'تقرير أسبوعي'},
@@ -7844,6 +7845,7 @@ function clearDonFilter(){document.getElementById('donFrom').value='';document.g
 function donationRows(){
  const list=visibleDonors();const rows=[];
  list.forEach(d=>donationEntries(d).forEach(h=>{if(inRange(h.date,donFrom,donTo)&&(h.donationType||'cash')===donationsTypeFilter)rows.push({donor:d.name,donorId:d.id,...h})}));
+ (companies||[]).forEach(c=>visibleHistoryEntries(c.history).filter(h=>h.type==='donation'&&h.status!=='pending').forEach(h=>{if(inRange(h.date,donFrom,donTo)&&(h.donationType||'cash')===donationsTypeFilter)rows.push({donor:c.name,donorId:c.id,isCompany:true,...h})}));
  return rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''))
 }
 function renderDonations(){
@@ -7855,7 +7857,7 @@ function renderDonations(){
   <div class="stat"><div class="num">${rows.length}</div><div class="lbl">عدد عمليات التبرع</div></div>
   <div class="stat"><div class="num">${donorsCount}</div><div class="lbl">عدد المتبرعين</div></div>`;
  document.getElementById('donationsList').innerHTML=rows.length?rows.map(r=>`<div class="card" style="border-inline-start-color:var(--gold)">
-  <div class="info" onclick="openFinanceDetail('${r.donorId}','${r.hid}')" title="اضغط لعرض تفاصيل التبرع"><div class="name">${escapeHtml(r.donor)}</div>
+  <div class="info" ${r.isCompany?'':`onclick="openFinanceDetail('${r.donorId}','${r.hid}')" title="اضغط لعرض تفاصيل التبرع"`}><div class="name">${r.isCompany?'<span class="badge gold" style="margin-inline-end:6px">جهة</span>':''}${escapeHtml(r.donor)}</div>
   <div class="meta">${fmtDate(r.date)} · <b>${money(r.amount)}</b>${r.project?` · مشروع: ${escapeHtml(r.project)}`:''}${r.method?` · ${escapeHtml(r.method)}`:''}</div>
   ${donationsTypeFilter==='inkind'&&Array.isArray(r.items)&&r.items.length?`<div class="small-note" style="margin-top:4px">الأصناف: ${r.items.map(it=>`${escapeHtml(it.name)} (${it.qty} × ${money(it.price)})`).join('، ')}</div>`:''}
   <div class="small-note" style="margin-top:4px">بواسطة: ${escapeHtml(r.by||'—')}${r.notes?` · ${escapeHtml(r.notes)}`:''}</div></div>
@@ -9734,6 +9736,32 @@ async function importLogDelete(id,hid){
     const log=document.createElement('div');log.id='importPanelLog';log.className='hidden';
     box.appendChild(tabs);box.appendChild(main);box.appendChild(log);
     if(tab==='log')selectImportTab('log');
+  };
+})();
+</script>
+<script>
+/* ===== الرؤية حسب الإدارة (اختياري، مغلق افتراضيًا) ===== */
+function departmentScopeOn(){return !!(companyConfig&&companyConfig.departmentScope)}
+function setDepartmentScope(v){companyConfig.departmentScope=!!v;persistCompanyConfig()}
+function userDeptOf(id){const u=USERS.find(x=>String(x.id)===String(id));return normName((u&&u.department)||'')}
+function sameDeptAsMe(userId){const me=normName((currentUser&&currentUser.department)||'');return !!me&&userDeptOf(userId)===me}
+(function(){
+  const _rs=window.renderSettingsDepartments;
+  window.renderSettingsDepartments=function(){_rs();const t=document.getElementById('departmentScopeToggle');if(t)t.checked=departmentScopeOn()};
+  const _mc=window.movementCreatedByCurrentUser;
+  window.movementCreatedByCurrentUser=function(h){
+    if(_mc(h))return true;
+    if(!departmentScopeOn()||!h||!currentUser)return false;
+    const hd=normName(h.responsibleDepartment||'');const me=normName(currentUser.department||'');
+    if(me&&hd&&hd===me)return true;
+    return [h.createdBy,h.responsibleEmployeeId].some(v=>v&&sameDeptAsMe(v));
+  };
+  const _vd=window.visibleDonors;
+  window.visibleDonors=function(){
+    const base=_vd();
+    if(!departmentScopeOn()||!currentUser||isFinance(currentUser)||isSuperAdmin(currentUser)||isManagerRole(currentUser))return base;
+    const extra=donors.filter(d=>sameDeptAsMe(d.employeeId)&&!base.includes(d));
+    return base.concat(extra);
   };
 })();
 </script>
