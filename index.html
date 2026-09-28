@@ -1658,7 +1658,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 <div class="top-tabs"><div class="top-tab active" id="sideHomeBtn" onclick="setView('home')"><span class="nav-icon"><svg viewbox="0 0 24 24"><path d="m3 10 9-7 9 7"></path><path d="M5 9v11h14V9"></path><path d="M9 20v-6h6v6"></path></svg></span><span class="nav-label">الرئيسية</span></div>
 <div class="top-tab" id="tabDonationModuleBtn" onclick="setView('donationModule')"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"></path><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg></span><span class="nav-label">تبرع جديد</span></div>
 <div class="top-tab" id="tabDonorsBtn" onclick="setView('donors')"><span class="nav-icon"><svg viewbox="0 0 24 24"><circle cx="9" cy="8" r="3"></circle><path d="M3 20c.5-3.5 2.5-5.5 6-5.5s5.5 2 6 5.5"></path><path d="M16 6.5a3 3 0 0 1 0 5.9"></path><path d="M17 14.7c2.2.5 3.5 2.1 4 5.3"></path></svg></span><span class="nav-label">المتبرعون</span></div>
-<div class="top-tab" id="tabCompaniesBtn" onclick="setView('companies')"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="15" rx="2"></rect><path d="M8 5V3h8v2M3 10h18M8 14h3M13 14h3M8 17h3M13 17h3"></path></svg></span><span class="nav-label">الشركات</span></div>
+<div class="top-tab" id="tabCompaniesBtn" onclick="setView('companies')"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="15" rx="2"></rect><path d="M8 5V3h8v2M3 10h18M8 14h3M13 14h3M8 17h3M13 17h3"></path></svg></span><span class="nav-label">الشركات والجمعيات</span></div>
 <div class="top-tab" id="tabDonationsBtn" onclick="setView('donations')"><span class="nav-icon"><svg viewbox="0 0 24 24"><rect height="11" rx="2" width="18" x="3" y="9"></rect><path d="M12 9v11M3 13h18"></path><path d="M5.5 9c-1.2-2.5.2-4.5 2.2-4.5 2.1 0 3.4 2.2 4.3 4.5"></path><path d="M18.5 9c1.2-2.5-.2-4.5-2.2-4.5-2.1 0-3.4 2.2-4.3 4.5"></path></svg></span><span class="nav-label">التبرعات</span></div>
 <div class="top-tab" id="tabProjectsBtn" onclick="setView('projects')"><span class="nav-icon"><svg viewbox="0 0 24 24"><rect height="13" rx="2" width="18" x="3" y="7"></rect><path d="M8 7V5h8v2M3 12h18"></path></svg></span><span class="nav-label">المشاريع</span></div>
 <div class="top-tab hidden" id="tabReportsBtn" onclick="setView('reports')"><span class="nav-icon"><svg viewbox="0 0 24 24"><path d="M5 20V10M12 20V5M19 20v-8"></path><path d="M3 20h18"></path></svg></span><span class="nav-label">التقارير</span></div>
@@ -1735,7 +1735,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 
 <div id="companiesView" class="hidden">
   <div class="company-subnav">
-    <button class="company-subtab active" id="companySubListBtn" onclick="setCompanySubView('list')">الشركات</button>
+    <button class="company-subtab active" id="companySubListBtn" onclick="setCompanySubView('list')">الشركات والجمعيات</button>
     <button class="company-subtab" id="companySubPipelineBtn" onclick="setCompanySubView('pipeline')">مسار الشراكات</button>
     <button class="company-subtab" id="companySubTasksBtn" onclick="setCompanySubView('tasks')">المتابعات والمهام</button>
     <button class="company-subtab" id="companySubReportBtn" onclick="setCompanySubView('report')">التقارير</button>
@@ -1744,7 +1744,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
   <div id="companyListPanel">
   <div class="company-kpis" id="companyKpis"></div>
   <div class="company-toolbar">
-    <input id="companySearch" type="search" placeholder="ابحث باسم الشركة أو الهاتف أو البريد أو المجال">
+    <input id="companySearch" type="search" placeholder="ابحث باسم الشركة/الجمعية أو الهاتف أو البريد أو المجال">
     <div class="company-filters" id="companyFilterChips"></div>
     <button class="btn-primary" id="addCompanyBtn" onclick="openCompanyForm()">+ إضافة شركة</button>
     <button class="btn-outline btn-small" id="companyExcelExportBtn" onclick="exportCompaniesExcel()">تصدير Excel</button>
@@ -1772,17 +1772,23 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
     <div class="donation-form-grid">
       <div class="field"><label>التاريخ</label><input id="md_date" type="date" max="2050-12-31" value="${todayStr()}"></div>
       <div class="field"><label>نوع الجهة <span style="color:var(--red)">*</span></label><select id="md_entityType" onchange="syncModuleDonationEntity()"><option value="individual">أفراد</option><option value="company">شركات</option></select></div>
-      <div class="field"><label>قيمة التبرع</label><input id="md_amount" type="number" min="0" step="0.01" placeholder="قيمة التبرع"></div>
+      <div class="field" id="md_amountField"><label>قيمة التبرع</label><input id="md_amount" type="number" min="0" step="0.01" placeholder="قيمة التبرع"></div>
+      <div class="field"><label>نوع التبرع <span style="color:var(--red)">*</span></label><select id="md_donationType" onchange="syncModuleDonationType()"><option value="cash">تبرع نقدي</option><option value="inkind">تبرع عيني</option></select></div>
       <div class="field" id="md_individualField"><label>المتبرع</label><input id="md_name" type="text" list="allDonorNamesDatalist" placeholder="اختر/اكتب اسم المتبرع"></div>
       <div class="field hidden" id="md_companyField"><label>الشركة المكودة</label><select id="md_company"><option value="">— اختر الشركة المكودة —</option></select></div>
       <div class="field"><label>رقم التليفون</label><input id="md_phone" type="tel" placeholder="رقم التليفون"></div>
       <div class="field"><label>اسم المشروع</label><select id="md_project" onchange="syncModuleDonationIntention()">${donationProjectOptions()}</select></div>
       <div class="field"><label>النية</label><select id="md_intention">${donationIntentionOptions('')}</select></div>
-      <div class="field"><label>مكان التبرع</label><input id="md_location" list="locationsDatalist" placeholder="مقر المؤسسة / بازار / مول ..."></div>
-      <div class="field"><label>قناة أو طريقة التبرع</label><select id="md_method"></select></div>
+            <div class="field"><label>قناة أو طريقة التبرع</label><select id="md_method"></select></div>
       <div class="field"><label>الموظف المسؤول</label><input id="md_employee" type="text" readonly value="" title="يتم تحديد الموظف المسؤول تلقائيًا من حساب المستخدم الحالي"></div>
       <div class="field"><label>صورة أو إيصال التبرع</label><input id="md_attachment" type="file" accept="image/*"><div class="attachment-note">اختياري — سيتم ضغط الصورة تلقائيًا قبل الحفظ.</div></div>
       <div class="field"><label>حالة الحركة <span style="color:var(--red)">*</span></label><select id="md_movementStatus"><option value="">— اختر حالة الحركة —</option><option value="ناجحة">ناجحة</option><option value="مرفوضة">مرفوضة</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="اخرى">اخرى</option></select></div>
+    </div>
+    <div id="md_itemsSection" class="hidden" style="margin-top:14px;border:1px solid var(--border,#ddd);border-radius:10px;padding:12px">
+      <b style="display:block;margin-bottom:8px">أصناف التبرع العيني</b>
+      <div id="md_itemsList"></div>
+      <button type="button" class="btn-outline" onclick="addModuleDonationItemRow()" style="margin-top:8px">+ إضافة صنف</button>
+      <div style="margin-top:10px;font-weight:bold">إجمالي القيمة التقديرية: <span id="md_itemsTotal">0</span></div>
     </div>
     <div class="field"><label>ملاحظات</label><textarea id="md_notes" placeholder="ملاحظات إضافية (اختياري)"></textarea></div>
     <div class="modal-actions">
@@ -1820,8 +1826,6 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
   <div class="toolbar">
     <label style="font-size:12px;color:var(--muted)">تقرير الموظف / المدير</label>
     <select id="reportEmployeeSelect" onchange="reportEmployee=this.value;renderReports()" style="min-width:240px"></select>
-    <label style="font-size:12px;color:var(--muted);margin-inline-start:8px">مكان الحركة</label>
-    <select id="reportLocationSelect" onchange="reportLocation=this.value;renderReports()" style="min-width:220px"></select>
   </div>
   <div class="toolbar" style="align-items:center;gap:8px;flex-wrap:wrap">
     <div class="daterange">
@@ -1837,8 +1841,6 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
   </div>
   <div class="stats" id="reportStats"></div>
   <div class="report-charts-grid">
-    <div class="report-chart-card"><div class="report-chart-title">عدد العمليات حسب المكان</div><div id="reportLocationCountChart"></div></div>
-    <div class="report-chart-card"><div class="report-chart-title">إجمالي التبرعات حسب المكان</div><div id="reportLocationAmountChart"></div></div>
     <div class="report-chart-card report-chart-wide"><div class="report-chart-title">التبرعات حسب المشروع</div><div id="reportProjectAmountChart"></div></div>
     <div class="report-chart-card report-chart-wide"><div class="report-chart-title">اتجاه العمليات خلال الفترة</div><div id="reportMonthlyTrendChart"></div></div>
   </div>
@@ -1873,6 +1875,10 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 </div>
 
 <div id="donationsView" class="hidden">
+  <div class="donation-module-tabs">
+    <button class="donation-module-tab active" id="donationsTypeTabCash" onclick="selectDonationsTypeTab('cash')">التبرعات النقدية</button>
+    <button class="donation-module-tab" id="donationsTypeTabInkind" onclick="selectDonationsTypeTab('inkind')">التبرعات العينية</button>
+  </div>
   <div class="toolbar">
     <div class="daterange">
       <label>من</label><input type="date" id="donFrom" max="2050-12-31">
@@ -1952,10 +1958,10 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
     <div class="tag-list" id="channelsTagList"></div>
   </div>
   <div class="settings-section">
-    <h4>أماكن الحركات والتبرعات</h4>
-    <p class="small-note">يمكنك إضافة أو تعديل أو حذف أماكن الحركات والتبرعات. تعديل المكان يعيد تسمية المكان في السجلات المرتبطة به، وحذف المكان يزيله من قائمة الاختيارات فقط.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="newLocationInput" placeholder="اسم مكان جديد" style="flex:1;min-width:180px"><button class="btn-primary btn-small" onclick="addLocation()">إضافة</button></div>
-    <div class="tag-list" id="locationsTagList"></div>
+    <h4>الإدارات (تكويد الإدارات)</h4>
+    <p class="small-note">كوّد الإدارات هنا؛ يحصل كل إدارة على كود تلقائي (D1, D2...) وتظهر كقائمة اختيار عند إنشاء أو تعديل حساب أي مستخدم، وتُسجَّل إدارة المستخدم على كل تبرع يسجله. لا يمكن حذف إدارة مرتبطة بمستخدمين.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="newDepartmentInput" placeholder="اسم إدارة جديدة" style="flex:1;min-width:180px"><button class="btn-primary btn-small" onclick="addDepartment()">إضافة</button></div>
+    <div class="tag-list" id="departmentsTagList"></div>
   </div>
   <div class="settings-section">
     <h4>أنواع النية</h4>
@@ -2071,7 +2077,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxok9RYK8liF0BI4hHdBzfU8Hjs2Arm2Gls1ziuINosHbo8i5eCri8wsR7dkXrvsWisxA/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby9a7o4bFlgc2OJPVwSVD0YGk8FmaLmGYIol8fVnhFmvC-vTNctsMg7luiVz70VA9HJSA/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -3164,7 +3170,7 @@ const VIEWS=['home','donors','companies','donationModule','projects','donations'
 const TAB_IDS={home:'sideHomeBtn',donors:'tabDonorsBtn',companies:'tabCompaniesBtn',donationModule:'tabDonationModuleBtn',projects:'tabProjectsBtn',donations:'tabDonationsBtn',donationCounts:'tabDonationCountsBtn',donorRatings:'tabDonorRatingsBtn',channels:'tabChannelsBtn',reports:'tabReportsBtn',financeReview:'financeTabBtn',settings:'sideSettingsBtn',syncData:'sideSyncBtn',backup:'sideBackupBtn'};
 const VIEW_IDS={home:'homeView',donors:'donorsView',companies:'companiesView',donationModule:'donationModuleView',projects:'projectsView',donations:'donationsView',donationCounts:'donationCountsView',donorRatings:'donorRatingsView',channels:'channelsView',reports:'reportsView',financeReview:'financeReviewView',settings:'settingsView',syncData:'syncDataView',backup:'backupView'};
 const COMPANY_CONFIG_DEFAULT={categories:['شركة كبرى','شركة متوسطة','شركة صغيرة','بنك / مؤسسة مالية','مصنع','تجاري','خدمي','مقاولات','أخرى'],classifications:['مفيدة جدًا','مفيدة','قيد التقييم','غير مفيدة'],stages:['جديدة','تم التواصل','اجتماع','عرض / مقترح','تفاوض','شراكة / تبرع','مغلقة - ناجحة','مغلقة - غير ناجحة'],activityTypes:['اتصال هاتفي','واتساب','بريد إلكتروني','زيارة','اجتماع','عرض / مقترح','اتفاق / تعاقد','متابعة','ملاحظة']};
-function normalizeCompanyConfig(c){c=c&&typeof c==='object'?c:{};return {categories:Array.isArray(c.categories)&&c.categories.length?c.categories.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.categories.slice(),classifications:Array.isArray(c.classifications)&&c.classifications.length?c.classifications.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.classifications.slice(),stages:Array.isArray(c.stages)&&c.stages.length?c.stages.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.stages.slice(),activityTypes:Array.isArray(c.activityTypes)&&c.activityTypes.length?c.activityTypes.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.activityTypes.slice()};}
+function normalizeCompanyConfig(c){c=c&&typeof c==='object'?c:{};return {categories:Array.isArray(c.categories)&&c.categories.length?c.categories.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.categories.slice(),classifications:Array.isArray(c.classifications)&&c.classifications.length?c.classifications.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.classifications.slice(),stages:Array.isArray(c.stages)&&c.stages.length?c.stages.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.stages.slice(),activityTypes:Array.isArray(c.activityTypes)&&c.activityTypes.length?c.activityTypes.map(String).filter(Boolean):COMPANY_CONFIG_DEFAULT.activityTypes.slice(),departments:Array.isArray(c.departments)?c.departments.filter(d=>d&&d.name).map(d=>({id:String(d.id||''),name:String(d.name),code:String(d.code||'')})):[]};}
 companyConfig=normalizeCompanyConfig(companyConfig);
 const REPORT_PERIODS=[
   {key:'weekly',label:'تقرير أسبوعي'},
@@ -3668,7 +3674,7 @@ const PERMISSION_MODULES=[
  {key:'home',label:'الرئيسية'},
  {key:'donationModule',label:'تبرع جديد'},
  {key:'donors',label:'المتبرعون'},
- {key:'companies',label:'الشركات'},
+ {key:'companies',label:'الشركات والجمعيات'},
  {key:'projects',label:'المشاريع'},
  {key:'donations',label:'التبرعات'},
  {key:'donationCounts',label:'تكرار التبرع'},
@@ -5148,7 +5154,7 @@ function renderHomeDashboard(){
   const modules=[
     {key:'donationModule',label:'تبرع جديد',desc:'تسجيل تبرعات الأفراد والشركات',icon:'＋',tone:'green',count:donationCount?String(donationCount)+' حركة':''},
     {key:'donors',label:'المتبرعون',desc:'الأفراد، الجدد، والشهريون',icon:'◉',tone:'blue',count:String(donors.length)},
-    {key:'companies',label:'الشركات',desc:'CRM الشركات والشراكات',icon:'▦',tone:'green',count:String(companies.length)},
+    {key:'companies',label:'الشركات والجمعيات',desc:'CRM الشركات والجمعيات والشراكات',icon:'▦',tone:'green',count:String(companies.length)},
     {key:'donations',label:'التبرعات',desc:'سجلات وحركات التبرعات',icon:'◆',tone:'gold',count:String(donationCount)},
     {key:'projects',label:'المشاريع',desc:'إدارة المشاريع والنيات',icon:'▤',tone:'teal',count:String(projects.length)},
     {key:'reports',label:'التقارير',desc:'تقارير الأفراد والشركات والأبعاد',icon:'▥',tone:'indigo',count:''},
@@ -5258,7 +5264,7 @@ function renderAccountsList(){
  box.innerHTML=USERS.map(u=>{
   const self=u.id===currentUser.id, canDelete=u.role!=='superadmin', active=isActiveUser(u);
   return `<div class="hist-item" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-   <div><b>${escapeHtml(u.fullName)}</b> <span class="small-note">(${escapeHtml(userRoleLabel(u))} — ${escapeHtml(u.username)} — ${escapeHtml(u.email||'بدون إيميل')} — ${escapeHtml(u.department||'بدون إدارة')} — ${escapeHtml(u.phone||'')})${self?' — حسابك الحالي':''}</span>
+   <div><b>${escapeHtml(u.fullName)}</b> <span class="small-note">(${escapeHtml(userRoleLabel(u))} — ${escapeHtml(u.username)} — ${escapeHtml(u.email||'بدون إيميل')} — ${escapeHtml(u.department?(deptCodeByName(u.department)?deptCodeByName(u.department)+' — ':'')+u.department:'بدون إدارة')} — ${escapeHtml(u.phone||'')})${self?' — حسابك الحالي':''}</span>
    <span class="badge ${active?'green':'red'}">${active?'نشط':'غير نشط'}</span><span class="badge gold">متابعة: ${escapeHtml(followScopeLabel(u))}</span></div>
    <div style="display:flex;gap:6px;flex-wrap:wrap">
     <button class="btn-outline btn-small" onclick="editUserData('${u.id}')">تعديل البيانات</button>
@@ -5985,7 +5991,7 @@ function reportBaseDonors(){
  return [];
 }
 function allReportLocations(){const set=new Map();ensureLocationsCatalog();locations.forEach(loc=>{const v=String(loc||'').trim();if(v&&!set.has(normName(v)))set.set(normName(v),v)});reportBaseDonors().forEach(d=>reportHistoryForDonor(d).forEach(h=>{const loc=String(h.location||'').trim();if(loc&&!set.has(normName(loc)))set.set(normName(loc),loc)}));return Array.from(set.values()).sort((a,b)=>a.localeCompare(b,'ar'))}
-function locationMatches(row){
+function locationMatches(row){return true;
  if(reportLocation==='all')return true;
  return normName(row&&row.location)===normName(reportLocation);
 }
@@ -6290,7 +6296,7 @@ function renderReports(){
  reportCounts.donations=dimensionRows.length;
  document.getElementById('reportDonationsList').innerHTML=dimensionRows.length?dimensionRows.map(r=>`<div class="card" style="border-inline-start-color:var(--gold)">
   <div class="info"><div class="name">${escapeHtml(r.donor)}</div>
-  <div class="meta">${fmtDate(r.date)} · <b>${money(r.amount)}</b>${r.project?` · مشروع: ${escapeHtml(r.project)}`:''}${r.method?` · ${escapeHtml(r.method)}`:''}${r.location?` · المكان: ${escapeHtml(r.location)}`:''} · حالة الحركة: ${escapeHtml(movementStatusLabel(r.movementStatus))}</div>
+  <div class="meta">${fmtDate(r.date)} · <b>${money(r.amount)}</b>${r.project?` · مشروع: ${escapeHtml(r.project)}`:''}${r.method?` · ${escapeHtml(r.method)}`:''} · حالة الحركة: ${escapeHtml(movementStatusLabel(r.movementStatus))}</div>
   <div class="small-note" style="margin-top:4px">الموظف المسؤول: ${escapeHtml(r.employee||r.by||'—')} · بواسطة: ${escapeHtml(r.by||'—')}${r.notes?` · ${escapeHtml(r.notes)}`:''}${r.attachmentData?attachmentMarkup(r):''}</div></div>
  </div>`).join(''):'<div class="empty">لا توجد تبرعات ضمن الفترة المحددة.</div>';
  let movementRows=reportMovementRows();
@@ -6301,7 +6307,7 @@ function renderReports(){
  reportCounts.movements=movementRows.length;
  document.getElementById('reportMovementsList').innerHTML=movementRows.length?movementRows.map(r=>`<div class="card" style="border-inline-start-color:${r.type==='donation'?'var(--gold)':'var(--primary)'}">
   <div class="info"><div class="name">${escapeHtml(r.donor)} <span class="badge">${r.type==='donation'?'تبرع':'تواصل'}</span></div>
-  <div class="meta">${fmtDate(r.date)} · <b>${escapeHtml(r.action||'حركة')}</b>${r.amount?` · ${money(r.amount)}`:''}${r.location?` · المكان: ${escapeHtml(r.location)}`:''}${r.project?` · المشروع: ${escapeHtml(r.project)}`:''}${r.type==='donation'?` · حالة الحركة: ${escapeHtml(movementStatusLabel(r.movementStatus))}`:''}</div>
+  <div class="meta">${fmtDate(r.date)} · <b>${escapeHtml(r.action||'حركة')}</b>${r.amount?` · ${money(r.amount)}`:''}${r.project?` · المشروع: ${escapeHtml(r.project)}`:''}${r.type==='donation'?` · حالة الحركة: ${escapeHtml(movementStatusLabel(r.movementStatus))}`:''}</div>
   <div class="small-note" style="margin-top:4px">بواسطة: ${escapeHtml(r.by||'—')}${r.notes?` · ${escapeHtml(r.notes)}`:''}</div></div>
  </div>`).join(''):'<div class="empty">لا توجد حركات ضمن الفترة والمكان المحددين.</div>';
 
@@ -6736,11 +6742,11 @@ function visibleCompanies(){
   return companies.filter(c=>c.employeeId===currentUser.id);
 }
 function companyStatus(c){
-  const s=String(c.status||'active');
+  c=c||{};const s=String(c.status||'active');
   return ['active','prospect','partner','inactive'].includes(s)?s:'active';
 }
 function companyStatusLabel(s){return ({active:'نشطة',prospect:'محتملة',partner:'شريك',inactive:'غير نشطة'})[s]||'نشطة'}
-function companyPriority(c){return String(c.priority||'normal')}
+function companyPriority(c){c=c||{};return String(c.priority||'normal')}
 function companyPriorityLabel(p){return ({high:'أولوية عالية',normal:'عادية',low:'منخفضة'})[p]||'عادية'}
 function companyVisibleHistory(c){return visibleHistoryEntries(c&&c.history)}
 function companyDonationEntries(c){return companyVisibleHistory(c).filter(h=>h.type==='donation')}
@@ -6786,9 +6792,9 @@ function renderCompanyFilters(){
   const cs=[['all','الكل'],['active','نشطة'],['prospect','محتملة'],['partner','شركاء'],['inactive','غير نشطة']];
   document.getElementById('companyFilterChips').innerHTML=cs.map(x=>`<button class="chip ${companyFilter===x[0]?'active':''}" onclick="companyFilter='${x[0]}';renderCompanies()">${x[1]}</button>`).join('');
 }
-function companyStage(c){return String(c.stage||companyConfig.stages[0]||'جديدة')}
-function companyClassification(c){return String(c.classification||companyConfig.classifications[1]||'مفيدة')}
-function companyCategory(c){return String(c.category||companyConfig.categories[0]||'شركة كبرى')}
+function companyStage(c){c=c||{};return String(c.stage||companyConfig.stages[0]||'جديدة')}
+function companyClassification(c){c=c||{};return String(c.classification||companyConfig.classifications[1]||'مفيدة')}
+function companyCategory(c){c=c||{};return String(c.category||companyConfig.categories[0]||'شركة كبرى')}
 function companyTasks(c){return Array.isArray(c.tasks)?c.tasks:[]}
 function companyOpenTasks(c){return companyTasks(c).filter(t=>t.status!=='done')}
 function companyCard(c){
@@ -6861,6 +6867,7 @@ function legacy_openCompanyForm(id=''){
     openModal(`<h3>${c?'تعديل شركة':'إضافة شركة جديدة'}</h3>
     <div class="company-form-section"><h4>1) ملف الشركة الأساسي</h4><div class="grid2">
       <div class="field"><label>اسم الشركة *</label><input id="cf_name" value="${escapeHtml(c?.name||'')}" autofocus></div>
+      <div class="field"><label>النوع (شركة / جمعية) *</label><select id="cf_kind"><option value="">— اختر النوع —</option><option value="شركة" ${(c?.entityKind||'')==='شركة'?'selected':''}>شركة</option><option value="جمعية" ${(c?.entityKind||'')==='جمعية'?'selected':''}>جمعية</option></select></div>
       <div class="field"><label>الاسم القانوني</label><input id="cf_legalName" value="${escapeHtml(c?.legalName||'')}"></div>
       <div class="field"><label>نوع الشركة</label><select id="cf_companyType">${companySelectOptionsPro(companyConfig.companyTypes,c?.companyType||'')}</select></div>
       <div class="field"><label>فئة الشركة</label><select id="cf_category">${companySelectOptionsPro(companyConfig.categories,c?.category)}</select></div>
@@ -6931,9 +6938,10 @@ function openCompanyForm(id=''){
   if(!canModule('companies',id?'edit':'add',currentUser)){alert('ليس لديك صلاحية هذا الإجراء على الشركات.');return}
   const c=id?companies.find(x=>x.id===id):null; if(id&&!c)return;
   const isEdit=!!c, isMgr=isManagerRole(currentUser);
-  openModal(`<h3>${isEdit?'تعديل بيانات الشركة':'إضافة شركة جديدة'}</h3>
+  openModal(`<h3>${isEdit?'تعديل بيانات الشركة / الجمعية':'إضافة شركة / جمعية جديدة'}</h3>
     <div class="company-form-section"><h4>البيانات الأساسية</h4><div class="grid2">
       <div class="field"><label>اسم الشركة</label><input id="cf_name" value="${escapeHtml(c?.name||'')}"></div>
+      <div class="field"><label>النوع (شركة / جمعية) *</label><select id="cf_kind"><option value="">— اختر النوع —</option><option value="شركة" ${(c?.entityKind||'')==='شركة'?'selected':''}>شركة</option><option value="جمعية" ${(c?.entityKind||'')==='جمعية'?'selected':''}>جمعية</option></select></div>
       <div class="field"><label>الاسم القانوني</label><input id="cf_legalName" value="${escapeHtml(c?.legalName||'')}"></div>
       <div class="field"><label>مجال النشاط</label><input id="cf_industry" value="${escapeHtml(c?.industry||'')}" placeholder="مثال: مقاولات / أغذية / خدمات"></div>
       <div class="field"><label>فئة الشركة</label><select id="cf_category">${companySelectOptions(companyConfig.categories,companyCategory(c))}</select></div>
@@ -7017,7 +7025,7 @@ function openCompanyContact(id){
 function saveCompanyContact(id){const c=companies.find(x=>x.id===id);if(!c||!canModule('companies','edit',currentUser))return;const idx=document.getElementById('cc_contact').value;const contact=idx!==''?(c.contacts||[])[Number(idx)]:null;const date=document.getElementById('cc_date').value||todayStr();c.history=c.history||[];c.history.push({type:'contact',hid:uid(),date,action:document.getElementById('cc_action').value,contactName:contact?.name||'',contactRole:contact?.role||'',notes:document.getElementById('cc_notes').value.trim(),nextFollowUp:document.getElementById('cc_next').value||'',by:currentUser.fullName,createdBy:currentUser.id});if(document.getElementById('cc_next').value)c.nextFollowUp=document.getElementById('cc_next').value;persistCompanies();closeModal();renderCompanies();}
 function openCompanyDonation(id){if(!canDonationType('company',currentUser)){alert('ليس لديك صلاحية تسجيل تبرعات الشركات.');return}const c=companies.find(x=>x.id===id);if(!c)return;setView('donationModule');selectDonationModuleTab('new');document.getElementById('md_entityType').value='company';syncModuleDonationEntity();document.getElementById('md_company').value=c.id;document.getElementById('md_amount')?.focus()}
 
-function saveCompanyDonation(id){const c=companies.find(x=>x.id===id);if(!c||!canDonationType('company',currentUser))return;const amount=Number(document.getElementById('cd_amount').value);if(!(amount>0)){alert('يرجى إدخال قيمة تبرع صحيحة.');return}const project=document.getElementById('cd_project').value;if(!project){alert('يرجى اختيار المشروع.');return}const intention=document.getElementById('cd_intention').value;if(!intention){alert('يرجى اختيار النية.');return}const movementStatus=normalizeMovementStatus(document.getElementById('cd_movementStatus').value);c.history=c.history||[];c.history.push({type:'donation',hid:uid(),status:'confirmed',date:document.getElementById('cd_date').value||todayStr(),amount,project,intention,method:document.getElementById('cd_method').value,location:document.getElementById('cd_location').value.trim(),movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',notes:document.getElementById('cd_notes').value.trim(),by:currentUser.fullName,createdBy:currentUser.id,createdById:currentUser.id,responsibleEmployeeId:currentUser.id,responsibleEmployeeName:currentUser.fullName});persistCompanies();if(GAS_URL)syncPushNow({silent:true});closeModal();renderCompanies();}
+function saveCompanyDonation(id){const c=companies.find(x=>x.id===id);if(!c||!canDonationType('company',currentUser))return;const amount=Number(document.getElementById('cd_amount').value);if(!(amount>0)){alert('يرجى إدخال قيمة تبرع صحيحة.');return}const project=document.getElementById('cd_project').value;if(!project){alert('يرجى اختيار المشروع.');return}const intention=document.getElementById('cd_intention').value;if(!intention){alert('يرجى اختيار النية.');return}const movementStatus=normalizeMovementStatus(document.getElementById('cd_movementStatus').value);c.history=c.history||[];c.history.push({type:'donation',hid:uid(),status:'confirmed',date:document.getElementById('cd_date').value||todayStr(),amount,project,intention,method:document.getElementById('cd_method').value,location:(document.getElementById('cd_location')?.value||'').trim(),movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',notes:document.getElementById('cd_notes').value.trim(),by:currentUser.fullName,createdBy:currentUser.id,createdById:currentUser.id,responsibleEmployeeId:currentUser.id,responsibleEmployeeName:currentUser.fullName});persistCompanies();if(GAS_URL)syncPushNow({silent:true});closeModal();renderCompanies();}
 function legacy_openCompanyRecord(id){const c=companies.find(x=>x.id===id);if(!c)return;const emp=USERS.find(u=>u.id===c.employeeId),contacts=c.contacts||[],hist=(c.history||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));openModal(`<h3>${escapeHtml(c.name)}</h3>
   <div class="company-record-grid"><div class="company-detail"><div class="label">الحالة</div><div class="value">${companyStatusLabel(companyStatus(c))}</div><div class="company-detail"><div class="label">الفئة</div><div class="value">${escapeHtml(companyCategory(c))}</div></div><div class="company-detail"><div class="label">التصنيف</div><div class="value">${escapeHtml(companyClassification(c))}</div></div><div class="company-detail"><div class="label">مرحلة الـ Pipeline</div><div class="value">${escapeHtml(companyStage(c))}</div></div><div class="company-detail"><div class="label">المتابعة القادمة</div><div class="value">${c.nextFollowUp?fmtDate(c.nextFollowUp):'—'}</div></div><div class="company-detail"><div class="label">القيمة المتوقعة</div><div class="value">${c.expectedValue?money(c.expectedValue):'—'}</div></div><div class="company-detail"><div class="label">مصدر الشركة</div><div class="value">${escapeHtml(c.source||'—')}</div></div></div><div class="company-detail"><div class="label">المسؤول</div><div class="value">${escapeHtml(emp?.fullName||'غير محدد')}</div></div><div class="company-detail"><div class="label">إجمالي التبرعات</div><div class="value">${money(companyTotal(c))}</div></div><div class="company-detail"><div class="label">مجال النشاط</div><div class="value">${escapeHtml(c.industry||'—')}</div></div><div class="company-detail"><div class="label">الهاتف</div><div class="value">${escapeHtml(c.phone||'—')}</div></div><div class="company-detail"><div class="label">البريد</div><div class="value">${escapeHtml(c.email||'—')}</div></div><div class="company-detail"><div class="label">السجل التجاري</div><div class="value">${escapeHtml(c.commercialReg||'—')}</div></div><div class="company-detail"><div class="label">الرقم الضريبي</div><div class="value">${escapeHtml(c.taxId||'—')}</div></div><div class="company-detail"><div class="label">العنوان</div><div class="value">${escapeHtml(c.address||'—')}</div></div></div>
   ${c.tags?.length?`<div class="company-tags">${c.tags.map(t=>`<span class="company-tag">${escapeHtml(t)}</span>`).join('')}</div>`:''}
@@ -7085,6 +7093,11 @@ function selectDonationModuleTab(tab){
   if(donationModuleTab==='records')renderModuleDonationRecords();
 }
 
+function refreshAllDonorNamesDatalist(){
+  const dl=document.getElementById('allDonorNamesDatalist');if(!dl)return;
+  const names=[...new Set((donors||[]).map(d=>d&&d.name).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
+  dl.innerHTML=names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('');
+}
 function renderDonationModule(){
   if(!currentUser)return;
   selectDonationModuleTab(donationModuleTab);
@@ -7171,7 +7184,7 @@ function openUnifiedDonationDetail(entityType,id,hid){
     if(!c||!entry){alert('تعذر العثور على تبرع الشركة.');return;}
     const status=normalizeFinanceStatus(entry.financeStatus);
     const badge=status==='approved'?'<span class="badge green">معتمد ماليًا ✓</span>':status==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد المالي</span>';
-    openModal(`<h3>تفاصيل تبرع الشركة — ${escapeHtml(c.name||'—')}</h3><div class="meta" style="margin-bottom:10px">${badge}</div><div class="grid2"><div class="field"><label>التاريخ</label><div>${fmtDate(entry.date)}</div></div><div class="field"><label>قيمة التبرع</label><div><b>${money(entry.amount)}</b></div></div><div class="field"><label>الشركة</label><div>${escapeHtml(c.name||'—')}</div></div><div class="field"><label>المشروع</label><div>${escapeHtml(entry.project||'—')}</div></div><div class="field"><label>النية</label><div>${escapeHtml(entry.intention||'—')}</div></div><div class="field"><label>مكان التبرع</label><div>${escapeHtml(entry.location||'—')}</div></div><div class="field"><label>طريقة التبرع</label><div>${escapeHtml(entry.method||'—')}</div></div><div class="field"><label>بواسطة</label><div>${escapeHtml(entry.by||'—')}</div></div></div>${entry.notes?`<div class="field"><label>ملاحظات</label><div>${escapeHtml(entry.notes)}</div></div>`:''}<div class="modal-actions"><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`);
+    openModal(`<h3>تفاصيل تبرع الشركة — ${escapeHtml(c.name||'—')}</h3><div class="meta" style="margin-bottom:10px">${badge}</div><div class="grid2"><div class="field"><label>التاريخ</label><div>${fmtDate(entry.date)}</div></div><div class="field"><label>قيمة التبرع</label><div><b>${money(entry.amount)}</b></div></div><div class="field"><label>الشركة</label><div>${escapeHtml(c.name||'—')}</div></div><div class="field"><label>المشروع</label><div>${escapeHtml(entry.project||'—')}</div></div><div class="field"><label>النية</label><div>${escapeHtml(entry.intention||'—')}</div></div><div class="field"><label>طريقة التبرع</label><div>${escapeHtml(entry.method||'—')}</div></div><div class="field"><label>بواسطة</label><div>${escapeHtml(entry.by||'—')}</div></div></div>${entry.notes?`<div class="field"><label>ملاحظات</label><div>${escapeHtml(entry.notes)}</div></div>`:''}<div class="modal-actions"><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`);
     return;
   }
   openFinanceDetail(id,hid);
@@ -7196,8 +7209,49 @@ function syncModuleDonationIntention(){
 
 function refreshModuleDonationCompanies(){const sel=document.getElementById('md_company');if(!sel)return;const current=sel.value||'';const coded=(companies||[]).filter(c=>c&&String(c.name||'').trim());sel.innerHTML='<option value="">— اختر الشركة المكودة —</option>'+coded.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');if(coded.some(c=>c.id===current))sel.value=current;}
 function syncModuleDonationEntity(){const type=document.getElementById('md_entityType')?.value||'individual';document.getElementById('md_individualField')?.classList.toggle('hidden',type!=='individual');document.getElementById('md_companyField')?.classList.toggle('hidden',type!=='company');refreshModuleDonationCompanies();}
+let __mdItemRowSeq=0;
+function syncModuleDonationType(){
+  const type=document.getElementById('md_donationType')?.value||'cash';
+  const isInkind=type==='inkind';
+  document.getElementById('md_itemsSection')?.classList.toggle('hidden',!isInkind);
+  document.getElementById('md_amountField')?.classList.toggle('hidden',isInkind);
+  const amountEl=document.getElementById('md_amount');
+  if(isInkind){
+    if(!document.getElementById('md_itemsList').children.length)addModuleDonationItemRow();
+    recalcModuleDonationItemsTotal();
+  }
+}
+function addModuleDonationItemRow(){
+  const list=document.getElementById('md_itemsList');if(!list)return;
+  const rid='mdi_'+(++__mdItemRowSeq);
+  const row=document.createElement('div');
+  row.className='md-item-row';row.id=rid;
+  row.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap';
+  row.innerHTML=`<input type="text" placeholder="اسم الصنف" class="md-item-name" style="flex:2;min-width:140px">
+    <input type="number" placeholder="الكمية" min="0" step="0.01" class="md-item-qty" style="flex:1;min-width:90px" oninput="recalcModuleDonationItemsTotal()">
+    <input type="number" placeholder="السعر التقديري للوحدة" min="0" step="0.01" class="md-item-price" style="flex:1;min-width:120px" oninput="recalcModuleDonationItemsTotal()">
+    <button type="button" class="btn-outline" onclick="document.getElementById('${rid}').remove();recalcModuleDonationItemsTotal()">✕</button>`;
+  list.appendChild(row);
+}
+function collectModuleDonationItems(){
+  return Array.from(document.querySelectorAll('#md_itemsList .md-item-row')).map(row=>{
+    const name=row.querySelector('.md-item-name')?.value.trim()||'';
+    const qty=Number(row.querySelector('.md-item-qty')?.value||0);
+    const price=Number(row.querySelector('.md-item-price')?.value||0);
+    return {name,qty,price,total:qty*price};
+  }).filter(it=>it.name||it.qty||it.price);
+}
+function recalcModuleDonationItemsTotal(){
+  const items=collectModuleDonationItems();
+  const total=items.reduce((s,it)=>s+(it.qty*it.price),0);
+  const el=document.getElementById('md_itemsTotal');if(el)el.textContent=money(total);
+  return total;
+}
 function resetModuleDonationForm(){
   const type=document.getElementById('md_entityType');if(type)type.value='individual';syncModuleDonationEntity();
+  const dtype=document.getElementById('md_donationType');if(dtype)dtype.value='cash';
+  const itemsList=document.getElementById('md_itemsList');if(itemsList)itemsList.innerHTML='';
+  syncModuleDonationType();
   const company=document.getElementById('md_company');if(company)company.value='';
   const ms=document.getElementById('md_movementStatus');document.getElementById('md_movementStatus');if(ms)ms.value='';
   const fp=document.getElementById('md_financeStatusPreview');if(fp)fp.value='تحدد تلقائيًا حسب حالة الحركة';
@@ -7213,11 +7267,21 @@ function resetModuleDonationForm(){
 async function saveModuleDonation(){
   if(!currentUser||!canModule('donationModule','add',currentUser)){alert('ليس لديك صلاحية إضافة تبرعات.');return}
   const entityType=document.getElementById('md_entityType')?.value||'individual';if(!canDonationType(entityType,currentUser)){alert(entityType==='company'?'ليس لديك صلاحية تسجيل تبرعات الشركات.':'ليس لديك صلاحية تسجيل تبرعات الأفراد.');return}
-  const date=document.getElementById('md_date')?.value||todayStr(),amount=document.getElementById('md_amount')?.value||'',name=document.getElementById('md_name')?.value.trim()||'',companyId=document.getElementById('md_company')?.value||'';
+  const donationType=document.getElementById('md_donationType')?.value==='inkind'?'inkind':'cash';
+  const date=document.getElementById('md_date')?.value||todayStr(),name=document.getElementById('md_name')?.value.trim()||'',companyId=document.getElementById('md_company')?.value||'';
+  let amount=document.getElementById('md_amount')?.value||'', items=[];
   const company=entityType==='company'?(companies||[]).find(c=>c.id===companyId):null,phone=document.getElementById('md_phone')?.value.trim()||'',project=document.getElementById('md_project')?.value.trim()||'',intention=document.getElementById('md_intention')?.value.trim()||'',location=document.getElementById('md_location')?.value.trim()||'',method=document.getElementById('md_method')?.value||'',rawMovementStatus=document.getElementById('md_movementStatus')?.value||'',movementStatus=normalizeMovementStatus(rawMovementStatus),notes=document.getElementById('md_notes')?.value.trim()||'';
-  if(entityType==='individual'&&!name){alert('يرجى اختيار/إدخال اسم المتبرع.');return}if(entityType==='company'&&!company){alert('يرجى اختيار شركة مكودة من القائمة.');return}if(!amount||Number(String(amount).replace(/,/g,''))<=0){alert('يرجى إدخال قيمة تبرع صحيحة.');return}if(!rawMovementStatus){alert('يرجى اختيار حالة الحركة قبل تسجيل التبرع.');return}if(!project||!projects.some(p=>normName(p.name)===normName(project))){alert('يرجى اختيار مشروع مكود.');return}if(!intention||!intentions.some(x=>normName(x)===normName(intention))){alert('يرجى اختيار نية مكودة.');return}if(!method||!channels.some(x=>normName(x)===normName(method))){alert('يرجى اختيار قناة أو طريقة تبرع مكودة.');return}
+  if(entityType==='individual'&&!name){alert('يرجى اختيار/إدخال اسم المتبرع.');return}if(entityType==='company'&&!company){alert('يرجى اختيار شركة مكودة من القائمة.');return}
+  if(donationType==='inkind'){
+    items=collectModuleDonationItems();
+    if(!items.length||items.some(it=>!it.name||!(it.qty>0)||!(it.price>0))){alert('التبرع العيني يتطلب كتابة كل الأصناف بالكامل (الاسم، الكمية، والسعر التقديري) لكل صنف، ويمكن إضافة أكثر من صنف.');return}
+    amount=items.reduce((s,it)=>s+(it.qty*it.price),0);
+  }else{
+    if(!amount||Number(String(amount).replace(/,/g,''))<=0){alert('يرجى إدخال قيمة تبرع صحيحة.');return}
+  }
+  if(!rawMovementStatus){alert('يرجى اختيار حالة الحركة قبل تسجيل التبرع.');return}if(!project||!projects.some(p=>normName(p.name)===normName(project))){alert('يرجى اختيار مشروع مكود.');return}if(!intention||!intentions.some(x=>normName(x)===normName(intention))){alert('يرجى اختيار نية مكودة.');return}if(!method||!channels.some(x=>normName(x)===normName(method))){alert('يرجى اختيار قناة أو طريقة تبرع مكودة.');return}
   let attachmentData='';try{const file=document.getElementById('md_attachment')?.files?.[0];if(file)attachmentData=await compressDonationImage(file)}catch(e){alert(e.message||'تعذر تجهيز الصورة المرفقة.');return}
-  const donation={type:'donation',hid:uid(),date,action:'تبرع جديد',amount,project,intention,location,method:channels.find(x=>normName(x)===normName(method)),notes,by:currentUser.fullName,createdBy:currentUser.id,responsibleEmployeeId:String(currentUser.id||''),responsibleEmployeeName:String(currentUser.fullName||''),status:'confirmed',movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',attachmentData,entityType};
+  const donation={type:'donation',hid:uid(),date,action:'تبرع جديد',amount,donationType,items,project,intention,location,method:channels.find(x=>normName(x)===normName(method)),notes,by:currentUser.fullName,createdBy:currentUser.id,responsibleEmployeeId:String(currentUser.id||''),responsibleEmployeeName:String(currentUser.fullName||''),responsibleDepartment:String(currentUser.department||''),departmentCode:deptCodeByName(currentUser.department),status:'confirmed',movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',attachmentData,entityType};
   if(entityType==='company'){donation.companyId=company.id;donation.companyName=company.name;company.history=company.history||[];company.history.push(donation);company.lastDonationDate=date;persistCompanies();if(GAS_URL)syncPushNow({silent:true});resetModuleDonationForm();alert(movementStatus==='ناجحة'?'تم تسجيل تبرع الشركة بنجاح، وهو الآن بانتظار اعتماد الإدارة المالية.':'تم تسجيل تبرع الشركة بنجاح واعتماده مباشرة لأن حالة الحركة غير ناجحة.')}else{let donor=donors.find(x=>x&&normName(x.name)===normName(name));if(!donor){donor={id:uid(),name,phone,employeeId:currentUser.id,createdBy:currentUser.id,registeredDate:date,history:[]};donors.push(donor)}else if(!donor.phone&&phone)donor.phone=phone;donor.history=donor.history||[];donor.history.push(donation);persist();if(GAS_URL)syncPushNow({silent:true});resetModuleDonationForm();alert(movementStatus==='ناجحة'?'تم تسجيل تبرع الفرد بنجاح، وهو الآن بانتظار اعتماد الإدارة المالية.':'تم تسجيل تبرع الفرد بنجاح واعتماده مباشرة لأن حالة الحركة غير ناجحة.')}
   if(donationModuleTab==='records')renderModuleDonationRecords();
 }
@@ -7301,14 +7365,13 @@ function openContact(id){
  openModal(`<h3>تسجيل تواصل مع ${escapeHtml(d.name)}</h3>
  <div class="field"><label>التاريخ</label><input id="c_date" type="date" max="2050-12-31" value="${todayStr()}"></div>
  <div class="field"><label>نوع الإجراء</label><select id="c_action">${CONTACT_ACTIONS.map(x=>`<option>${x}</option>`).join('')}</select></div>
- <div class="field"><label>مكان الحركة</label><input id="c_location" list="locationsDatalist" placeholder="مقر المؤسسة / بازار / مول ..."></div>
- <div class="field"><label>ملاحظات</label><textarea id="c_notes"></textarea></div>
+  <div class="field"><label>ملاحظات</label><textarea id="c_notes"></textarea></div>
  <div class="modal-actions"><button class="btn-gold" onclick="saveContact('${id}')">حفظ</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
 }
 function saveContact(id){
  if(!canDonorContact(currentUser)){alert('ليس لديك صلاحية تسجيل تواصل مع المتبرعين.');return}
  const d=donors.find(x=>x.id===id);if(!d)return;
- const date=document.getElementById('c_date').value||todayStr(), action=document.getElementById('c_action').value, location=document.getElementById('c_location').value.trim(), notes=document.getElementById('c_notes').value.trim();
+ const date=document.getElementById('c_date').value||todayStr(), action=document.getElementById('c_action').value, location=(document.getElementById('c_location')?.value||'').trim(), notes=document.getElementById('c_notes').value.trim();
  d.history=d.history||[];d.history.push({type:'contact',hid:uid(),date,action,location,notes,by:currentUser.fullName,createdBy:currentUser.id});
  persist();closeModal();render()
 }
@@ -7355,7 +7418,7 @@ function editDonation(id,hid){
   <div class="field"><label>قيمة التبرع</label><input id="ed_amount" type="number" min="0" step="0.01" value="${escapeHtml(entry.amount||'')}"></div>
   <div class="field"><label>اسم المتبرع</label><input value="${escapeHtml(d.name)}" readonly></div><div class="field"><label>رقم التليفون</label><input value="${escapeHtml(d.phone||'—')}" readonly></div>
   <div class="field"><label>اسم المشروع</label><select id="ed_project" onchange="syncEditDonationIntention()">${donationProjectOptions(entry.project||'')}</select></div><div class="field"><label>النية</label><select id="ed_intention">${donationIntentionOptions(entry.intention||projectIntention(entry.project||''))}</select></div>
-  <div class="field"><label>مكان التبرع</label><input id="ed_location" list="locationsDatalist" value="${escapeHtml(entry.location||'')}"></div><div class="field"><label>قناة/طريقة التبرع</label><select id="ed_method">${channels.map(x=>`<option ${normName(x)===normName(entry.method||'')?'selected':''}>${escapeHtml(x)}</option>`).join('')}</select></div>
+  <div class="field"><label>قناة/طريقة التبرع</label><select id="ed_method">${channels.map(x=>`<option ${normName(x)===normName(entry.method||'')?'selected':''}>${escapeHtml(x)}</option>`).join('')}</select></div>
   <div class="field"><label>حالة الحركة <span style="color:var(--red)">*</span></label><select id="ed_movementStatus"><option value="">— اختر حالة الحركة —</option>${['ناجحة','مرفوضة','قيد التنفيذ','اخرى'].map(x=>`<option value="${x}" ${normalizeMovementStatus(entry.movementStatus)===x?'selected':''}>${x}</option>`).join('')}</select></div></div>
   <div class="field"><label>صورة التبرع / الإيصال</label><input id="ed_attachment" type="file" accept="image/*">${entry.attachmentData?`${attachmentMarkup(entry)}<label style="display:flex;align-items:center;gap:7px;margin-top:7px"><input id="ed_remove_attachment" type="checkbox" style="width:auto"> حذف الصورة الحالية</label>`:'<div class="attachment-note">لا توجد صورة مرفقة حاليًا.</div>'}<div class="attachment-note">اختياري — اختيار صورة جديدة يستبدل الصورة الحالية.</div></div>
   <div class="field"><label>ملاحظات</label><textarea id="ed_notes">${escapeHtml(entry.notes||'')}</textarea></div><div class="small-note">${isFinance(currentUser)?'يمكن للإدارة المالية تعديل أو حذف حركة التبرع طالما لم تُعتمد ماليًا بعد؛ بعد اعتمادها لا يمكن تعديلها أو حذفها إطلاقًا.':'ملحوظة: يمكنك تعديل أو حذف هذه الحركة طالما لم تعتمدها الإدارة المالية ماليًا بعد. بمجرد اعتماد الإدارة المالية لها، لن يكون بإمكانك أنت أو مدير النظام تعديلها أو حذفها بعد ذلك إلا من خلال الإدارة المالية.'}</div>
@@ -7377,7 +7440,7 @@ async function saveEditedDonation(id,hid){
   }
   const amount=document.getElementById('ed_amount').value,project=document.getElementById('ed_project').value.trim(),intention=document.getElementById('ed_intention').value.trim();if(!amount){alert('يرجى إدخال قيمة التبرع.');return}if(!project){alert('يرجى اختيار المشروع.');return}if(!intention){alert('يرجى اختيار النية.');return}if(!projects.some(p=>normName(p.name)===normName(project))){alert('المشروع المختار غير مكود في النظام.');return}
   try{const file=document.getElementById('ed_attachment')?.files?.[0];if(file)entry.attachmentData=await compressDonationImage(file)}catch(e){alert(e.message||'تعذر تجهيز الصورة المرفقة.');return}if(document.getElementById('ed_remove_attachment')?.checked)entry.attachmentData='';
-  const rawMovementStatus=document.getElementById('ed_movementStatus')?.value||'';if(!rawMovementStatus){alert('يرجى اختيار حالة الحركة قبل حفظ التعديل.');return}const movementStatus=normalizeMovementStatus(rawMovementStatus);entry.status='confirmed';entry.date=document.getElementById('ed_date').value||todayStr();entry.amount=amount;entry.project=project;entry.intention=intention;entry.location=document.getElementById('ed_location').value.trim();entry.method=document.getElementById('ed_method').value;entry.movementStatus=movementStatus;entry.financeStatus=movementStatus==='ناجحة'?'pending':'approved';entry.notes=document.getElementById('ed_notes').value.trim();if(isFinance(currentUser)){entry.financeEditedBy=currentUser.fullName;entry.financeEditedAt=new Date().toISOString()}else{entry.lastEditedBy=currentUser.fullName;entry.lastEditedAt=new Date().toISOString()}if(project)ensureProject(project);persist();closeModal();render();openRecord(id);
+  const rawMovementStatus=document.getElementById('ed_movementStatus')?.value||'';if(!rawMovementStatus){alert('يرجى اختيار حالة الحركة قبل حفظ التعديل.');return}const movementStatus=normalizeMovementStatus(rawMovementStatus);entry.status='confirmed';entry.date=document.getElementById('ed_date').value||todayStr();entry.amount=amount;entry.project=project;entry.intention=intention;entry.location=(document.getElementById('ed_location')?.value||'').trim();entry.method=document.getElementById('ed_method').value;entry.movementStatus=movementStatus;entry.financeStatus=movementStatus==='ناجحة'?'pending':'approved';entry.notes=document.getElementById('ed_notes').value.trim();if(isFinance(currentUser)){entry.financeEditedBy=currentUser.fullName;entry.financeEditedAt=new Date().toISOString()}else{entry.lastEditedBy=currentUser.fullName;entry.lastEditedAt=new Date().toISOString()}if(project)ensureProject(project);persist();closeModal();render();openRecord(id);
 }
 
 /* ---------- edit/delete permissions ----------
@@ -7634,7 +7697,7 @@ function openFinanceDetail(donorId,hid){
   <div class="field"><label>رقم التليفون</label><div>${escapeHtml(d.phone||'—')}</div></div>
   <div class="field"><label>المشروع</label><div>${escapeHtml(entry.project||'—')}</div></div>
   <div class="field"><label>النية</label><div>${escapeHtml(entry.intention||'—')}</div></div>
-  <div class="field"><label>مكان التبرع</label><div>${escapeHtml(entry.location||'—')}</div></div>
+  
   <div class="field"><label>قناة/طريقة التبرع</label><div>${escapeHtml(entry.method||'—')}</div></div>
   <div class="field"><label>بواسطة</label><div>${escapeHtml(entry.by||'—')}</div></div>
   ${status==='approved'?`<div class="field"><label>اعتماد ماليًا بواسطة</label><div>${escapeHtml(entry.financeApprovedBy||'—')} — ${fmtTime(entry.financeApprovedAt||'')}</div></div>`:''}
@@ -7769,11 +7832,18 @@ function renderProjects(){refreshProjectsDatalist();ensureProjectCodes();if(!pro
 function exportProjectDetailsExcel(name){const rows=projectContributions(name);if(!window.XLSX){alert('مكتبة Excel غير متاحة حاليًا.');return}const data=[['تاريخ','اسم','قيمة التبرع','المشروع','النية','حالة الاعتماد','التواصل','بواسطة']];rows.forEach(r=>data.push([r.date||'',r.donor||'',Number(String(r.amount||0).replace(/,/g,''))||0,r.project||'',r.intention||'',statusLabel(normalizeFinanceStatus(r.financeStatus)),canDonorContact(currentUser)?'تواصل':'—',r.by||'']));const ws=XLSX.utils.aoa_to_sheet(data),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'سجل المشروع');XLSX.writeFile(wb,'سجل_المشروع_'+String(name).replace(/[\/:*?"<>|]/g,'_')+'_'+todayStr()+'.xlsx')}
 function openProjectDetails(name){const rows=projectContributions(name),v=projectAmountByStatus(rows),body=rows.length?rows.map(r=>`<tr onclick="openFinanceDetail('${r.donorId}','${r.hid}')" style="cursor:pointer"><td>${fmtDate(r.date)}</td><td>${escapeHtml(r.donor||'—')}</td><td><b>${money(r.amount)}</b></td><td>${escapeHtml(r.project||'—')}</td><td>${escapeHtml(r.intention||'—')}</td><td>${escapeHtml(statusLabel(normalizeFinanceStatus(r.financeStatus)))}</td><td>${canDonorContact(currentUser)&&r.entityType!=='company'?`<button class="btn-gold btn-small" onclick="event.stopPropagation();openContact('${r.donorId}')">تواصل</button>`:'—'}</td><td>${escapeHtml(r.by||'—')}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">لا توجد سجلات لهذا المشروع.</td></tr>';openModal(`<h3>تفاصيل مشروع: ${escapeHtml(name)}</h3><div class="stats" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px"><div class="stat green"><div class="num">${money(v.approved)}</div><div class="lbl">معتمد ماليًا</div></div><div class="stat red"><div class="num">${money(v.rejected)}</div><div class="lbl">مرفوض</div></div><div class="stat amber"><div class="num">${money(v.progress)}</div><div class="lbl">قيد التنفيذ</div></div><div class="stat gold"><div class="num">${money(v.total)}</div><div class="lbl">إجمالي</div></div></div><div class="donation-record-table-wrap"><table class="donation-record-table" style="min-width:1050px"><thead><tr><th>تاريخ</th><th>اسم</th><th>قيمة التبرع</th><th>المشروع</th><th>النية</th><th>حالة الاعتماد</th><th>التواصل</th><th>بواسطة</th></tr></thead><tbody>${body}</tbody></table></div><div class="modal-actions"><button class="btn-primary btn-small" onclick="exportProjectDetailsExcel(${JSON.stringify(String(name))})">تصدير السجل إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)}
 /* ---------- donations view (flat log, with date filter) ---------- */
+let donationsTypeFilter='cash';
+function selectDonationsTypeTab(type){
+  donationsTypeFilter=type==='inkind'?'inkind':'cash';
+  document.getElementById('donationsTypeTabCash')?.classList.toggle('active',donationsTypeFilter==='cash');
+  document.getElementById('donationsTypeTabInkind')?.classList.toggle('active',donationsTypeFilter==='inkind');
+  renderDonations();
+}
 function applyDonFilter(){donFrom=document.getElementById('donFrom').value;donTo=document.getElementById('donTo').value;renderDonations()}
 function clearDonFilter(){document.getElementById('donFrom').value='';document.getElementById('donTo').value='';donFrom='';donTo='';renderDonations()}
 function donationRows(){
  const list=visibleDonors();const rows=[];
- list.forEach(d=>donationEntries(d).forEach(h=>{if(inRange(h.date,donFrom,donTo))rows.push({donor:d.name,donorId:d.id,...h})}));
+ list.forEach(d=>donationEntries(d).forEach(h=>{if(inRange(h.date,donFrom,donTo)&&(h.donationType||'cash')===donationsTypeFilter)rows.push({donor:d.name,donorId:d.id,...h})}));
  return rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''))
 }
 function renderDonations(){
@@ -7781,14 +7851,15 @@ function renderDonations(){
  const total=rows.reduce((s,r)=>s+(Number(String(r.amount).replace(/,/g,''))||0),0);
  const donorsCount=new Set(rows.map(r=>r.donor)).size;
  document.getElementById('donationsStats').innerHTML=`
-  <div class="stat gold"><div class="num">${total.toLocaleString('ar-EG')}</div><div class="lbl">إجمالي التبرعات (جنيه)</div></div>
+  <div class="stat gold"><div class="num">${total.toLocaleString('ar-EG')}</div><div class="lbl">${donationsTypeFilter==='inkind'?'إجمالي القيمة التقديرية (جنيه)':'إجمالي التبرعات (جنيه)'}</div></div>
   <div class="stat"><div class="num">${rows.length}</div><div class="lbl">عدد عمليات التبرع</div></div>
   <div class="stat"><div class="num">${donorsCount}</div><div class="lbl">عدد المتبرعين</div></div>`;
  document.getElementById('donationsList').innerHTML=rows.length?rows.map(r=>`<div class="card" style="border-inline-start-color:var(--gold)">
   <div class="info" onclick="openFinanceDetail('${r.donorId}','${r.hid}')" title="اضغط لعرض تفاصيل التبرع"><div class="name">${escapeHtml(r.donor)}</div>
-  <div class="meta">${fmtDate(r.date)} · <b>${money(r.amount)}</b>${r.project?` · مشروع: ${escapeHtml(r.project)}`:''}${r.method?` · ${escapeHtml(r.method)}`:''}${r.location?` · ${escapeHtml(r.location)}`:''}</div>
+  <div class="meta">${fmtDate(r.date)} · <b>${money(r.amount)}</b>${r.project?` · مشروع: ${escapeHtml(r.project)}`:''}${r.method?` · ${escapeHtml(r.method)}`:''}</div>
+  ${donationsTypeFilter==='inkind'&&Array.isArray(r.items)&&r.items.length?`<div class="small-note" style="margin-top:4px">الأصناف: ${r.items.map(it=>`${escapeHtml(it.name)} (${it.qty} × ${money(it.price)})`).join('، ')}</div>`:''}
   <div class="small-note" style="margin-top:4px">بواسطة: ${escapeHtml(r.by||'—')}${r.notes?` · ${escapeHtml(r.notes)}`:''}</div></div>
- </div>`).join(''):'<div class="empty">لا توجد تبرعات مسجلة ضمن الفترة المحددة.</div>';
+ </div>`).join(''):`<div class="empty">${donationsTypeFilter==='inkind'?'لا توجد تبرعات عينية مسجلة ضمن الفترة المحددة.':'لا توجد تبرعات نقدية مسجلة ضمن الفترة المحددة.'}</div>`;
 }
 
 /* ---------- channels view (grouped by payment method, with date filter) ---------- */
@@ -7947,8 +8018,7 @@ async function downloadSheetDataToSystem(){
 
 /* ---------- settings view ---------- */
 function renderSettingsView(){
- refreshLocationsDatalist();
- renderSettingsLocations();
+ renderSettingsDepartments();
  renderSettingsChannels();
  renderSettingsIntentions();
  renderSettingsManagerCategories();
@@ -8046,8 +8116,8 @@ function openImportCodesReference(){
 function downloadImportTemplate(){
   ensureProjectCodes();ensureChannelCodes();ensureIntentionCodes();
   const firstProjectCode=projects[0]?.code||'P1', firstChannelCode=channels[0]?channelCode(channels[0]):'C1', firstIntentionCode=intentions[0]?intentionCode(intentions[0]):'N1';
-  const rows=[['التاريخ','قيمة التبرع','اسم المتبرع','رقم التليفون','المشروع (اسم أو كود)','النية (اسم أو كود)','مكان التبرع','قناة/طريقة التبرع (اسم أو كود)','الموظف المسؤول','حالة الحركة (نص أو كود)','حالة الاعتماد المالي','ملاحظات'],
-    [todayStr(),500,'مثال: إسلام أحمد','01000000000',firstProjectCode,firstIntentionCode,'القاهرة',firstChannelCode,'يحدد من شاشة الاستيراد','1 (=ناجحة)','تلقائيًا — بانتظار اعتماد الإدارة المالية','']];
+  const rows=[['التاريخ','قيمة التبرع','اسم المتبرع','رقم التليفون','المشروع (اسم أو كود)','النية (اسم أو كود)','(عمود غير مستخدم — اتركه فارغًا)','قناة/طريقة التبرع (اسم أو كود)','الموظف المسؤول','حالة الحركة (نص أو كود)','حالة الاعتماد المالي','ملاحظات'],
+    [todayStr(),500,'مثال: إسلام أحمد','01000000000',firstProjectCode,firstIntentionCode,'',firstChannelCode,'يحدد من شاشة الاستيراد','1 (=ناجحة)','تلقائيًا — بانتظار اعتماد الإدارة المالية','']];
   const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:14},{wch:14},{wch:24},{wch:16},{wch:24},{wch:18},{wch:18},{wch:22},{wch:24},{wch:16},{wch:28},{wch:30}];XLSX.utils.book_append_sheet(wb,ws,'بيانات الاستيراد');
   const codeRows=[['نوع العنصر','الكود','الاسم/الوصف']];
   projects.forEach(p=>codeRows.push(['مشروع',p.code||'',p.name||'']));
@@ -8084,7 +8154,7 @@ async function runImport(){
   rows.forEach((c,index)=>{
     const first=String(c[0]||'').trim(), second=String(c[1]||'').trim(), third=String(c[2]||'').trim();
     if(index===0&&/^(التاريخ|date)$/i.test(first)&&/^(قيمة التبرع|amount)$/i.test(second))return;
-    const date=normalizeImportDate(c[0]), amount=String(c[1]??'').replace(/,/g,'').trim(), name=third, phone=String(c[3]||'').trim(), project=String(c[4]||'').trim(), intention=String(c[5]||'').trim(), location=String(c[6]||'').trim(), method=String(c[7]||'').trim(), sheetEmployee=String(c[8]||'').trim(), rawMovementStatus=String(c[9]||'').trim(), movementStatus=normalizeMovementStatus(rawMovementStatus), notes=String(c[11]||'').trim();
+    const date=normalizeImportDate(c[0]), amount=String(c[1]??'').replace(/,/g,'').trim(), name=third, phone=String(c[3]||'').trim(), project=String(c[4]||'').trim(), intention=String(c[5]||'').trim(), location='', method=String(c[7]||'').trim(), sheetEmployee=String(c[8]||'').trim(), rawMovementStatus=String(c[9]||'').trim(), movementStatus=normalizeMovementStatus(rawMovementStatus), notes=String(c[11]||'').trim();
     if(date===null){skipped++;errors.push(`السطر ${index+1}: التاريخ «${c[0]||''}» غير صالح أو غير مطابق لصيغة النظام (yyyy-mm-dd) أو تاريخ مستقبلي.`);return}
     if(!name){skipped++;errors.push(`السطر ${index+1}: اسم المتبرع فارغ.`);return}
     if(!amount||isNaN(Number(amount))||Number(amount)<=0){skipped++;errors.push(`السطر ${index+1}: قيمة التبرع غير صالحة.`);return}
@@ -8098,7 +8168,7 @@ async function runImport(){
     if(!finalIntention){skipped++;errors.push(`السطر ${index+1}: النية مطلوبة.`);return}
     const channel=channelByCode(method)||channels.find(ch=>normName(ch)===normName(method));if(!method||!channel){skipped++;errors.push(`السطر ${index+1}: قناة/طريقة التبرع غير موجودة في النظام (اكتب اسم القناة كاملًا أو كودها مثل C1).`);return}
     const dup=findDuplicate(name,phone,'');
-    const h={type:'donation',hid:uid(),date:date||todayStr(),action:'تبرع جديد',amount,project:projectObj.name,intention:finalIntention,location,method:channel,notes,by:employee.fullName,createdBy:employee.id,responsibleEmployeeId:employee.id,responsibleEmployeeName:employee.fullName,status:'confirmed',movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved'};
+    const h={type:'donation',hid:uid(),date:date||todayStr(),action:'تبرع جديد',amount,project:projectObj.name,intention:finalIntention,location,method:channel,notes,by:employee.fullName,createdBy:employee.id,responsibleEmployeeId:employee.id,responsibleEmployeeName:employee.fullName,status:'confirmed',movementStatus,financeStatus:movementStatus==='ناجحة'?'pending':'approved',imported:true,importedBy:currentUser.id,importedByName:currentUser.fullName,importedAt:new Date().toISOString()};
     if(dup){dup.history=dup.history||[];dup.history.push(h);merged++}else{donors.push({id:uid(),name:name.trim(),phone,employeeId:employee.id,createdBy:employee.id,registeredDate:date||todayStr(),history:[h]});added++}
   });
   persist();render();closeModal();
@@ -8207,6 +8277,7 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
         '<h3>إضافة شركة جديدة</h3>'+
         '<div class="company-form-section"><h4>البيانات الأساسية</h4><div class="grid2">'+
         '<div class="field"><label>اسم الشركة *</label><input id="cf_name" type="text" autocomplete="organization" placeholder="مثال: شركة ABC"></div>'+ 
+        '<div class="field"><label>النوع (شركة / جمعية) *</label><select id="cf_kind"><option value="">— اختر النوع —</option><option value="شركة">شركة</option><option value="جمعية">جمعية</option></select></div>'+
         '<div class="field"><label>الاسم القانوني</label><input id="cf_legalName" type="text"></div>'+ 
         '<div class="field"><label>نوع الشركة</label><select id="cf_companyType"><option value="">اختر</option>'+opts(cfg.companyTypes)+'</select></div>'+ 
         '<div class="field"><label>فئة الشركة</label><select id="cf_category">'+opts(cfg.categories)+'</select></div>'+ 
@@ -8388,7 +8459,7 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
   window.openContact=function(id){
     if(!currentUser){alert('يجب تسجيل الدخول أولًا.');return}
     const d=donors.find(x=>x.id===id);if(!d)return;if(currentUser?.role==='employee'&&d.employeeId!==currentUser.id){alert('هذا المتبرع غير تابع لحسابك.');return}
-    openModal(`<h3>تسجيل تواصل مع ${esc(d.name)}</h3><div class="grid2"><div class="field"><label>التاريخ</label><input id="c_date" type="date" max="2050-12-31" value="${todayStr()}"></div><div class="field"><label>نوع الإجراء</label><select id="c_action">${CONTACT_ACTIONS.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>موعد التواصل/المتابعة القادمة</label><input id="c_next" type="date" max="2050-12-31" value="${esc(d.nextFollowUp||'')}"></div><div class="field"><label>مكان الحركة</label><input id="c_location" list="locationsDatalist" placeholder="مقر المؤسسة / بازار / مول ..."></div></div><div class="field"><label>ملاحظات</label><textarea id="c_notes"></textarea></div><div class="followup-notice">إذا حددت موعدًا قادمًا سيظهر تلقائيًا في 🔔 تنبيهات النظام مع عدد الأيام المتبقية، وإذا مر الموعد سيظهر كمتابعة متأخرة.</div><div class="modal-actions"><button class="btn-gold" onclick="saveContact('${id}')">حفظ</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
+    openModal(`<h3>تسجيل تواصل مع ${esc(d.name)}</h3><div class="grid2"><div class="field"><label>التاريخ</label><input id="c_date" type="date" max="2050-12-31" value="${todayStr()}"></div><div class="field"><label>نوع الإجراء</label><select id="c_action">${CONTACT_ACTIONS.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>موعد التواصل/المتابعة القادمة</label><input id="c_next" type="date" max="2050-12-31" value="${esc(d.nextFollowUp||'')}"></div></div><div class="field"><label>ملاحظات</label><textarea id="c_notes"></textarea></div><div class="followup-notice">إذا حددت موعدًا قادمًا سيظهر تلقائيًا في 🔔 تنبيهات النظام مع عدد الأيام المتبقية، وإذا مر الموعد سيظهر كمتابعة متأخرة.</div><div class="modal-actions"><button class="btn-gold" onclick="saveContact('${id}')">حفظ</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
   };
   window.saveContact=function(id){
     if(!currentUser){alert('يجب تسجيل الدخول أولًا.');return}
@@ -8451,8 +8522,7 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
           <div class="field"><label>المشروع / القافلة *</label><select id="cd_project">${donationProjectOptions()}</select></div>
           <div class="field"><label>النية *</label><select id="cd_intention"><option value="">اختر النية</option>${(typeof intentions!=='undefined'&&Array.isArray(intentions)?intentions:[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('')}</select></div>
           <div class="field"><label>طريقة التبرع</label><select id="cd_method"></select></div>
-          <div class="field"><label>مكان التبرع</label><input id="cd_location"></div>
-          <div class="field"><label>حالة الحركة</label><select id="cd_movementStatus"><option value="ناجحة">ناجحة</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مرفوضة">مرفوضة</option><option value="اخرى">أخرى</option></select></div>
+                    <div class="field"><label>حالة الحركة</label><select id="cd_movementStatus"><option value="ناجحة">ناجحة</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مرفوضة">مرفوضة</option><option value="اخرى">أخرى</option></select></div>
         </div>
       </div>
       <div class="company-form-section">
@@ -8679,7 +8749,7 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
       <div class="field"><label>المشروع</label><input value="${escapeHtml(entry.project||'—')}" readonly></div>
       <div class="field"><label>النية</label><input value="${escapeHtml(entry.intention||'—')}" readonly></div>
       <div class="field"><label>قناة التبرع</label><input value="${escapeHtml(entry.method||'—')}" readonly></div>
-      <div class="field"><label>مكان الحركة</label><input value="${escapeHtml(entry.location||'—')}" readonly></div>
+      
       <div class="field"><label>حالة الحركة</label><input value="${escapeHtml(movementStatusLabel(entry.movementStatus))}" readonly></div></div>
       ${entry.notes?`<div class="manager-box"><b>ملاحظات:</b> ${escapeHtml(entry.notes)}</div>`:''}
       <div class="modal-actions">${canAct&&status!=='approved'&&status!=='rejected'?`<button class="btn-primary" onclick="approveFinanceDonation('${escapeHtml(donorId)}','${escapeHtml(hid)}')">✅ اعتماد مالي</button><button class="btn-danger" onclick="rejectFinanceDonation('${escapeHtml(donorId)}','${escapeHtml(hid)}')">✖️ رفض ماليًا</button>`:''}<button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`);
@@ -9148,7 +9218,6 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
       <div class="report-dimensions-grid">
         <div class="report-dimension"><label>التاريخ</label><select id="reportDateDimension" onchange="selectReportPeriod(this.value)">${REPORT_PERIODS.map(p=>`<option value="${escapeHtml(p.key)}">${escapeHtml(p.label)}</option>`).join('')}<option value="custom">فترة مخصصة</option></select></div>
         <div class="report-dimension"><label>الموظف</label><select id="reportEmployeeDimension" onchange="setReportDimensionEmployee(this.value)" ${currentUser?.role==='employee'?'disabled':''}>${empHtml}</select></div>
-        <div class="report-dimension"><label>المكان</label><select id="reportLocationDimension" onchange="setReportDimension('location',this.value)">${opt(loc,D.location)}</select></div>
         <div class="report-dimension"><label>قنوات التبرع</label><select id="reportChannelDimension" onchange="selectReportChannelFilter(this.value)">${opt(chan,D.channel)}</select></div>
         <div class="report-dimension"><label>حالة الاعتماد المالي</label><select id="reportFinanceDimension" onchange="selectReportFinanceFilter(this.value)"><option value="all">الكل</option><option value="approved">معتمد ماليًا</option><option value="rejected">مرفوض ماليًا</option><option value="pending">في انتظار اعتماد المالية</option></select></div>
         <div class="report-dimension"><label>أفراد أو شركات</label><select id="reportEntityDimension" onchange="selectReportEntityFilter(this.value)"><option value="all">الكل</option><option value="individuals">أفراد</option><option value="companies">شركات</option></select></div>
@@ -9322,8 +9391,8 @@ document.addEventListener('DOMContentLoaded',function(){
 (function(){
  function ce(id,hid){var c=(companies||[]).find(function(x){return String(x.id)===String(id)});var e=c&&(c.history||[]).find(function(x){return x&&x.hid===hid&&x.type==='donation'});return {c:c,e:e}}
  function allowed(e,a){return !!(e&&typeof canEditDeleteDonationEntry==='function'&&canEditDeleteDonationEntry(e,a,currentUser))}
- window.editCompanyDonation=function(id,hid){var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e)return;if(!allowed(e,'edit')){alert('هذه الحركة غير قابلة للتعديل حسب حالة الاعتماد والصلاحيات.');return}var b=document.createElement('button');openModal('<h3>تعديل تبرع الشركة — '+escapeHtml(c.name)+'</h3><div class="grid2"><div class="field"><label>التاريخ</label><input id="ced_date" type="date" value="'+escapeHtml(e.date||todayStr())+'"></div><div class="field"><label>القيمة</label><input id="ced_amount" type="number" min="0" step="0.01" value="'+escapeHtml(e.amount||'')+'"></div><div class="field"><label>المشروع</label><select id="ced_project">'+donationProjectOptions(e.project||'')+'</select></div><div class="field"><label>النية</label><select id="ced_intention">'+donationIntentionOptions(e.intention||projectIntention(e.project||''))+'</select></div><div class="field"><label>المكان</label><input id="ced_location" value="'+escapeHtml(e.location||'')+'"></div><div class="field"><label>القناة</label><select id="ced_method">'+channels.map(function(x){return '<option '+(normName(x)===normName(e.method||'')?'selected':'')+'>'+escapeHtml(x)+'</option>'}).join('')+'</select></div><div class="field"><label>حالة الحركة</label><select id="ced_status"><option value="">— اختر —</option>'+['ناجحة','مرفوضة','قيد التنفيذ','اخرى'].map(function(x){return '<option value="'+x+'" '+(normalizeMovementStatus(e.movementStatus)===x?'selected':'')+'>'+x+'</option>'}).join('')+'</select></div></div><div class="field"><label>ملاحظات</label><textarea id="ced_notes">'+escapeHtml(e.notes||'')+'</textarea></div><div class="modal-actions"><button class="btn-primary" id="ced_save">حفظ التعديل</button><button class="btn-outline" id="ced_cancel">إلغاء</button></div>');document.getElementById('ced_save').onclick=function(){saveCompanyDonationEdit(id,hid)};document.getElementById('ced_cancel').onclick=closeModal}
- window.saveCompanyDonationEdit=function(id,hid){var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e||!allowed(e,'edit')){alert('لم تعد هذه الحركة قابلة للتعديل.');return}var amount=document.getElementById('ced_amount').value,project=document.getElementById('ced_project').value,intention=document.getElementById('ced_intention').value,status=document.getElementById('ced_status').value;if(!(Number(String(amount).replace(/,/g,''))>0)||!project||!intention||!status){alert('يرجى استكمال القيمة والمشروع والنية وحالة الحركة.');return}e.date=document.getElementById('ced_date').value||todayStr();e.amount=amount;e.project=project;e.intention=intention;e.location=document.getElementById('ced_location').value.trim();e.method=document.getElementById('ced_method').value;e.movementStatus=normalizeMovementStatus(status);e.financeStatus=e.movementStatus==='ناجحة'?'pending':'approved';e.notes=document.getElementById('ced_notes').value.trim();e.status='confirmed';e.lastEditedBy=currentUser.fullName;e.lastEditedAt=new Date().toISOString();persistCompanies();closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();alert('تم تعديل حركة التبرع بنجاح.')}
+ window.editCompanyDonation=function(id,hid){var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e)return;if(!allowed(e,'edit')){alert('هذه الحركة غير قابلة للتعديل حسب حالة الاعتماد والصلاحيات.');return}var b=document.createElement('button');openModal('<h3>تعديل تبرع الشركة — '+escapeHtml(c.name)+'</h3><div class="grid2"><div class="field"><label>التاريخ</label><input id="ced_date" type="date" value="'+escapeHtml(e.date||todayStr())+'"></div><div class="field"><label>القيمة</label><input id="ced_amount" type="number" min="0" step="0.01" value="'+escapeHtml(e.amount||'')+'"></div><div class="field"><label>المشروع</label><select id="ced_project">'+donationProjectOptions(e.project||'')+'</select></div><div class="field"><label>النية</label><select id="ced_intention">'+donationIntentionOptions(e.intention||projectIntention(e.project||''))+'</select></div><div class="field"><label>القناة</label><select id="ced_method">'+channels.map(function(x){return '<option '+(normName(x)===normName(e.method||'')?'selected':'')+'>'+escapeHtml(x)+'</option>'}).join('')+'</select></div><div class="field"><label>حالة الحركة</label><select id="ced_status"><option value="">— اختر —</option>'+['ناجحة','مرفوضة','قيد التنفيذ','اخرى'].map(function(x){return '<option value="'+x+'" '+(normalizeMovementStatus(e.movementStatus)===x?'selected':'')+'>'+x+'</option>'}).join('')+'</select></div></div><div class="field"><label>ملاحظات</label><textarea id="ced_notes">'+escapeHtml(e.notes||'')+'</textarea></div><div class="modal-actions"><button class="btn-primary" id="ced_save">حفظ التعديل</button><button class="btn-outline" id="ced_cancel">إلغاء</button></div>');document.getElementById('ced_save').onclick=function(){saveCompanyDonationEdit(id,hid)};document.getElementById('ced_cancel').onclick=closeModal}
+ window.saveCompanyDonationEdit=function(id,hid){var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e||!allowed(e,'edit')){alert('لم تعد هذه الحركة قابلة للتعديل.');return}var amount=document.getElementById('ced_amount').value,project=document.getElementById('ced_project').value,intention=document.getElementById('ced_intention').value,status=document.getElementById('ced_status').value;if(!(Number(String(amount).replace(/,/g,''))>0)||!project||!intention||!status){alert('يرجى استكمال القيمة والمشروع والنية وحالة الحركة.');return}e.date=document.getElementById('ced_date').value||todayStr();e.amount=amount;e.project=project;e.intention=intention;e.location=(document.getElementById('ced_location')?.value||'').trim();e.method=document.getElementById('ced_method').value;e.movementStatus=normalizeMovementStatus(status);e.financeStatus=e.movementStatus==='ناجحة'?'pending':'approved';e.notes=document.getElementById('ced_notes').value.trim();e.status='confirmed';e.lastEditedBy=currentUser.fullName;e.lastEditedAt=new Date().toISOString();persistCompanies();closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();alert('تم تعديل حركة التبرع بنجاح.')}
  window.deleteCompanyDonation=function(id,hid){var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e||!allowed(e,'delete')){alert('هذه الحركة غير قابلة للحذف حسب حالة الاعتماد والصلاحيات.');return}if(!confirm('حذف حركة التبرع هذه نهائيًا؟'))return;c.history=(c.history||[]).filter(function(x){return x.hid!==hid});__markSyncHistoryDeleted('company',id,hid);persistCompanies();closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();alert('تم حذف حركة التبرع بنجاح.')}
  window.openUnifiedDonationDetail=function(type,id,hid){if(type!=='company')return openFinanceDetail(id,hid);var z=ce(id,hid),c=z.c,e=z.e;if(!c||!e)return;var fs=normalizeFinanceStatus(e.financeStatus),badge=fs==='approved'?'<span class="badge green">معتمد ماليًا ✓</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد المالي</span>';openModal('<h3>تفاصيل تبرع الشركة — '+escapeHtml(c.name)+'</h3><div class="meta" style="margin-bottom:10px">'+badge+'</div><div class="grid2"><div class="field"><label>التاريخ</label><div>'+fmtDate(e.date)+'</div></div><div class="field"><label>القيمة</label><div><b>'+money(e.amount)+'</b></div></div><div class="field"><label>المشروع</label><div>'+escapeHtml(e.project||'—')+'</div></div><div class="field"><label>النية</label><div>'+escapeHtml(e.intention||'—')+'</div></div><div class="field"><label>المكان</label><div>'+escapeHtml(e.location||'—')+'</div></div><div class="field"><label>القناة</label><div>'+escapeHtml(e.method||'—')+'</div></div><div class="field"><label>حالة الحركة</label><div>'+escapeHtml(movementStatusLabel(e.movementStatus))+'</div></div></div>'+(e.notes?'<div class="field"><label>ملاحظات</label><div>'+escapeHtml(e.notes)+'</div></div>':'')+'<div class="modal-actions"><button class="btn-outline btn-small" id="ced_edit_btn">تعديل التبرع</button><button class="btn-danger btn-small" id="ced_delete_btn">حذف</button><button class="btn-outline btn-small" id="ced_close_btn">إغلاق</button></div>');var eb=document.getElementById('ced_edit_btn'),db=document.getElementById('ced_delete_btn');if(!allowed(e,'edit'))eb.remove();else eb.onclick=function(){closeModal();editCompanyDonation(id,hid)};if(!allowed(e,'delete'))db.remove();else db.onclick=function(){deleteCompanyDonation(id,hid)};document.getElementById('ced_close_btn').onclick=closeModal}
 })();
@@ -9531,6 +9600,143 @@ window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=
 </script>
 
 </body>
+<script>
+/* شركات وجمعيات: النوع إجباري عند التكويد ويُحفظ في entityKind */
+(function(){
+  if(typeof window.saveCompany!=='function')return;
+  const _save=window.saveCompany;
+  window.saveCompany=function(id){
+    const kindEl=document.getElementById('cf_kind');
+    const kind=kindEl?kindEl.value:'';
+    if(kindEl&&!kind){alert('يرجى تحديد النوع (شركة أو جمعية) قبل التكويد.');return}
+    const before=companies.length, name=(document.getElementById('cf_name')?.value||'').trim();
+    _save(id);
+    if(!kind)return;
+    const c=id?companies.find(x=>x.id===id):(companies.length>before?companies.find(x=>normName(x.name)===normName(name)):null);
+    if(c&&c.entityKind!==kind){c.entityKind=kind;persistCompanies();if(typeof renderCompanies==='function')renderCompanies()}
+  };
+  const _card=window.companyCard;
+  if(typeof _card==='function'){
+    window.companyCard=function(c){
+      const html=_card(c);
+      const k=c&&c.entityKind;
+      return k?html.replace(/(class="[^"]*name[^"]*"[^>]*>)/,'$1<span class="badge '+(k==='جمعية'?'gold':'green')+'" style="margin-inline-end:6px">'+k+'</span>'):html;
+    };
+  }
+})();
+</script>
+<script>
+/* ===== الإدارات: تكويد + ربط بالمستخدمين والتبرعات ===== */
+function deptList(){companyConfig=normalizeCompanyConfig(companyConfig);return companyConfig.departments}
+function deptCodeByName(name){const n=normName(name||'');if(!n)return '';const d=deptList().find(x=>normName(x.name)===n);return d?d.code:''}
+function ensureDepartmentCodes(){const list=deptList();let max=0;list.forEach(d=>{const m=/^D(\d+)$/.exec(d.code||'');if(m)max=Math.max(max,Number(m[1]))});let ch=false;list.forEach(d=>{if(!d.id){d.id=uid();ch=true}if(!d.code){d.code='D'+(++max);ch=true}});return ch}
+function renderSettingsDepartments(){
+  const el=document.getElementById('departmentsTagList');if(!el)return;
+  ensureDepartmentCodes();
+  el.innerHTML=deptList().map(d=>`<span class="tag"><span class="badge green" style="margin-inline-end:6px">${escapeHtml(d.code)}</span><span>${escapeHtml(d.name)}</span><button title="تعديل" onclick="editDepartment('${d.id}')">✎</button><button title="حذف" onclick="removeDepartment('${d.id}')">✕</button></span>`).join('')||'<span class="small-note">لا توجد إدارات مكودة بعد.</span>';
+}
+function addDepartment(){
+  if(!isSuperAdmin(currentUser)&&!canModule('settings','add',currentUser)){alert('ليس لديك صلاحية إضافة إدارات.');return}
+  const inp=document.getElementById('newDepartmentInput');const name=(inp.value||'').trim();if(!name)return;
+  if(deptList().some(d=>normName(d.name)===normName(name))){alert('هذه الإدارة موجودة بالفعل.');return}
+  deptList().push({id:uid(),name,code:''});ensureDepartmentCodes();persistCompanyConfig();inp.value='';renderSettingsDepartments();
+}
+function editDepartment(id){
+  if(!isSuperAdmin(currentUser)&&!canModule('settings','edit',currentUser)){alert('ليس لديك صلاحية تعديل الإدارات.');return}
+  const d=deptList().find(x=>x.id===id);if(!d)return;
+  const name=(prompt('اسم الإدارة الجديد:',d.name)||'').trim();if(!name||name===d.name)return;
+  if(deptList().some(x=>x.id!==id&&normName(x.name)===normName(name))){alert('يوجد إدارة أخرى بنفس الاسم.');return}
+  const old=d.name;d.name=name;
+  USERS.forEach(u=>{if(normName(u.department||'')===normName(old))u.department=name});
+  try{saveUsers()}catch(e){}
+  persistCompanyConfig();renderSettingsDepartments();
+}
+function removeDepartment(id){
+  if(!isSuperAdmin(currentUser)&&!canModule('settings','delete',currentUser)){alert('ليس لديك صلاحية حذف الإدارات.');return}
+  const d=deptList().find(x=>x.id===id);if(!d)return;
+  const used=USERS.filter(u=>normName(u.department||'')===normName(d.name));
+  if(used.length){alert('لا يمكن حذف الإدارة «'+d.name+'» لأنها مرتبطة بـ '+used.length+' مستخدم. غيّر إدارة هؤلاء المستخدمين أولًا.');return}
+  if(!confirm('حذف الإدارة «'+d.name+'»؟'))return;
+  const kept=deptList().filter(x=>x.id!==id);companyConfig.departments=kept;persistCompanyConfig();renderSettingsDepartments();
+}
+/* تحويل حقل «الإدارة» في نماذج المستخدمين إلى قائمة اختيار من الإدارات المكودة */
+(function(){
+  const _open=window.openModal||openModal;
+  function convert(){
+    if(!deptList().length)return;
+    ['r_department','edit_ud_department'].forEach(fid=>{
+      const inp=document.getElementById(fid);if(!inp||inp.tagName!=='INPUT')return;
+      const cur=(inp.value||'').trim();const sel=document.createElement('select');sel.id=fid;
+      const opts=['<option value="">— اختر الإدارة —</option>'].concat(deptList().map(d=>`<option value="${escapeHtml(d.name)}" ${normName(d.name)===normName(cur)?'selected':''}>${escapeHtml(d.code)} — ${escapeHtml(d.name)}</option>`));
+      if(cur&&!deptCodeByName(cur))opts.push(`<option value="${escapeHtml(cur)}" selected>${escapeHtml(cur)} (غير مكودة)</option>`);
+      sel.innerHTML=opts.join('');inp.replaceWith(sel);
+    });
+  }
+  window.openModal=openModal=function(content){const r=_open(content);try{convert()}catch(e){console.error(e)}return r};
+})();
+</script>
+<script>
+/* حذف أماكن الحركات والتبرعات المسجلة: تفريغ الكتالوج وإيقاف إعادة بنائه من السجلات */
+(function(){
+  try{locations=[];safeSet(localStorage,LOCATIONSKEY,'[]')}catch(e){}
+  window.ensureLocationsCatalog=function(){locations=[];return locations};
+  window.refreshLocationsDatalist=function(){const dl=document.getElementById('locationsDatalist');if(dl)dl.innerHTML=''};
+  window.allReportLocations=function(){return []};
+})();
+</script>
+<script>
+/* ===== مديول استيراد البيانات: تبويبا «استيراد بيانات» و«سجل الاستيراد» ===== */
+if(typeof window.statusLabel!=='function'){window.statusLabel=function(s){return s==='approved'?'معتمد ماليًا':s==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد المالي'}}
+function importLogRows(){
+  const rows=[];
+  (visibleDonors()||[]).forEach(d=>visibleDonationEntries(d).forEach(h=>{if(h&&h.imported)rows.push({donor:d.name,donorId:d.id,...h})}));
+  return rows.sort((a,b)=>String(b.importedAt||b.date||'').localeCompare(String(a.importedAt||a.date||'')));
+}
+function renderImportLog(){
+  const host=document.getElementById('importPanelLog');if(!host)return;
+  const rows=importLogRows();
+  const body=rows.map(r=>{
+    const fin=normalizeFinanceStatus(r.financeStatus);
+    const canEdit=canEditDeleteDonationEntry(r,'edit'), canDel=canEditDeleteDonationEntry(r,'delete');
+    const actions=(canEdit||canDel)?
+      `${canEdit?`<button class="btn-outline btn-small" onclick="importLogEdit('${r.donorId}','${r.hid}')">تعديل</button>`:''} ${canDel?`<button class="btn-danger btn-small" onclick="importLogDelete('${r.donorId}','${r.hid}')">حذف</button>`:''}`
+      :'<span class="badge green" title="لا يمكن التعديل أو الحذف بعد اعتماد الإدارة المالية">🔒 معتمد ماليًا</span>';
+    return `<tr><td>${fmtDate(r.date)}</td><td>${escapeHtml(r.donor||'—')}</td><td><b>${money(r.amount)}</b></td><td>${escapeHtml(r.project||'—')}</td><td>${escapeHtml(r.intention||'—')}</td><td>${escapeHtml(r.importedByName||r.by||'—')}</td><td>${escapeHtml(movementStatusLabel(r.movementStatus))}</td><td>${escapeHtml(statusLabel(fin))}</td><td>${actions}</td></tr>`;
+  }).join('');
+  host.innerHTML=`<div class="small-note" style="margin-bottom:8px">الحركات التي سُجلت عبر الاستيراد بواسطة المستخدم. بمجرد اعتماد الإدارة المالية للحركة يُقفل التعديل والحذف نهائيًا.</div>
+   <div class="donation-record-table-wrap" style="max-height:52vh;overflow:auto"><table class="donation-record-table" style="min-width:900px"><thead><tr><th>التاريخ</th><th>المتبرع</th><th>القيمة</th><th>المشروع</th><th>النية</th><th>المستورد بواسطة</th><th>حالة الحركة</th><th>حالة الاعتماد</th><th>إجراءات</th></tr></thead><tbody>${body||'<tr><td colspan="9" class="empty">لا توجد حركات مستوردة بعد.</td></tr>'}</tbody></table></div>
+   <div class="modal-actions"><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`;
+}
+function selectImportTab(tab){
+  const log=tab==='log';
+  document.getElementById('importPanelMain')?.classList.toggle('hidden',log);
+  document.getElementById('importPanelLog')?.classList.toggle('hidden',!log);
+  document.getElementById('importTabMain')?.classList.toggle('active',!log);
+  document.getElementById('importTabLog')?.classList.toggle('active',log);
+  if(log)renderImportLog();
+}
+function importLogEdit(id,hid){const e=(donors.find(d=>d.id===id)?.history||[]).find(h=>h.hid===hid);if(!e||!canEditDeleteDonationEntry(e,'edit')){alert('لا يمكن تعديل هذه الحركة بعد اعتمادها من الإدارة المالية.');renderImportLog();return}editDonation(id,hid)}
+async function importLogDelete(id,hid){
+  const e=(donors.find(d=>d.id===id)?.history||[]).find(h=>h.hid===hid);
+  if(!e||!canEditDeleteDonationEntry(e,'delete')){alert('لا يمكن حذف هذه الحركة بعد اعتمادها من الإدارة المالية.');renderImportLog();return}
+  await deleteDonation(id,hid);
+  if(!(donors.find(d=>d.id===id)?.history||[]).some(h=>h.hid===hid)&&canModule('importData','add',currentUser)){openImport('log')}
+}
+(function(){
+  const _openImport=window.openImport;
+  window.openImport=function(tab){
+    _openImport();
+    const ov=document.getElementById('overlay');const box=ov&&ov.firstElementChild;if(!box)return;
+    const main=document.createElement('div');main.id='importPanelMain';
+    while(box.firstChild)main.appendChild(box.firstChild);
+    const tabs=document.createElement('div');tabs.className='donation-module-tabs';
+    tabs.innerHTML='<button class="donation-module-tab active" id="importTabMain" onclick="selectImportTab(\'main\')">استيراد بيانات</button><button class="donation-module-tab" id="importTabLog" onclick="selectImportTab(\'log\')">سجل الاستيراد</button>';
+    const log=document.createElement('div');log.id='importPanelLog';log.className='hidden';
+    box.appendChild(tabs);box.appendChild(main);box.appendChild(log);
+    if(tab==='log')selectImportTab('log');
+  };
+})();
+</script>
 </html>
 
 
