@@ -2078,7 +2078,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw4djPWYHYGKLHKz0lJ-oiPzzj3zUNryVzSjmYbJZCw-Qp8GSwUu0WB0EJXTqOK53KxXw/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzlV3Zt_eQGSCWFFS57IR26jpd72cPbXVyWobDD916PIeGMt8CmcqRZX0YUT1X-0w-Y4w/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -7176,7 +7176,7 @@ function renderModuleDonationRecords(){
     <div class="stat"><div class="num">${rejectedMovement}</div><div class="lbl">حركات مرفوضة</div></div>
     <div class="stat"><div class="num">${inProgress}</div><div class="lbl">قيد التنفيذ</div></div>`;
 
-  document.getElementById('moduleDonationRecords').innerHTML=rows.length?`<div class="donation-record-table-wrap"><table class="donation-record-table" style="min-width:1250px"><thead><tr><th>رقم الحركة</th><th>تاريخ</th><th>اسم</th><th>هاتف</th><th>مشروع</th><th>نية</th><th>قيمة</th><th>حالة الاعتماد</th><th>بواسطة</th><th>التواصل</th></tr></thead><tbody>${rows.map((r,i)=>{const fs=normalizeFinanceStatus(r.financeStatus),badge=fs==='approved'?'<span class="badge green">معتمد ماليًا</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>',contact=r.entityType==='company'?'—':(canDonorContact(currentUser)?`<button class="btn-gold btn-small" onclick="event.stopPropagation();openContact('${String(r.donorId)}')">تواصل</button>`:'—');return `<tr onclick="openUnifiedDonationDetail('${r.entityType||'individual'}','${r.entityType==='company'?r.companyId:r.donorId}','${r.hid}')"><td>${i+1}</td><td>${fmtDate(r.date)}</td><td>${escapeHtml(r.donor||'—')}</td><td>${escapeHtml(r.phone||'—')}</td><td>${escapeHtml(r.project||'—')}</td><td>${escapeHtml(r.intention||'—')}</td><td><b>${money(r.amount)}</b></td><td>${badge}</td><td>${escapeHtml(r.by||'—')}</td><td>${contact}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">لا توجد سجلات تبرعات مطابقة للبحث أو الفترة المحددة.</div>';
+  document.getElementById('moduleDonationRecords').innerHTML=rows.length?`<div class="donation-record-table-wrap"><table class="donation-record-table" style="min-width:1250px"><thead><tr><th>رقم الحركة</th><th>تاريخ</th><th>اسم</th><th>هاتف</th><th>نوع</th><th>مشروع</th><th>نية</th><th>قيمة</th><th>حالة الاعتماد</th><th>بواسطة</th><th>التواصل</th></tr></thead><tbody>${rows.map((r,i)=>{const fs=normalizeFinanceStatus(r.financeStatus),badge=fs==='approved'?'<span class="badge green">معتمد ماليًا</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>',contact=r.entityType==='company'?'—':(canDonorContact(currentUser)?`<button class="btn-gold btn-small" onclick="event.stopPropagation();openContact('${String(r.donorId)}')">تواصل</button>`:'—');return `<tr onclick="openUnifiedDonationDetail('${r.entityType||'individual'}','${r.entityType==='company'?r.companyId:r.donorId}','${r.hid}')"><td>${i+1}</td><td>${fmtDate(r.date)}</td><td>${escapeHtml(r.donor||'—')}</td><td>${escapeHtml(r.phone||'—')}</td><td>${r.donationType==='inkind'?'<span class="badge gold">عيني</span>':'<span class="badge green">نقدي</span>'}</td><td>${escapeHtml(r.project||'—')}</td><td>${escapeHtml(r.intention||'—')}</td><td><b>${money(r.amount)}</b></td><td>${badge}</td><td>${escapeHtml(r.by||'—')}</td><td>${contact}</td></tr>`}).join('')}</tbody></table></div>`:'<div class="empty">لا توجد سجلات تبرعات مطابقة للبحث أو الفترة المحددة.</div>';
 }
 
 function openUnifiedDonationDetail(entityType,id,hid){
@@ -7185,7 +7185,7 @@ function openUnifiedDonationDetail(entityType,id,hid){
     if(!c||!entry){alert('تعذر العثور على تبرع الشركة.');return;}
     const status=normalizeFinanceStatus(entry.financeStatus);
     const badge=status==='approved'?'<span class="badge green">معتمد ماليًا ✓</span>':status==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد المالي</span>';
-    openModal(`<h3>تفاصيل تبرع الشركة — ${escapeHtml(c.name||'—')}</h3><div class="meta" style="margin-bottom:10px">${badge}</div><div class="grid2"><div class="field"><label>التاريخ</label><div>${fmtDate(entry.date)}</div></div><div class="field"><label>قيمة التبرع</label><div><b>${money(entry.amount)}</b></div></div><div class="field"><label>الشركة</label><div>${escapeHtml(c.name||'—')}</div></div><div class="field"><label>المشروع</label><div>${escapeHtml(entry.project||'—')}</div></div><div class="field"><label>النية</label><div>${escapeHtml(entry.intention||'—')}</div></div><div class="field"><label>طريقة التبرع</label><div>${escapeHtml(entry.method||'—')}</div></div><div class="field"><label>بواسطة</label><div>${escapeHtml(entry.by||'—')}</div></div></div>${entry.notes?`<div class="field"><label>ملاحظات</label><div>${escapeHtml(entry.notes)}</div></div>`:''}<div class="modal-actions"><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`);
+    openModal(`<h3>تفاصيل تبرع الشركة — ${escapeHtml(c.name||'—')}</h3><div class="meta" style="margin-bottom:10px">${badge}</div><div class="grid2"><div class="field"><label>التاريخ</label><div>${fmtDate(entry.date)}</div></div><div class="field"><label>نوع التبرع</label><div>${entry.donationType==='inkind'?'<span class="badge gold">تبرع عيني</span>':'<span class="badge green">تبرع نقدي</span>'}</div></div><div class="field"><label>${entry.donationType==='inkind'?'إجمالي القيمة التقديرية':'قيمة التبرع'}</label><div><b>${money(entry.amount)}</b></div></div><div class="field"><label>الشركة</label><div>${escapeHtml(c.name||'—')}</div></div><div class="field"><label>المشروع</label><div>${escapeHtml(entry.project||'—')}</div></div><div class="field"><label>النية</label><div>${escapeHtml(entry.intention||'—')}</div></div><div class="field"><label>طريقة التبرع</label><div>${escapeHtml(entry.method||'—')}</div></div><div class="field"><label>بواسطة</label><div>${escapeHtml(entry.by||'—')}</div></div></div>${entry.donationType==='inkind'&&Array.isArray(entry.items)&&entry.items.length?`<div class="field"><label>أصناف التبرع العيني</label><div class="donation-record-table-wrap"><table class="donation-record-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر التقديري للوحدة</th><th>الإجمالي</th></tr></thead><tbody>${entry.items.map(it=>`<tr><td>${escapeHtml(it.name)}</td><td>${it.qty}</td><td>${money(it.price)}</td><td>${money(it.qty*it.price)}</td></tr>`).join('')}</tbody></table></div></div>`:''}${entry.notes?`<div class="field"><label>ملاحظات</label><div>${escapeHtml(entry.notes)}</div></div>`:''}<div class="modal-actions"><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`);
     return;
   }
   openFinanceDetail(id,hid);
@@ -7222,32 +7222,39 @@ function syncModuleDonationType(){
     recalcModuleDonationItemsTotal();
   }
 }
-function addModuleDonationItemRow(){
-  const list=document.getElementById('md_itemsList');if(!list)return;
-  const rid='mdi_'+(++__mdItemRowSeq);
-  const row=document.createElement('div');
-  row.className='md-item-row';row.id=rid;
-  row.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap';
-  row.innerHTML=`<input type="text" placeholder="اسم الصنف" class="md-item-name" style="flex:2;min-width:140px">
-    <input type="number" placeholder="الكمية" min="0" step="0.01" class="md-item-qty" style="flex:1;min-width:90px" oninput="recalcModuleDonationItemsTotal()">
-    <input type="number" placeholder="السعر التقديري للوحدة" min="0" step="0.01" class="md-item-price" style="flex:1;min-width:120px" oninput="recalcModuleDonationItemsTotal()">
-    <button type="button" class="btn-outline" onclick="document.getElementById('${rid}').remove();recalcModuleDonationItemsTotal()">✕</button>`;
-  list.appendChild(row);
-}
-function collectModuleDonationItems(){
-  return Array.from(document.querySelectorAll('#md_itemsList .md-item-row')).map(row=>{
+function collectItemRowsFrom(containerId){
+  return Array.from(document.querySelectorAll('#'+containerId+' .md-item-row')).map(row=>{
     const name=row.querySelector('.md-item-name')?.value.trim()||'';
     const qty=Number(row.querySelector('.md-item-qty')?.value||0);
     const price=Number(row.querySelector('.md-item-price')?.value||0);
     return {name,qty,price,total:qty*price};
   }).filter(it=>it.name||it.qty||it.price);
 }
-function recalcModuleDonationItemsTotal(){
-  const items=collectModuleDonationItems();
+function addItemRowTo(containerId,item){
+  const list=document.getElementById(containerId);if(!list)return;
+  const rid=containerId+'_'+(++__mdItemRowSeq);
+  const row=document.createElement('div');row.className='md-item-row';row.id=rid;
+  row.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap';
+  const it=item||{name:'',qty:'',price:''};
+  row.innerHTML=`<input type="text" placeholder="اسم الصنف" class="md-item-name" value="${escapeHtml(it.name||'')}" style="flex:2;min-width:140px">
+    <input type="number" placeholder="الكمية" min="0" step="0.01" class="md-item-qty" value="${it.qty||''}" style="flex:1;min-width:90px" oninput="recalcItemsTotalFor('${containerId}')">
+    <input type="number" placeholder="السعر التقديري للوحدة" min="0" step="0.01" class="md-item-price" value="${it.price||''}" style="flex:1;min-width:120px" oninput="recalcItemsTotalFor('${containerId}')">
+    <button type="button" class="btn-outline" onclick="document.getElementById('${rid}').remove();recalcItemsTotalFor('${containerId}')">✕</button>`;
+  list.appendChild(row);
+}
+function recalcItemsTotalFor(containerId){
+  const items=collectItemRowsFrom(containerId);
   const total=items.reduce((s,it)=>s+(it.qty*it.price),0);
+  const el=document.getElementById(containerId+'_total');if(el)el.textContent=money(total);
+  return total;
+}
+function collectModuleDonationItems(){return collectItemRowsFrom('md_itemsList')}
+function recalcModuleDonationItemsTotal(){
+  const total=recalcItemsTotalFor('md_itemsList');
   const el=document.getElementById('md_itemsTotal');if(el)el.textContent=money(total);
   return total;
 }
+function addModuleDonationItemRow(){addItemRowTo('md_itemsList')}
 function resetModuleDonationForm(){
   const type=document.getElementById('md_entityType');if(type)type.value='individual';syncModuleDonationEntity();
   const dtype=document.getElementById('md_donationType');if(dtype)dtype.value='cash';
@@ -7397,11 +7404,13 @@ function exportDonorRecordExcel(id){
  const items=(d.history||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
  const rows=items.map(x=>[
    d.name||'',d.phone||'',fmtDate(x.date),
-   x.type==='donation'?'تبرع':'تواصل',x.action||'',x.amount||'',
+   x.type==='donation'?'تبرع':'تواصل',x.action||'',
+   x.type==='donation'?(x.donationType==='inkind'?'عيني':'نقدي'):'',x.amount||'',
+   x.type==='donation'&&Array.isArray(x.items)&&x.items.length?x.items.map(it=>`${it.name} (${it.qty}×${it.price})`).join('، '):'',
    x.project||'',x.intention||'',x.method||'',financeStatusLabel(x),
-   x.location||'',x.by||'',x.notes||''
+   x.by||'',x.notes||''
  ]);
- const headers=['اسم المتبرع','رقم الهاتف','التاريخ','نوع الحركة','الإجراء','قيمة التبرع','المشروع','النية','قناة التبرع','الحالة المالية','مكان الحركة','بواسطة','ملاحظات'];
+ const headers=['اسم المتبرع','رقم الهاتف','التاريخ','نوع الحركة','الإجراء','نوع التبرع','قيمة التبرع','الأصناف (للتبرع العيني)','المشروع','النية','قناة التبرع','الحالة المالية','بواسطة','ملاحظات'];
  const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
  ws['!cols']=headers.map(()=>({wch:20}));
  XLSX.utils.book_append_sheet(wb,ws,'سجل المتبرع');
@@ -7416,14 +7425,25 @@ function editDonation(id,hid){
   refreshProjectsDatalist();
   openModal(`<h3>تعديل التبرع — ${escapeHtml(d.name)}</h3><div class="grid2">
   <div class="field"><label>التاريخ</label><input id="ed_date" type="date" max="2050-12-31" value="${escapeHtml(entry.date||todayStr())}"></div>
-  <div class="field"><label>قيمة التبرع</label><input id="ed_amount" type="number" min="0" step="0.01" value="${escapeHtml(entry.amount||'')}"></div>
+  <div class="field"><label>نوع التبرع</label><div>${entry.donationType==='inkind'?'<span class="badge gold">تبرع عيني</span>':'<span class="badge green">تبرع نقدي</span>'}</div></div>
+  <div class="field" id="ed_amountField" ${entry.donationType==='inkind'?'style="display:none"':''}><label>قيمة التبرع</label><input id="ed_amount" type="number" min="0" step="0.01" value="${escapeHtml(entry.amount||'')}"></div>
   <div class="field"><label>اسم المتبرع</label><input value="${escapeHtml(d.name)}" readonly></div><div class="field"><label>رقم التليفون</label><input value="${escapeHtml(d.phone||'—')}" readonly></div>
   <div class="field"><label>اسم المشروع</label><select id="ed_project" onchange="syncEditDonationIntention()">${donationProjectOptions(entry.project||'')}</select></div><div class="field"><label>النية</label><select id="ed_intention">${donationIntentionOptions(entry.intention||projectIntention(entry.project||''))}</select></div>
   <div class="field"><label>قناة/طريقة التبرع</label><select id="ed_method">${channels.map(x=>`<option ${normName(x)===normName(entry.method||'')?'selected':''}>${escapeHtml(x)}</option>`).join('')}</select></div>
   <div class="field"><label>حالة الحركة <span style="color:var(--red)">*</span></label><select id="ed_movementStatus"><option value="">— اختر حالة الحركة —</option>${['ناجحة','مرفوضة','قيد التنفيذ','اخرى'].map(x=>`<option value="${x}" ${normalizeMovementStatus(entry.movementStatus)===x?'selected':''}>${x}</option>`).join('')}</select></div></div>
+  ${entry.donationType==='inkind'?`<div id="ed_itemsSection" style="margin-top:14px;border:1px solid var(--border,#ddd);border-radius:10px;padding:12px">
+    <b style="display:block;margin-bottom:8px">أصناف التبرع العيني</b>
+    <div id="ed_itemsList"></div>
+    <button type="button" class="btn-outline" onclick="addItemRowTo('ed_itemsList')" style="margin-top:8px">+ إضافة صنف</button>
+    <div style="margin-top:10px;font-weight:bold">إجمالي القيمة التقديرية: <span id="ed_itemsList_total">${money(entry.amount)}</span></div>
+  </div>`:''}
   <div class="field"><label>صورة التبرع / الإيصال</label><input id="ed_attachment" type="file" accept="image/*">${entry.attachmentData?`${attachmentMarkup(entry)}<label style="display:flex;align-items:center;gap:7px;margin-top:7px"><input id="ed_remove_attachment" type="checkbox" style="width:auto"> حذف الصورة الحالية</label>`:'<div class="attachment-note">لا توجد صورة مرفقة حاليًا.</div>'}<div class="attachment-note">اختياري — اختيار صورة جديدة يستبدل الصورة الحالية.</div></div>
   <div class="field"><label>ملاحظات</label><textarea id="ed_notes">${escapeHtml(entry.notes||'')}</textarea></div><div class="small-note">${isFinance(currentUser)?'يمكن للإدارة المالية تعديل أو حذف حركة التبرع طالما لم تُعتمد ماليًا بعد؛ بعد اعتمادها لا يمكن تعديلها أو حذفها إطلاقًا.':'ملحوظة: يمكنك تعديل أو حذف هذه الحركة طالما لم تعتمدها الإدارة المالية ماليًا بعد. بمجرد اعتماد الإدارة المالية لها، لن يكون بإمكانك أنت أو مدير النظام تعديلها أو حذفها بعد ذلك إلا من خلال الإدارة المالية.'}</div>
   <div class="modal-actions"><button class="btn-primary" onclick="saveEditedDonation('${id}','${hid}')">حفظ التعديل</button><button class="btn-outline" onclick="closeModal();openRecord('${id}')">إلغاء</button></div>`);
+  if(entry.donationType==='inkind'){
+    (Array.isArray(entry.items)&&entry.items.length?entry.items:[{}]).forEach(it=>addItemRowTo('ed_itemsList',it));
+    recalcItemsTotalFor('ed_itemsList');
+  }
 }
 function syncEditDonationIntention(){const project=document.getElementById('ed_project')?.value||'',sel=document.getElementById('ed_intention');if(!sel)return;const p=projects.find(x=>normName(x.name)===normName(project));if(p&&p.intention)sel.value=p.intention;}
 async function saveEditedDonation(id,hid){
@@ -7439,9 +7459,18 @@ async function saveEditedDonation(id,hid){
     if(!canEditDeleteDonationEntry(freshEntry,'edit')){alert('تعذر حفظ التعديل: تم اعتماد هذه الحركة ماليًا للتو من الإدارة المالية. تم تحديث بياناتك تلقائيًا ولم يعد بالإمكان تعديلها.');closeModal();render();return}
     d=freshD;entry=freshEntry;
   }
-  const amount=document.getElementById('ed_amount').value,project=document.getElementById('ed_project').value.trim(),intention=document.getElementById('ed_intention').value.trim();if(!amount){alert('يرجى إدخال قيمة التبرع.');return}if(!project){alert('يرجى اختيار المشروع.');return}if(!intention){alert('يرجى اختيار النية.');return}if(!projects.some(p=>normName(p.name)===normName(project))){alert('المشروع المختار غير مكود في النظام.');return}
+  let amount=document.getElementById('ed_amount').value;const project=document.getElementById('ed_project').value.trim(),intention=document.getElementById('ed_intention').value.trim();
+  let items=entry.items||[];
+  if(entry.donationType==='inkind'){
+    items=collectItemRowsFrom('ed_itemsList');
+    if(!items.length||items.some(it=>!it.name||!(it.qty>0)||!(it.price>0))){alert('التبرع العيني يتطلب كتابة كل الأصناف بالكامل (الاسم، الكمية، والسعر التقديري) لكل صنف.');return}
+    amount=items.reduce((s,it)=>s+(it.qty*it.price),0);
+  }else{
+    if(!amount){alert('يرجى إدخال قيمة التبرع.');return}
+  }
+  if(!project){alert('يرجى اختيار المشروع.');return}if(!intention){alert('يرجى اختيار النية.');return}if(!projects.some(p=>normName(p.name)===normName(project))){alert('المشروع المختار غير مكود في النظام.');return}
   try{const file=document.getElementById('ed_attachment')?.files?.[0];if(file)entry.attachmentData=await compressDonationImage(file)}catch(e){alert(e.message||'تعذر تجهيز الصورة المرفقة.');return}if(document.getElementById('ed_remove_attachment')?.checked)entry.attachmentData='';
-  const rawMovementStatus=document.getElementById('ed_movementStatus')?.value||'';if(!rawMovementStatus){alert('يرجى اختيار حالة الحركة قبل حفظ التعديل.');return}const movementStatus=normalizeMovementStatus(rawMovementStatus);entry.status='confirmed';entry.date=document.getElementById('ed_date').value||todayStr();entry.amount=amount;entry.project=project;entry.intention=intention;entry.location=(document.getElementById('ed_location')?.value||'').trim();entry.method=document.getElementById('ed_method').value;entry.movementStatus=movementStatus;entry.financeStatus=movementStatus==='ناجحة'?'pending':'approved';entry.notes=document.getElementById('ed_notes').value.trim();if(isFinance(currentUser)){entry.financeEditedBy=currentUser.fullName;entry.financeEditedAt=new Date().toISOString()}else{entry.lastEditedBy=currentUser.fullName;entry.lastEditedAt=new Date().toISOString()}if(project)ensureProject(project);persist();closeModal();render();openRecord(id);
+  const rawMovementStatus=document.getElementById('ed_movementStatus')?.value||'';if(!rawMovementStatus){alert('يرجى اختيار حالة الحركة قبل حفظ التعديل.');return}const movementStatus=normalizeMovementStatus(rawMovementStatus);entry.status='confirmed';entry.date=document.getElementById('ed_date').value||todayStr();entry.amount=amount;if(entry.donationType==='inkind')entry.items=items;entry.project=project;entry.intention=intention;entry.location=(document.getElementById('ed_location')?.value||'').trim();entry.method=document.getElementById('ed_method').value;entry.movementStatus=movementStatus;entry.financeStatus=movementStatus==='ناجحة'?'pending':'approved';entry.notes=document.getElementById('ed_notes').value.trim();if(isFinance(currentUser)){entry.financeEditedBy=currentUser.fullName;entry.financeEditedAt=new Date().toISOString()}else{entry.lastEditedBy=currentUser.fullName;entry.lastEditedAt=new Date().toISOString()}if(project)ensureProject(project);persist();closeModal();render();openRecord(id);
 }
 
 /* ---------- edit/delete permissions ----------
@@ -7693,7 +7722,8 @@ function openFinanceDetail(donorId,hid){
  <div class="meta" style="margin-bottom:10px">${statusBadge}</div>
  <div class="grid2">
   <div class="field"><label>التاريخ</label><div>${fmtDate(entry.date)}</div></div>
-  <div class="field"><label>قيمة التبرع</label><div><b>${money(entry.amount)}</b></div></div>
+  <div class="field"><label>نوع التبرع</label><div>${entry.donationType==='inkind'?'<span class="badge gold">تبرع عيني</span>':'<span class="badge green">تبرع نقدي</span>'}</div></div>
+  <div class="field"><label>${entry.donationType==='inkind'?'إجمالي القيمة التقديرية':'قيمة التبرع'}</label><div><b>${money(entry.amount)}</b></div></div>
   <div class="field"><label>اسم المتبرع</label><div>${escapeHtml(d.name)}</div></div>
   <div class="field"><label>رقم التليفون</label><div>${escapeHtml(d.phone||'—')}</div></div>
   <div class="field"><label>المشروع</label><div>${escapeHtml(entry.project||'—')}</div></div>
@@ -7704,6 +7734,7 @@ function openFinanceDetail(donorId,hid){
   ${status==='approved'?`<div class="field"><label>اعتماد ماليًا بواسطة</label><div>${escapeHtml(entry.financeApprovedBy||'—')} — ${fmtTime(entry.financeApprovedAt||'')}</div></div>`:''}
   ${status==='rejected'?`<div class="field"><label>رفض ماليًا بواسطة</label><div>${escapeHtml(entry.financeRejectedBy||'—')} — ${fmtTime(entry.financeRejectedAt||'')}</div></div>`:''}
  </div>
+ ${entry.donationType==='inkind'&&Array.isArray(entry.items)&&entry.items.length?`<div class="field"><label>أصناف التبرع العيني</label><div class="donation-record-table-wrap"><table class="donation-record-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر التقديري للوحدة</th><th>الإجمالي</th></tr></thead><tbody>${entry.items.map(it=>`<tr><td>${escapeHtml(it.name)}</td><td>${it.qty}</td><td>${money(it.price)}</td><td>${money(it.qty*it.price)}</td></tr>`).join('')}</tbody></table></div></div>`:''}
  ${entry.notes?`<div class="field"><label>ملاحظات</label><div>${escapeHtml(entry.notes)}</div></div>`:''}
  <div class="field"><label>صورة التبرع / الإيصال</label>${entry.attachmentData?`<div style="margin-top:6px"><a href="${escapeHtml(entry.attachmentData)}" target="_blank" rel="noopener"><img src="${escapeHtml(entry.attachmentData)}" alt="صورة التبرع" style="max-width:100%;max-height:360px;border-radius:10px;border:1px solid #D7EEE6;display:block;object-fit:contain"></a></div>`:'<div class="attachment-note">لا توجد صورة مرفقة.</div>'}</div>
  <div class="modal-actions" style="flex-wrap:wrap">
@@ -7751,7 +7782,7 @@ function renderFinanceReview(){
   return `<div class="card" style="border-inline-start-color:${r.financeStatus==='approved'?'var(--green)':r.financeStatus==='rejected'?'var(--red)':'var(--amber)'}">
   ${selectable?`<div style="display:flex;align-items:flex-start;padding-top:3px"><input type="checkbox" class="finance-select-cb" data-key="${escapeHtml(key)}" ${financeSelected.has(key)?'checked':''} onclick="event.stopPropagation()" onchange="toggleFinanceSelect(this)"></div>`:''}
   <div class="info" onclick="openFinanceDetail('${r.donorId}','${r.hid}')" title="اضغط لعرض تفاصيل الحركة">
-   <div class="name">${escapeHtml(r.donorName)} ${r.financeStatus==='approved'?'<span class="badge green">معتمد ماليًا ✓</span>':r.financeStatus==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد المالي</span>'}</div>
+   <div class="name">${escapeHtml(r.donorName)} ${r.donationType==='inkind'?'<span class="badge gold">عيني</span>':''} ${r.financeStatus==='approved'?'<span class="badge green">معتمد ماليًا ✓</span>':r.financeStatus==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد المالي</span>'}</div>
    <div class="meta">${fmtDate(r.date)} · <b>${money(r.amount)}</b>${r.project?` · مشروع: ${escapeHtml(r.project)}`:''}${r.method?` · ${escapeHtml(r.method)}`:''}</div>
    <div class="small-note" style="margin-top:4px">بواسطة: ${escapeHtml(r.by||'—')}${r.financeStatus==='approved'?` · اعتماد: ${escapeHtml(r.financeApprovedBy||'')} — ${fmtTime(r.financeApprovedAt||'')}`:''}${r.notes?` · ${escapeHtml(r.notes)}`:''}${r.attachmentData?' · 📎 يوجد صورة مرفقة':''}</div>
   </div>
@@ -8747,12 +8778,14 @@ function exportCompaniesExcel(){if(!isSuperAdmin(currentUser)){alert('تصدير
     openModal(`<h3>تفاصيل حركة تبرع شركة — ${escapeHtml(c.name)}</h3><div class="meta" style="margin-bottom:10px">${badge}</div>
       <div class="grid2"><div class="field"><label>الشركة</label><input value="${escapeHtml(c.name)}" readonly></div>
       <div class="field"><label>التاريخ</label><input value="${escapeHtml(fmtDate(entry.date||''))}" readonly></div>
-      <div class="field"><label>قيمة التبرع</label><input value="${escapeHtml(money(entry.amount))}" readonly></div>
+      <div class="field"><label>نوع التبرع</label><input value="${entry.donationType==='inkind'?'تبرع عيني':'تبرع نقدي'}" readonly></div>
+      <div class="field"><label>${entry.donationType==='inkind'?'إجمالي القيمة التقديرية':'قيمة التبرع'}</label><input value="${escapeHtml(money(entry.amount))}" readonly></div>
       <div class="field"><label>المشروع</label><input value="${escapeHtml(entry.project||'—')}" readonly></div>
       <div class="field"><label>النية</label><input value="${escapeHtml(entry.intention||'—')}" readonly></div>
       <div class="field"><label>قناة التبرع</label><input value="${escapeHtml(entry.method||'—')}" readonly></div>
       
       <div class="field"><label>حالة الحركة</label><input value="${escapeHtml(movementStatusLabel(entry.movementStatus))}" readonly></div></div>
+      ${entry.donationType==='inkind'&&Array.isArray(entry.items)&&entry.items.length?`<div class="field"><label>أصناف التبرع العيني</label><div class="donation-record-table-wrap"><table class="donation-record-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر التقديري للوحدة</th><th>الإجمالي</th></tr></thead><tbody>${entry.items.map(it=>`<tr><td>${escapeHtml(it.name)}</td><td>${it.qty}</td><td>${money(it.price)}</td><td>${money(it.qty*it.price)}</td></tr>`).join('')}</tbody></table></div></div>`:''}
       ${entry.notes?`<div class="manager-box"><b>ملاحظات:</b> ${escapeHtml(entry.notes)}</div>`:''}
       <div class="modal-actions">${canAct&&status!=='approved'&&status!=='rejected'?`<button class="btn-primary" onclick="approveFinanceDonation('${escapeHtml(donorId)}','${escapeHtml(hid)}')">✅ اعتماد مالي</button><button class="btn-danger" onclick="rejectFinanceDonation('${escapeHtml(donorId)}','${escapeHtml(hid)}')">✖️ رفض ماليًا</button>`:''}<button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`);
   };
@@ -9457,7 +9490,7 @@ document.addEventListener('DOMContentLoaded',function(){
  window.editSettingItem=editItem;
  function rows(){return typeof filteredModuleDonationRows==='function'?filteredModuleDonationRows():[]}
  window.renderModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser))return;refreshModuleDonationEmployeeFilter();const rs=rows();const total=rs.reduce((s,r)=>s+(Number(String(r.amount||0).replace(/,/g,''))||0),0);document.getElementById('moduleDonationStats').innerHTML=`<div class="stat gold"><div class="num">${total.toLocaleString('ar-EG')}</div><div class="lbl">إجمالي التبرعات (جنيه)</div></div><div class="stat"><div class="num">${rs.length}</div><div class="lbl">عدد الحركات</div></div><div class="stat"><div class="num">${new Set(rs.map(r=>normName(r.donor))).size}</div><div class="lbl">عدد المتبرعين والجهات</div></div>`;const box=document.getElementById('moduleDonationRecords');if(!rs.length){box.innerHTML='<div class="empty">لا توجد حركات تبرع مطابقة للفلاتر الحالية.</div>';return}box.innerHTML=`<table class="donation-record-table"><thead><tr><th>المتبرع / الجهة</th><th>تاريخ</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>مكان</th><th>قناة</th><th>موظف مسؤول</th><th>حالة الحركة</th><th>الاعتماد المالي</th></tr></thead><tbody>${rs.map(r=>{const fs=normalizeFinanceStatus(r.financeStatus);const badge=fs==='approved'?'<span class="badge green">معتمد ماليًا</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>';const id=r.entityType==='company'?r.companyId:r.donorId;return `<tr data-entity="${esc(r.entityType||'individual')}" data-id="${esc(id)}" data-hid="${esc(r.hid)}"><td><b>${esc(r.donor||'—')}</b><br><span class="small-note">${esc(r.entityLabel||'فرد')}</span></td><td>${fmtDate(r.date)}</td><td><b>${money(r.amount)}</b></td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${esc(r.location||'—')}</td><td>${esc(r.method||'—')}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td><td><span class="badge">${esc(movementStatusLabel(r.movementStatus))}</span></td><td>${badge}</td></tr>`}).join('')}</tbody></table>`;box.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=function(){openUnifiedDonationDetail(this.dataset.entity,this.dataset.id,this.dataset.hid)})};
- window.exportModuleDonationExcel=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية التصدير.');return}const rs=rows(),out=[['المتبرع / الجهة','تاريخ','قيمة','مشروع','نية','مكان','قناة','موظف مسؤول','حالة الحركة','الاعتماد المالي']];rs.forEach(r=>out.push([r.donor||'',r.date||'',r.amount||'',r.project||'',r.intention||'',r.location||'',r.method||'',r.responsibleEmployeeName||r.by||'',movementStatusLabel(r.movementStatus),normalizeFinanceStatus(r.financeStatus)==='approved'?'معتمد ماليًا':normalizeFinanceStatus(r.financeStatus)==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد']));const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:24},{wch:14},{wch:14},{wch:22},{wch:18},{wch:18},{wch:18},{wch:22},{wch:18},{wch:22}];XLSX.utils.book_append_sheet(wb,ws,'سجلات التبرعات');XLSX.writeFile(wb,'سجلات_التبرعات_تفصيلي.xlsx')};
+ window.exportModuleDonationExcel=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية التصدير.');return}const rs=rows(),out=[['المتبرع / الجهة','تاريخ','نوع التبرع','قيمة','الأصناف (للتبرع العيني)','مشروع','نية','قناة','موظف مسؤول','حالة الحركة','الاعتماد المالي']];rs.forEach(r=>out.push([r.donor||'',r.date||'',r.donationType==='inkind'?'عيني':'نقدي',r.amount||'',(Array.isArray(r.items)&&r.items.length)?r.items.map(it=>`${it.name} (${it.qty}×${it.price})`).join('، '):'',r.project||'',r.intention||'',r.method||'',r.responsibleEmployeeName||r.by||'',movementStatusLabel(r.movementStatus),normalizeFinanceStatus(r.financeStatus)==='approved'?'معتمد ماليًا':normalizeFinanceStatus(r.financeStatus)==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد']));const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(out);ws['!cols']=[{wch:24},{wch:14},{wch:12},{wch:14},{wch:40},{wch:22},{wch:18},{wch:18},{wch:22},{wch:18},{wch:22}];XLSX.utils.book_append_sheet(wb,ws,'سجلات التبرعات');XLSX.writeFile(wb,'سجلات_التبرعات_تفصيلي.xlsx')};
  window.printModuleDonationRecords=function(){if(!currentUser||!canModule('donationModule','view',currentUser)){alert('ليس لديك صلاحية الطباعة.');return}const rs=rows(),html=rs.map(r=>`<tr><td>${esc(r.donor||'—')}</td><td>${fmtDate(r.date)}</td><td>${money(r.amount)}</td><td>${esc(r.project||'—')}</td><td>${esc(r.intention||'—')}</td><td>${esc(r.location||'—')}</td><td>${esc(r.method||'—')}</td><td>${esc(r.responsibleEmployeeName||r.by||'—')}</td><td>${esc(movementStatusLabel(r.movementStatus))}</td><td>${esc(normalizeFinanceStatus(r.financeStatus)==='approved'?'معتمد ماليًا':normalizeFinanceStatus(r.financeStatus)==='rejected'?'مرفوض ماليًا':'بانتظار الاعتماد')}</td></tr>`).join('');const w=window.open('','_blank','width=1500,height=800');if(!w){alert('يرجى السماح بالنوافذ المنبثقة للطباعة.');return}w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>سجلات التبرعات</title><style>body{font-family:Tahoma,Arial;padding:24px;color:#17302E}h2{color:#0B6B5B;text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #D8E9E2;padding:9px;text-align:right}th{background:#F4FBF8;color:#0B6B5B}</style></head><body><h2>سجلات التبرعات</h2><table><thead><tr><th>المتبرع / الجهة</th><th>تاريخ</th><th>قيمة</th><th>مشروع</th><th>نية</th><th>مكان</th><th>قناة</th><th>موظف مسؤول</th><th>حالة الحركة</th><th>الاعتماد المالي</th></tr></thead><tbody>${html}</tbody></table></body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),250)};
 })();
 </script>
