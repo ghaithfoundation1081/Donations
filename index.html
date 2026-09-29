@@ -2036,6 +2036,13 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
       <input id="syncGasUrlInput" type="url" dir="ltr" placeholder="https://script.google.com/macros/s/XXXX/exec" autocomplete="off" oncopy="return false" oncut="return false" oncontextmenu="return false">
       <p class="small-note" id="syncGasUrlHiddenNote" style="display:none">الرابط مخفي لأسباب أمنية، ولا يظهر إلا للمدير الرئيسي أو من لديه صلاحية التعديل على هذه الشاشة.</p>
     </div>
+    <div class="field" id="syncGithubSection" style="margin-top:10px">
+      <label>رابط ملف GitHub لتحديث رابط المزامنة تلقائيًا</label>
+      <input id="syncGithubSrcInput" type="url" dir="ltr" placeholder="https://raw.githubusercontent.com/USER/REPO/main/gas-url.txt" autocomplete="off">
+      <p class="small-note">ضع رابط الملف الذي يحتوي رابط /exec الحالي (نص أو JSON أو حتى ملف النظام نفسه). يفحصه النظام عند الفتح وكل 10 دقائق ويحدّث الرابط تلقائيًا على كل جهاز.</p>
+      <p class="small-note" id="syncGithubStatus"></p>
+      <button type="button" class="btn-outline btn-small" onclick="saveGithubSrc()">حفظ وتحديث الآن</button>
+    </div>
     <div style="display:flex;gap:9px;flex-wrap:wrap">
       <button type="button" class="btn-primary btn-small" id="syncSaveUrlBtn" onclick="saveSyncGasUrl()">حفظ الرابط</button>
       <button type="button" class="btn-outline btn-small" id="syncTestBtn" onclick="testSyncConnection()">اختبار الاتصال</button>
@@ -2090,7 +2097,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxaFYn40L9igAhAJB_dDuPYRStVcVVk945XFFvgiGCwqoUCVupnPwNOOdjbEGYUh2O_dg/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyI1qG4ajIrL-tWv1icmgPQuMQz0hVmwQh0oV0Mk9s1-qD02lQmS6aTu2tYNyFcZ3GlkA/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2616,7 +2623,7 @@ function getSheet(name) {
 function readAll() {
   var sh = getSheet(SHEET_DATA);
   var lastRow = sh.getLastRow();
-  var empty = { users: [], donors: [], companies: [], projects: [], channels: [], intentions: [], managerCategories: [], locations: [], companyConfig: null, catalogTombstones:{projects:{},channels:{}} };
+  var empty = { users: [], donors: [], companies: [], projects: [], channels: [], intentions: [], managerCategories: [], locations: [], companyConfig: null, channelCodes: {}, intentionCodes: {}, catalogTombstones:{projects:{},channels:{}} };
   if (lastRow < 1) {
     var mirrored = readMirrorSheets();
     return mirrored || empty;
@@ -2835,6 +2842,68 @@ function mergeSimpleArrayForConflict_(remoteList,incomingList,deletedValues){
  var deleted={};(Array.isArray(deletedValues)?deletedValues:[]).forEach(function(x){deleted[String(x).trim().toLowerCase()]=true});
  var seen={},out=[];(Array.isArray(remoteList)?remoteList:[]).concat(Array.isArray(incomingList)?incomingList:[]).forEach(function(x){var k=String(x).trim().toLowerCase();if(!k||deleted[k]||seen[k])return;seen[k]=true;out.push(x)});return out;
 }
+function normKey_(s) {
+  return String(s == null ? '' : s).replace(/^\\s+|\\s+$/g, '').replace(/\\s+/g, ' ').toLowerCase()
+    .replace(/[\\u064B-\\u065F\\u0670\\u0640]/g, '')
+    .replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+    .replace(/ؤ/g, 'و').replace(/ئ/g, 'ي');
+}
+// دمج خرائط الأكواد (اسم موحّد -> كود): كود الشيت المحفوظ له الأولوية، والأكواد الجديدة تُضاف دون تكرار،
+// وتُحذف أكواد العناصر التي لم تعد موجودة في القائمة.
+function mergeCodeMap_(oldMap, incomingMap, list) {
+  var present = {};
+  (Array.isArray(list) ? list : []).forEach(function(x){ var k = normKey_(x); if (k) present[k] = true; });
+  var out = {}, used = {};
+  function take(map) {
+    if (!map || typeof map !== 'object') return;
+    Object.keys(map).forEach(function(k){
+      var c = String(map[k] == null ? '' : map[k]).trim().toUpperCase();
+      if (!k || !c || !present[k] || out[k] || used[c]) return;
+      out[k] = c; used[c] = true;
+    });
+  }
+  take(oldMap); take(incomingMap);
+  return out;
+}
+function codeFor_(map, name) {
+  var v = map && map[normKey_(name)];
+  return v ? String(v) : '';
+}
+function readMirrorCodeMap_(name) {
+  var map = {};
+  try {
+    var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return map;
+    sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(function(r){
+      var c = String(r[0] || '').trim().toUpperCase(), n = normKey_(r[1]);
+      if (c && n) map[n] = c;
+    });
+  } catch (e) {}
+  return map;
+}
+function buildCodesRows_(data) {
+  var rows = [];
+  (data.projects || []).forEach(function(p){ if (p) rows.push(['مشروع', p.code || '', p.name || '']); });
+  (data.channels || []).forEach(function(x){ rows.push(['قناة تبرع', codeFor_(data.channelCodes, x), x || '']); });
+  (data.intentions || []).forEach(function(x){ rows.push(['نية', codeFor_(data.intentionCodes, x), x || '']); });
+  var cfg = data.companyConfig || {};
+  (cfg.departments || []).forEach(function(d){ if (d) rows.push(['إدارة', d.code || '', d.name || '']); });
+  [['1','ناجحة'],['2','مرفوضة'],['3','قيد التنفيذ'],['4','اخرى']].forEach(function(x){ rows.push(['حالة الحركة', x[0], x[1]]); });
+  return rows;
+}
+function buildCompanyConfigRows_(cfg) {
+  var rows = [];
+  cfg = cfg || {};
+  Object.keys(cfg).forEach(function(key){
+    var v = cfg[key];
+    if (!Array.isArray(v)) return;
+    v.forEach(function(item){
+      if (item && typeof item === 'object') rows.push([key, item.name || item.label || JSON.stringify(item), item.code || '']);
+      else rows.push([key, item == null ? '' : String(item), '']);
+    });
+  });
+  return rows;
+}
 function mergeServerSnapshot_(old, incoming) {
   old = normalizeServerCatalog_(old || {});
   incoming = normalizeServerCatalog_(incoming || {});
@@ -2870,7 +2939,10 @@ function mergeServerSnapshot_(old, incoming) {
     donationResetVersion: incoming.donationResetVersion || old.donationResetVersion || '',
     catalogTombstones:tombs
   };
-  return applyCatalogTombstones_(normalizeServerCatalog_(result),tombs,recreated);
+  var finalResult = applyCatalogTombstones_(normalizeServerCatalog_(result),tombs,recreated);
+  finalResult.channelCodes = mergeCodeMap_(old.channelCodes, incoming.channelCodes, finalResult.channels);
+  finalResult.intentionCodes = mergeCodeMap_(old.intentionCodes, incoming.intentionCodes, finalResult.intentions);
+  return finalResult;
 }
 function writeAll(payload) {
   payload = payload || {};
@@ -2886,6 +2958,8 @@ function writeAll(payload) {
     intentions: merged.intentions || [],
     managerCategories: merged.managerCategories || [],
     locations: merged.locations || [],
+    channelCodes: merged.channelCodes || {},
+    intentionCodes: merged.intentionCodes || {},
     companies: merged.companies || [],
     companyConfig: merged.companyConfig || null,
     catalogTombstones: merged.catalogTombstones || {projects:{},channels:{}},
@@ -2938,16 +3012,20 @@ function writeMirrorSheets(data) {
     return [c.name || '', c.phone || '', c.email || '', c.employeeId || '', (c.contacts || []).length, (c.history || []).length, donations, JSON.stringify(c)];
   }));
   var projectsList = data.projects || [];
-  writeMirrorSheet('المشاريع', ['اسم المشروع','النية','بيانات النظام الكاملة (JSON)'], projectsList.map(function(p){
-    return [p && p.name || '', p && p.intention || '', JSON.stringify(p)];
+  writeMirrorSheet('المشاريع', ['كود المشروع','اسم المشروع','النية','بيانات النظام الكاملة (JSON)'], projectsList.map(function(p){
+    return [p && p.code || '', p && p.name || '', p && p.intention || '', JSON.stringify(p)];
   }));
   var channelsList = data.channels || [];
-  writeMirrorSheet('قنوات التبرع', ['قناة التبرع','بيانات النظام الكاملة (JSON)'], channelsList.map(function(x){return [x || '', JSON.stringify(x)];}));
+  writeMirrorSheet('قنوات التبرع', ['كود القناة','قناة التبرع','بيانات النظام الكاملة (JSON)'], channelsList.map(function(x){return [codeFor_(data.channelCodes, x), x || '', JSON.stringify(x)];}));
   var intentionsList = data.intentions || [];
-  writeMirrorSheet('النيات', ['نوع النية','بيانات النظام الكاملة (JSON)'], intentionsList.map(function(x){return [x || '', JSON.stringify(x)];}));
+  writeMirrorSheet('النيات', ['كود النية','نوع النية','بيانات النظام الكاملة (JSON)'], intentionsList.map(function(x){return [codeFor_(data.intentionCodes, x), x || '', JSON.stringify(x)];}));
   var cats = data.managerCategories || [];
   writeMirrorSheet('فئات المديرين', ['الفئة','بيانات النظام الكاملة (JSON)'], cats.map(function(x){return [x || '', JSON.stringify(x)];}));
   writeMirrorSheet('إعدادات الشركات', ['الإعداد','بيانات النظام الكاملة (JSON)'], [['companyConfig', JSON.stringify(data.companyConfig || null)]]);
+  writeMirrorSheet('إعدادات الشركات (مفصلة)', ['الإعداد','القيمة','الكود'], buildCompanyConfigRows_(data.companyConfig));
+  writeMirrorSheet('الإدارات', ['كود الإدارة','اسم الإدارة'], ((data.companyConfig && data.companyConfig.departments) || []).map(function(d){ return [d && d.code || '', d && d.name || '']; }));
+  writeMirrorSheet('المواقع', ['الموقع'], (data.locations || []).map(function(x){ return [x || '']; }));
+  writeMirrorSheet('التكويدات', ['نوع التكويد','الكود','الاسم'], buildCodesRows_(data));
   writeMirrorSheet('الحركات', ['النوع','التاريخ','القيمة','الجهة','المشروع','النية','القناة','الموظف المسؤول','حالة الحركة','حالة الاعتماد المالي','ملاحظات','بيانات الحركة الكاملة (JSON)'], buildMovementRows(donorsList, companiesList));
 }
 function buildMovementRows(donorsList, companiesList) {
@@ -2980,15 +3058,16 @@ function readMirrorSheets() {
   var users = readMirrorJson('المستخدمون', 4);
   var donors = readMirrorJson('المتبرعون', 4);
   var companies = readMirrorJson('الشركات', 7);
-  var projects = readMirrorJson('المشاريع', 2);
-  var channels = readMirrorJson('قنوات التبرع', 1);
-  var intentions = readMirrorJson('النيات', 1);
+  var projects = readMirrorJson('المشاريع', 3);
+  var channels = readMirrorJson('قنوات التبرع', 2);
+  var intentions = readMirrorJson('النيات', 2);
   var managerCategories = readMirrorJson('فئات المديرين', 1);
   var cfgRows = readMirrorJson('إعدادات الشركات', 1);
   var hasAny = users.length || donors.length || companies.length || projects.length || channels.length || intentions.length || managerCategories.length || cfgRows.length;
   if (!hasAny) return null;
   return {
-    users: users, donors: donors, companies: companies, projects: projects, channels: channels, intentions: intentions, managerCategories: managerCategories, companyConfig: cfgRows.length ? cfgRows[0] : null
+    users: users, donors: donors, companies: companies, projects: projects, channels: channels, intentions: intentions, managerCategories: managerCategories, companyConfig: cfgRows.length ? cfgRows[0] : null,
+    channelCodes: readMirrorCodeMap_('قنوات التبرع'), intentionCodes: readMirrorCodeMap_('النيات')
   };
 }
 
@@ -4256,10 +4335,11 @@ async function syncPull(options){
     normalizeDonationWorkflow();
     projects=mergeProjectListsNoLoss_(Array.isArray(data.projects)?normalizeProjects(data.projects):[],projects);
      ensureProjectCodes();
+    __applyRemoteCodeMaps(data);
     channels=Array.isArray(data.channels)&&data.channels.length?data.channels:channels;
     channels=normalizeChannelsLocal(channels);
     intentions=[...new Set([...(Array.isArray(data.intentions)?data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).map(x=>x.trim()).filter(Boolean))];
-    ensureIntentionCodes();
+    ensureIntentionCodes();ensureChannelCodes();
     managerCategories=Array.isArray(data.managerCategories)&&data.managerCategories.length?data.managerCategories:managerCategories;
     ensureSuperAdmin();
 
@@ -4289,6 +4369,11 @@ async function syncPull(options){
     __lastPullSuccess=true;__lastPullError='';
     return changed;
   }catch(e){
+    /* فشل الاتصال قد يعني أن رابط النشر تغيّر: نفحص GitHub مرة واحدة ونعيد المحاولة إن تغيّر الرابط. */
+    if(!options.__ghRetry&&typeof refreshGasUrlFromGithub==='function'){
+      let changed=false;try{changed=await refreshGasUrlFromGithub({force:true,noPull:true})}catch(_){}
+      if(changed)return await syncPull({...options,__ghRetry:true});
+    }
     setConnStatus('off');
     __lastPullSuccess=false;__lastPullError=(e&&e.message)?e.message:'فشل الاتصال بجوجل شيت';
     return false;
@@ -4303,8 +4388,22 @@ let __pushQueued=false;
 let __localRevision=0;
 
 function __currentSyncState(){
+  /* أكواد القنوات والنيات كانت محفوظة محليًا فقط ولا تصل للشيت؛ تُرسل الآن مع باقي البيانات. */
+  try{ensureChannelCodes();ensureIntentionCodes()}catch(e){}
   return {users:USERS,donors,companies,projects,channels,intentions,managerCategories,locations,companyConfig,
+    channelCodes:loadCodeMap(CHCODEKEY),intentionCodes:loadCodeMap(INCODEKEY),
     donationResetVersion:DONATION_RESET_VERSION};
+}
+function __applyRemoteCodeMaps(data){
+  /* كود الشيت له الأولوية؛ الأكواد المحلية الجديدة تُبقى إن لم تتعارض، وما تعارض يُعاد توليده تلقائيًا. */
+  if(!data)return;
+  [[CHCODEKEY,data.channelCodes],[INCODEKEY,data.intentionCodes]].forEach(([key,remote])=>{
+    if(!remote||typeof remote!=='object')return;
+    const local=loadCodeMap(key),out={},used=new Set();
+    const take=map=>Object.keys(map).forEach(k=>{const c=String(map[k]==null?'':map[k]).trim().toUpperCase();if(k&&c&&!out[k]&&!used.has(c)){out[k]=c;used.add(c)}});
+    take(remote);take(local);
+    if(JSON.stringify(out)!==JSON.stringify(local))safeSet(localStorage,key,JSON.stringify(out));
+  });
 }
 function __safeClone(v){try{return JSON.parse(JSON.stringify(v))}catch(e){return v}}
 function __getBaseSnapshot(){
@@ -4455,7 +4554,8 @@ async function syncPushNow(options){
       projects=mergeProjectListsNoLoss_(Array.isArray(res.data.projects)?normalizeProjects(res.data.projects):[],projects);
       channels=Array.isArray(res.data.channels)&&res.data.channels.length?res.data.channels:channels;
       intentions=[...new Set([...(Array.isArray(res.data.intentions)?res.data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).map(x=>x.trim()).filter(Boolean))];
-      ensureProjectCodes();ensureIntentionCodes();
+      __applyRemoteCodeMaps(res.data);
+      ensureProjectCodes();ensureIntentionCodes();ensureChannelCodes();
       managerCategories=Array.isArray(res.data.managerCategories)?res.data.managerCategories:managerCategories;
       companyConfig=mergeCompanyConfigNoLoss_(res.data.companyConfig,companyConfig);
       safeSet(localStorage,UKEY,JSON.stringify(USERS));safeSet(localStorage,DKEY,JSON.stringify(donors));
@@ -8032,6 +8132,90 @@ function openChannelDetails(name){
  <div class="modal-actions"><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)
 }
 
+/* ---------- تحديث رابط المزامنة تلقائيًا من GitHub ----------
+   يقرأ النظام ملفًا نصيًا/JSON على GitHub (Raw) يحتوي رابط Apps Script (/exec) الحالي،
+   وإذا اختلف عن المحفوظ يحدّثه تلقائيًا على هذا الجهاز ثم يزامن. يعمل عند فتح النظام،
+   كل 10 دقائق، عند العودة للتبويب، وعند فشل الاتصال بالرابط الحالي. */
+const GITHUB_GAS_SOURCE_DEFAULT = ''; // ضع هنا رابط الملف (Raw) على GitHub ليعمل على كل الأجهزة دون إعداد يدوي.
+const GH_SRC_KEY='donors_gas_github_src_v1', GH_OFF_KEY='donors_gas_github_disabled_v1';
+let __ghLastCheck=0,__ghInFlight=null,__ghLastStatus='';
+function __ghSource(){
+  let v=(safeGet(localStorage,GH_SRC_KEY)||GITHUB_GAS_SOURCE_DEFAULT||'').trim();
+  return __ghNormalizeSource(v);
+}
+function __ghNormalizeSource(v){
+  v=String(v||'').trim(); if(!v)return '';
+  let u; try{u=new URL(v)}catch(e){return ''}
+  if(u.protocol!=='https:')return '';
+  const h=u.hostname.toLowerCase();
+  if(h==='github.com'){
+    const m=u.pathname.match(/^\/([^\/]+)\/([^\/]+)\/(?:blob|raw)\/(.+)$/);
+    if(!m)return '';
+    return 'https://raw.githubusercontent.com/'+m[1]+'/'+m[2]+'/'+m[3];
+  }
+  if(h==='raw.githubusercontent.com'||h==='gist.githubusercontent.com'||h.endsWith('.github.io'))return u.href;
+  return '';
+}
+function __extractGasUrl(text){
+  const idRe='[A-Za-z0-9_\\-]{20,}';
+  const full=new RegExp('https://script\\.google\\.com/macros/s/'+idRe+'/exec','ig');
+  text=String(text||'');
+  try{const j=JSON.parse(text);const v=j&&(j.gasUrl||j.gas_url||j.syncUrl||j.url||j.DEFAULT_GAS_URL);if(v){const m=String(v).match(new RegExp('https://script\\.google\\.com/macros/s/'+idRe+'/exec','i'));if(m)return m[0]}}catch(e){}
+  const named=text.match(new RegExp('(?:DEFAULT_GAS_URL|GAS_URL|gasUrl)\\s*[=:]\\s*[\'"]?\\s*(https://script\\.google\\.com/macros/s/'+idRe+'/exec)','i'));
+  if(named)return named[1];
+  const all=text.match(full);
+  return all&&all.length?all[0]:'';
+}
+async function refreshGasUrlFromGithub(options){
+  options=options||{};
+  if(safeGet(localStorage,GH_OFF_KEY)==='1'&&!options.force)return false;
+  const src=__ghSource(); if(!src){__ghLastStatus='';return false}
+  if(__ghInFlight)return __ghInFlight;
+  if(!options.force&&Date.now()-__ghLastCheck<60000)return false;
+  __ghInFlight=(async()=>{
+    try{
+      __ghLastCheck=Date.now();
+      const res=await fetch(src+(src.includes('?')?'&':'?')+'_='+Date.now(),{cache:'no-store'});
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      const url=__extractGasUrl(await res.text());
+      if(!url)throw new Error('لم يُعثر على رابط /exec داخل ملف GitHub.');
+      __ghLastStatus='آخر فحص: '+fmtTime(new Date().toISOString())+' — الرابط مطابق لما في GitHub';
+      if(url===GAS_URL)return false;
+      GAS_URL=url; safeSet(localStorage,GASKEY,GAS_URL);
+      __ghLastStatus='آخر فحص: '+fmtTime(new Date().toISOString())+' — تم تحديث الرابط من GitHub';
+      try{showSaveToast('تم تحديث رابط المزامنة من GitHub')}catch(e){}
+      if(document.getElementById('syncGasUrlInput')&&currentUser&&isSuperAdmin(currentUser)){try{document.getElementById('syncGasUrlInput').value=GAS_URL}catch(e){}}
+      if(!options.noPull&&currentUser){try{await syncPull({silent:true,preserveLocalIfRemoteEmpty:true})}catch(e){}}
+      try{updateSyncViewBadge(lastSyncAt?'on':'connecting')}catch(e){}
+      return true;
+    }catch(e){
+      __ghLastStatus='تعذر قراءة ملف GitHub: '+((e&&e.message)||e);
+      return false;
+    }finally{
+      __ghInFlight=null;
+      const st=document.getElementById('syncGithubStatus');if(st)st.textContent=__ghLastStatus;
+    }
+  })();
+  return __ghInFlight;
+}
+function saveGithubSrc(){
+  if(!canModule('syncData','edit',currentUser))return;
+  const input=document.getElementById('syncGithubSrcInput');
+  const raw=(input?.value||'').trim();
+  if(!raw){safeRemove(localStorage,GH_SRC_KEY);const st=document.getElementById('syncGithubStatus');if(st)st.textContent='تم إيقاف التحديث التلقائي من GitHub على هذا الجهاز.';return}
+  const norm=__ghNormalizeSource(raw);
+  if(!norm){alert('يرجى إدخال رابط GitHub صحيح (github.com/.../blob/... أو raw.githubusercontent.com/...).');return}
+  safeSet(localStorage,GH_SRC_KEY,norm);safeRemove(localStorage,GH_OFF_KEY);
+  if(input)input.value=norm;
+  refreshGasUrlFromGithub({force:true}).then(changed=>{
+    const st=document.getElementById('syncGithubStatus');if(st)st.textContent=__ghLastStatus;
+    if(changed)setView('syncData');
+  });
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshGasUrlFromGithub()});
+setInterval(()=>refreshGasUrlFromGithub({force:true}),10*60*1000);
+setTimeout(()=>refreshGasUrlFromGithub({force:true}),300);
+
 /* ---------- Google Sheets sync view ---------- */
 function renderSyncDataView(){
   const isSuper=isSuperAdmin(currentUser);
@@ -8053,6 +8237,8 @@ function renderSyncDataView(){
   document.getElementById('syncTestBtn')?.classList.toggle('hidden',!canEdit);
   document.getElementById('syncNowBtn')?.classList.toggle('hidden',!canEdit);
   document.getElementById('syncDisconnectBtn')?.classList.toggle('hidden',!canEdit||!GAS_URL);
+  document.getElementById('syncGithubSection')?.classList.toggle('hidden',!canEdit);
+  if(canEdit){const gi=document.getElementById('syncGithubSrcInput');if(gi)gi.value=__ghSource();const gs=document.getElementById('syncGithubStatus');if(gs)gs.textContent=__ghLastStatus||(__ghSource()?'':'لم يتم تحديد رابط GitHub بعد.')}
   document.getElementById('syncTransferSection')?.classList.toggle('hidden',!canEdit);
   document.getElementById('syncUploadLocalBtn')?.classList.toggle('hidden',!canEdit);
   document.getElementById('syncDownloadRemoteBtn')?.classList.toggle('hidden',!canEdit);
@@ -8100,6 +8286,7 @@ function disconnectSyncGasUrl(){
   if(!confirm('سيتم حذف رابط Google Sheets المحفوظ من هذا الجهاز وفصل الربط. لن يتم حذف أي بيانات من النظام (الحسابات/المتبرعون/الحركات)، وسيستمر العمل محليًا فقط حتى تُدخل رابطًا جديدًا. هل تريد المتابعة؟'))return;
   GAS_URL='';
   safeRemove(localStorage,GASKEY);
+  safeSet(localStorage,GH_OFF_KEY,'1'); /* منع إعادة الربط التلقائي بعد فصل الشيت يدويًا */
   lastSyncAt='';
   safeRemove(localStorage,SYNCKEY);
   const input=document.getElementById('syncGasUrlInput');
