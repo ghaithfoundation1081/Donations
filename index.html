@@ -2097,7 +2097,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzUZDiPOOxcKpzMLg1F6LZzN32wWJSt3w5apxMLLcc9Z5ZkbbL7dYd0hDKMbryw8_cX6A/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwp1j_aMmOPlvapox3hPLFS7MJQRV6YTo-MDpyutE_AazVkDuDL6OU-JT-Qp-o4mnx3JQ/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -9963,8 +9963,10 @@ window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=
 
 
 <style>
-.sx-wrap{position:relative;margin-bottom:6px}
-.sx-input{width:100%;box-sizing:border-box}
+.sx-wrap{position:relative}
+.sx-input{width:100%;box-sizing:border-box;cursor:pointer;padding-left:30px!important;
+ background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23667' stroke-width='2'/%3E%3C/svg%3E");
+ background-repeat:no-repeat;background-position:left 10px center}
 .sx-list{position:absolute;right:0;left:0;top:100%;z-index:9999;background:#fff;border:1px solid #cfe3dc;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.12);max-height:190px;overflow:auto;display:none}
 .sx-list.open{display:block}
 .sx-item{padding:9px 12px;cursor:pointer;font-size:14px;text-align:right}
@@ -9972,7 +9974,7 @@ window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=
 .sx-empty{padding:9px 12px;color:#888;font-size:13px}
 </style>
 <script>
-/* بحث بجزء من الكلمة داخل خانتي: قناة أو طريقة التبرع + حالة الحركة */
+/* خانة واحدة: تعرض القيمة المختارة ويمكن الكتابة فيها للبحث بجزء من الكلمة (قناة أو طريقة التبرع + حالة الحركة) */
 (function(){
   var IDS=/^(md|dn|cd|ed)_(method|movementStatus)$/;
   function norm(x){return typeof normName==='function'?normName(x):String(x||'').trim().toLowerCase()}
@@ -9980,13 +9982,20 @@ window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=
     if(!sel||sel.dataset.sx)return; sel.dataset.sx='1';
     var wrap=document.createElement('div');wrap.className='sx-wrap';
     var inp=document.createElement('input');inp.type='text';inp.className='sx-input';inp.autocomplete='off';
-    inp.placeholder='🔍 اكتب جزءًا من الكلمة للبحث ثم اختر...';
     var list=document.createElement('div');list.className='sx-list';
     wrap.appendChild(inp);wrap.appendChild(list);
     sel.parentNode.insertBefore(wrap,sel);
-    var act=-1,items=[];
-    function build(){
-      var toks=norm(inp.value).split(' ').filter(Boolean);
+    sel.style.display='none';
+    var act=-1,items=[],typing=false;
+    function selText(){var o=sel.options[sel.selectedIndex];return(o&&o.value!=='')?o.textContent:''}
+    function ph(){var o=[].slice.call(sel.options).filter(function(x){return x.value===''})[0];return o?o.textContent:'اختر...'}
+    function sync(){
+      if(document.activeElement===inp&&typing)return;
+      var t=selText();if(inp.value!==t)inp.value=t;
+      var p=ph();if(inp.placeholder!==p)inp.placeholder=p;
+    }
+    function build(filter){
+      var toks=norm(filter).split(' ').filter(Boolean);
       items=[].slice.call(sel.options).filter(function(o){
         if(o.disabled||o.value==='')return false;
         var t=norm(o.textContent);return toks.every(function(k){return t.indexOf(k)>-1});
@@ -10001,25 +10010,30 @@ window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=
     function pick(o){
       sel.value=o.value;
       sel.dispatchEvent(new Event('change',{bubbles:true}));
-      inp.value='';list.classList.remove('open');
+      typing=false;list.classList.remove('open');sync();inp.blur();
     }
     function mark(){[].forEach.call(list.children,function(c,i){c.classList.toggle('act',i===act)})}
-    inp.addEventListener('input',function(){build();list.classList.add('open')});
-    inp.addEventListener('focus',function(){build();list.classList.add('open')});
-    inp.addEventListener('blur',function(){setTimeout(function(){list.classList.remove('open')},120)});
+    inp.addEventListener('focus',function(){typing=false;build('');list.classList.add('open');inp.select()});
+    inp.addEventListener('click',function(){if(!list.classList.contains('open')){build(typing?inp.value:'');list.classList.add('open')}});
+    inp.addEventListener('input',function(){typing=true;build(inp.value);list.classList.add('open')});
+    inp.addEventListener('blur',function(){setTimeout(function(){typing=false;list.classList.remove('open');sync()},120)});
     inp.addEventListener('keydown',function(ev){
       if(ev.key==='ArrowDown'&&items.length){act=(act+1)%items.length;mark();ev.preventDefault()}
       else if(ev.key==='ArrowUp'&&items.length){act=(act-1+items.length)%items.length;mark();ev.preventDefault()}
       else if(ev.key==='Enter'){ev.preventDefault();if(items[act])pick(items[act])}
-      else if(ev.key==='Escape'){list.classList.remove('open')}
+      else if(ev.key==='Escape'){typing=false;list.classList.remove('open');sync();inp.blur()}
     });
+    sel.addEventListener('change',sync);
+    sel._sxSync=sync;sync();
   }
-  function scan(root){
-    (root||document).querySelectorAll('select[id]').forEach(function(s){if(IDS.test(s.id))enhance(s)});
+  function scan(){
+    document.querySelectorAll('select[id]').forEach(function(s){if(IDS.test(s.id))enhance(s)});
+    document.querySelectorAll('select[data-sx]').forEach(function(s){if(s._sxSync)s._sxSync()});
   }
   function start(){
-    scan(document);
-    new MutationObserver(function(){scan(document)}).observe(document.body,{childList:true,subtree:true});
+    scan();
+    new MutationObserver(scan).observe(document.body,{childList:true,subtree:true});
+    setInterval(scan,400);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
