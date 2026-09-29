@@ -1587,6 +1587,17 @@ body{
 }
 </style>
 
+<style id="ssStyles">
+.ss-wrap{position:relative}
+.ss-wrap .ss-input{width:100%}
+.ss-list{display:none;position:absolute;top:100%;right:0;left:0;z-index:60;max-height:230px;overflow-y:auto;background:var(--card,#fff);border:1px solid var(--border,#d5dcd9);border-radius:8px;box-shadow:0 8px 22px rgba(0,0,0,.14);margin-top:2px}
+.ss-wrap.ss-open .ss-list{display:block}
+.ss-item{padding:8px 11px;cursor:pointer;font-size:14px}
+.ss-item.active,.ss-item:hover{background:rgba(14,122,99,.12)}
+.ss-empty{padding:9px 11px;color:var(--muted,#777);font-size:13px}
+.ss-item mark{background:rgba(212,165,32,.35);color:inherit;border-radius:3px;padding:0 1px}
+#projSearch{min-width:220px}
+</style>
 </head>
 <body>
 
@@ -1866,6 +1877,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
     <div class="daterange">
       <label>من</label><input type="date" id="projFrom" max="2050-12-31">
       <label>إلى</label><input type="date" id="projTo" max="2050-12-31">
+      <label>بحث</label><input type="search" id="projSearch" placeholder="ابحث باسم المشروع (جزء من الكلمة)" oninput="applyProjSearch()" autocomplete="off">
       <button class="btn-outline btn-small" onclick="applyProjFilter()">تطبيق</button>
       <button class="btn-outline btn-small" onclick="clearProjFilter()">مسح الفلتر</button>
     </div>
@@ -2078,7 +2090,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwIj-Ko8sUw62F2AmqILAnOpWoxcUKD8nvWQYhlw615vfor7uK-l4sDJ_p4P_KkXBs7yA/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxaFYn40L9igAhAJB_dDuPYRStVcVVk945XFFvgiGCwqoUCVupnPwNOOdjbEGYUh2O_dg/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -7097,12 +7109,95 @@ function refreshAllDonorNamesDatalist(){
   const names=[...new Set((donors||[]).map(d=>d&&d.name).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'ar'));
   dl.innerHTML=names.map(n=>`<option value="${escapeHtml(n)}"></option>`).join('');
 }
+
+/* ===== قوائم قابلة للبحث بجزء من الكلمة (اسم المشروع / النية في مديول تبرع جديد) ===== */
+function enhanceSearchableSelect(id,placeholder){
+  const sel=document.getElementById(id); if(!sel||sel.dataset.ssDone)return;
+  sel.dataset.ssDone='1';
+  const wrap=document.createElement('div'); wrap.className='ss-wrap';
+  const inp=document.createElement('input'); inp.type='text'; inp.className='ss-input'; inp.autocomplete='off'; inp.placeholder=placeholder||'اكتب للبحث...';
+  const list=document.createElement('div'); list.className='ss-list';
+  sel.parentNode.insertBefore(wrap,sel); wrap.appendChild(inp); wrap.appendChild(list); wrap.appendChild(sel);
+  sel.style.display='none'; sel.tabIndex=-1;
+  const vd=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value');
+  const sd=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'selectedIndex');
+  let typing=false, active=-1, shown=[];
+  const labelOf=()=>{const o=sel.options[sel.selectedIndex];return o&&o.value?o.textContent:''};
+  const syncDisplay=()=>{if(!typing)inp.value=labelOf()};
+  /* أي تغيير برمجي للقيمة (اختيار المشروع يحدد النية، مسح النموذج، إعادة تحميل الخيارات) ينعكس على الخانة */
+  Object.defineProperty(sel,'value',{configurable:true,get(){return vd.get.call(this)},set(v){vd.set.call(this,v);syncDisplay()}});
+  Object.defineProperty(sel,'selectedIndex',{configurable:true,get(){return sd.get.call(this)},set(v){sd.set.call(this,v);syncDisplay()}});
+  new MutationObserver(syncDisplay).observe(sel,{childList:true});
+  const matches=q=>{
+    const tokens=normName(q).split(' ').filter(Boolean);
+    return Array.from(sel.options).filter(o=>o.value&&tokens.every(t=>normName(o.textContent).includes(t)));
+  };
+  const hl=(text,q)=>{
+    const t=String(q||'').trim(); if(!t)return escapeHtml(text);
+    const i=text.toLowerCase().indexOf(t.toLowerCase());
+    if(i<0)return escapeHtml(text);
+    return escapeHtml(text.slice(0,i))+'<mark>'+escapeHtml(text.slice(i,i+t.length))+'</mark>'+escapeHtml(text.slice(i+t.length));
+  };
+  const render=q=>{
+    shown=matches(q); active=shown.length?0:-1;
+    list.innerHTML=shown.length?shown.map((o,i)=>`<div class="ss-item${i===0?' active':''}" data-i="${i}">${hl(o.textContent,q)}</div>`).join(''):'<div class="ss-empty">لا توجد نتائج مطابقة</div>';
+  };
+  const open=q=>{render(q);wrap.classList.add('ss-open')};
+  const close=()=>wrap.classList.remove('ss-open');
+  const choose=v=>{
+    typing=false; vd.set.call(sel,v); syncDisplay(); close();
+    sel.dispatchEvent(new Event('change',{bubbles:true}));
+  };
+  const setActive=i=>{
+    const items=list.querySelectorAll('.ss-item'); if(!items.length)return;
+    active=(i+items.length)%items.length;
+    items.forEach((el,k)=>el.classList.toggle('active',k===active));
+    items[active].scrollIntoView({block:'nearest'});
+  };
+  list.addEventListener('mousedown',e=>{e.preventDefault();const it=e.target.closest('.ss-item');if(it)choose(shown[Number(it.dataset.i)].value)});
+  inp.addEventListener('focus',()=>{typing=false;inp.select();open('')});
+  inp.addEventListener('input',()=>{typing=true;open(inp.value)});
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'){e.preventDefault();if(!wrap.classList.contains('ss-open'))open(typing?inp.value:'');else setActive(active+1)}
+    else if(e.key==='ArrowUp'){e.preventDefault();setActive(active-1)}
+    else if(e.key==='Enter'){e.preventDefault();if(wrap.classList.contains('ss-open')&&shown[active])choose(shown[active].value)}
+    else if(e.key==='Escape'){typing=false;syncDisplay();close()}
+  });
+  inp.addEventListener('blur',()=>{
+    if(typing){
+      const q=inp.value.trim();
+      if(!q){choose('');return}
+      const m=matches(q);
+      const exact=m.find(o=>normName(o.textContent)===normName(q));
+      if(exact){choose(exact.value);return}
+      if(m.length===1){choose(m[0].value);return}
+    }
+    typing=false; syncDisplay(); close();
+  });
+  syncDisplay();
+}
+function initDonationModuleSearchableFields(){
+  enhanceSearchableSelect('md_project','اكتب جزءًا من اسم المشروع للبحث...');
+  enhanceSearchableSelect('md_intention','اكتب جزءًا من النية للبحث...');
+}
+
+/* ===== المشاريع: البحث بجزء من الاسم ===== */
+let projSearch='';
+function applyProjSearch(){projSearch=(document.getElementById('projSearch')?.value||'');renderProjects()}
+function projectMatchesSearch(p){
+  const tokens=normName(projSearch).split(' ').filter(Boolean);
+  if(!tokens.length)return true;
+  const hay=normName([p.name,p.code,p.intention].filter(Boolean).join(' '));
+  return tokens.every(t=>hay.includes(t));
+}
+
 function renderDonationModule(){
   if(!currentUser)return;
   selectDonationModuleTab(donationModuleTab);
   const date=document.getElementById('md_date'); if(date&&!date.value)date.value=todayStr();
   refreshProjectsDatalist();
   refreshModuleDonationReferenceFields();
+  initDonationModuleSearchableFields();
   refreshAllDonorNamesDatalist();
   refreshModuleDonationCompanies();
   syncModuleDonationEntity();
@@ -7814,7 +7909,7 @@ function renderFinanceReview(){
 
 /* ---------- projects view (with date filter) ---------- */
 function applyProjFilter(){projFrom=document.getElementById('projFrom').value;projTo=document.getElementById('projTo').value;renderProjects()}
-function clearProjFilter(){document.getElementById('projFrom').value='';document.getElementById('projTo').value='';projFrom='';projTo='';renderProjects()}
+function clearProjFilter(){document.getElementById('projFrom').value='';document.getElementById('projTo').value='';const ps=document.getElementById('projSearch');if(ps)ps.value='';projFrom='';projTo='';projSearch='';renderProjects()}
 function intentionOptions(selected){
  return `<option value="">بدون تخصيص</option>`+intentions.map(x=>`<option ${normName(x)===normName(selected)?'selected':''}>${escapeHtml(x)}</option>`).join('');
 }
@@ -7839,7 +7934,7 @@ function editProject(name){
  openModal(`<h3>تعديل المشروع</h3>
  <div class="field"><label>اسم المشروع</label><input id="p_name" value="${escapeHtml(p.name)}"></div>
  <div class="field"><label>النية</label><select id="p_intention">${intentionOptions(p.intention)}</select></div>
- <div class="modal-actions"><button class="btn-primary" onclick="saveEditProject('${escapeHtml(name).replace(/'/g,"\\'")}')">حفظ</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
+ <div class="modal-actions"><button class="btn-primary" data-old="${escapeHtml(name)}" onclick="saveEditProject(this.dataset.old)">حفظ</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`)
 }
 function saveEditProject(oldName){
  if(!canModule('projects','edit',currentUser))return;
@@ -7870,9 +7965,9 @@ function projectContributions(name){
  return rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 }
 function projectAmountByStatus(rows){const amount=a=>a.reduce((s,r)=>s+(Number(String(r.amount||0).replace(/,/g,''))||0),0);return {approved:amount(rows.filter(r=>normalizeFinanceStatus(r.financeStatus)==='approved')),rejected:amount(rows.filter(r=>normalizeFinanceStatus(r.financeStatus)==='rejected'||normalizeMovementStatus(r.movementStatus)==='مرفوضة')),progress:amount(rows.filter(r=>normalizeMovementStatus(r.movementStatus)==='قيد التنفيذ')),total:amount(rows)}}
-function renderProjects(){refreshProjectsDatalist();ensureProjectCodes();if(!projects.length){document.getElementById('projectsList').innerHTML='<div class="empty">لا توجد مشاريع بعد. اضغط "إضافة مشروع" للبدء.</div>';return}document.getElementById('projectsList').innerHTML=projects.map(p=>{const v=projectAmountByStatus(projectContributions(p.name));return `<div class="project-card"><div style="flex:1;min-width:220px"><div class="name">${escapeHtml(p.name)} <span class="badge green">${escapeHtml(p.code||'')}</span></div></div><div style="display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px;flex:2"><div class="stat"><div class="num">${money(v.approved)}</div><div class="lbl">معتمد ماليًا</div></div><div class="stat red"><div class="num">${money(v.rejected)}</div><div class="lbl">مرفوض</div></div><div class="stat amber"><div class="num">${money(v.progress)}</div><div class="lbl">قيد التنفيذ</div></div><div class="stat gold"><div class="num">${money(v.total)}</div><div class="lbl">إجمالي</div></div></div><button class="btn-outline btn-small" onclick="openProjectDetails(${JSON.stringify(String(p.name))})">التفاصيل</button>${isSuperAdmin(currentUser)?`<button class="btn-outline btn-small" onclick="editProject(${JSON.stringify(String(p.name))})">تعديل</button><button class="btn-danger btn-small" onclick="deleteProject(${JSON.stringify(String(p.name))})">حذف</button>`:''}</div>`}).join('')}
+function renderProjects(){refreshProjectsDatalist();ensureProjectCodes();if(!projects.length){document.getElementById('projectsList').innerHTML='<div class="empty">لا توجد مشاريع بعد. اضغط "إضافة مشروع" للبدء.</div>';return}const shownProjects=projects.filter(projectMatchesSearch);if(!shownProjects.length){document.getElementById('projectsList').innerHTML='<div class="empty">لا توجد مشاريع مطابقة لنتيجة البحث.</div>';return}document.getElementById('projectsList').innerHTML=shownProjects.map(p=>{const v=projectAmountByStatus(projectContributions(p.name));return `<div class="project-card"><div style="flex:1;min-width:220px"><div class="name">${escapeHtml(p.name)} <span class="badge green">${escapeHtml(p.code||'')}</span></div></div><div style="display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px;flex:2"><div class="stat"><div class="num">${money(v.approved)}</div><div class="lbl">معتمد ماليًا</div></div><div class="stat red"><div class="num">${money(v.rejected)}</div><div class="lbl">مرفوض</div></div><div class="stat amber"><div class="num">${money(v.progress)}</div><div class="lbl">قيد التنفيذ</div></div><div class="stat gold"><div class="num">${money(v.total)}</div><div class="lbl">إجمالي</div></div></div><button type="button" class="btn-outline btn-small" data-name="${escapeHtml(p.name)}" onclick="openProjectDetails(this.dataset.name)">التفاصيل</button>${canModule('projects','edit',currentUser)?`<button type="button" class="btn-outline btn-small" data-name="${escapeHtml(p.name)}" onclick="editProject(this.dataset.name)">تعديل</button>`:''}${canModule('projects','delete',currentUser)?`<button type="button" class="btn-danger btn-small" data-name="${escapeHtml(p.name)}" onclick="deleteProject(this.dataset.name)">حذف</button>`:''}</div>`}).join('')}
 function exportProjectDetailsExcel(name){const rows=projectContributions(name);if(!window.XLSX){alert('مكتبة Excel غير متاحة حاليًا.');return}const data=[['تاريخ','اسم','قيمة التبرع','المشروع','النية','حالة الاعتماد','التواصل','بواسطة']];rows.forEach(r=>data.push([r.date||'',r.donor||'',Number(String(r.amount||0).replace(/,/g,''))||0,r.project||'',r.intention||'',statusLabel(normalizeFinanceStatus(r.financeStatus)),canDonorContact(currentUser)?'تواصل':'—',r.by||'']));const ws=XLSX.utils.aoa_to_sheet(data),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'سجل المشروع');XLSX.writeFile(wb,'سجل_المشروع_'+String(name).replace(/[\/:*?"<>|]/g,'_')+'_'+todayStr()+'.xlsx')}
-function openProjectDetails(name){const rows=projectContributions(name),v=projectAmountByStatus(rows),body=rows.length?rows.map(r=>`<tr onclick="openFinanceDetail('${r.donorId}','${r.hid}')" style="cursor:pointer"><td>${fmtDate(r.date)}</td><td>${escapeHtml(r.donor||'—')}</td><td><b>${money(r.amount)}</b></td><td>${escapeHtml(r.project||'—')}</td><td>${escapeHtml(r.intention||'—')}</td><td>${escapeHtml(statusLabel(normalizeFinanceStatus(r.financeStatus)))}</td><td>${canDonorContact(currentUser)&&r.entityType!=='company'?`<button class="btn-gold btn-small" onclick="event.stopPropagation();openContact('${r.donorId}')">تواصل</button>`:'—'}</td><td>${escapeHtml(r.by||'—')}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">لا توجد سجلات لهذا المشروع.</td></tr>';openModal(`<h3>تفاصيل مشروع: ${escapeHtml(name)}</h3><div class="stats" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px"><div class="stat green"><div class="num">${money(v.approved)}</div><div class="lbl">معتمد ماليًا</div></div><div class="stat red"><div class="num">${money(v.rejected)}</div><div class="lbl">مرفوض</div></div><div class="stat amber"><div class="num">${money(v.progress)}</div><div class="lbl">قيد التنفيذ</div></div><div class="stat gold"><div class="num">${money(v.total)}</div><div class="lbl">إجمالي</div></div></div><div class="donation-record-table-wrap"><table class="donation-record-table" style="min-width:1050px"><thead><tr><th>تاريخ</th><th>اسم</th><th>قيمة التبرع</th><th>المشروع</th><th>النية</th><th>حالة الاعتماد</th><th>التواصل</th><th>بواسطة</th></tr></thead><tbody>${body}</tbody></table></div><div class="modal-actions"><button class="btn-primary btn-small" onclick="exportProjectDetailsExcel(${JSON.stringify(String(name))})">تصدير السجل إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)}
+function openProjectDetails(name){const rows=projectContributions(name),v=projectAmountByStatus(rows),body=rows.length?rows.map(r=>`<tr onclick="openFinanceDetail('${r.donorId}','${r.hid}')" style="cursor:pointer"><td>${fmtDate(r.date)}</td><td>${escapeHtml(r.donor||'—')}</td><td><b>${money(r.amount)}</b></td><td>${escapeHtml(r.project||'—')}</td><td>${escapeHtml(r.intention||'—')}</td><td>${escapeHtml(statusLabel(normalizeFinanceStatus(r.financeStatus)))}</td><td>${canDonorContact(currentUser)&&r.entityType!=='company'?`<button class="btn-gold btn-small" onclick="event.stopPropagation();openContact('${r.donorId}')">تواصل</button>`:'—'}</td><td>${escapeHtml(r.by||'—')}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">لا توجد سجلات لهذا المشروع.</td></tr>';openModal(`<h3>تفاصيل مشروع: ${escapeHtml(name)}</h3><div class="stats" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px"><div class="stat green"><div class="num">${money(v.approved)}</div><div class="lbl">معتمد ماليًا</div></div><div class="stat red"><div class="num">${money(v.rejected)}</div><div class="lbl">مرفوض</div></div><div class="stat amber"><div class="num">${money(v.progress)}</div><div class="lbl">قيد التنفيذ</div></div><div class="stat gold"><div class="num">${money(v.total)}</div><div class="lbl">إجمالي</div></div></div><div class="donation-record-table-wrap"><table class="donation-record-table" style="min-width:1050px"><thead><tr><th>تاريخ</th><th>اسم</th><th>قيمة التبرع</th><th>المشروع</th><th>النية</th><th>حالة الاعتماد</th><th>التواصل</th><th>بواسطة</th></tr></thead><tbody>${body}</tbody></table></div><div class="modal-actions"><button class="btn-primary btn-small" data-name="${escapeHtml(name)}" onclick="exportProjectDetailsExcel(this.dataset.name)">تصدير السجل إلى Excel</button><button class="btn-outline" onclick="closeModal()">إغلاق</button></div>`)}
 /* ---------- donations view (flat log, with date filter) ---------- */
 let donationsTypeFilter='cash';
 function selectDonationsTypeTab(type){
