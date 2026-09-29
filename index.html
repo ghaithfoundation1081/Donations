@@ -835,6 +835,20 @@ body{overflow:hidden!important;}
   #app>.top-tabs>.top-tab{flex-basis:48px!important;height:48px!important;min-height:48px!important;}
 }
 
+.donor-selected-details{
+  background:#fff;border:1px solid #E5ECE9;border-radius:15px;padding:16px;margin-top:16px;
+  box-shadow:0 3px 14px rgba(0,0,0,.04);
+}
+.donor-selected-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.donor-selected-title{font-size:19px;font-weight:900;color:var(--primary-dark)}
+.donor-selected-meta{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.9}
+.donor-selected-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
+.donor-selected-table{width:100%;border-collapse:collapse;min-width:900px}
+.donor-selected-table th,.donor-selected-table td{padding:10px;border-bottom:1px solid var(--line);text-align:right;font-size:12px;vertical-align:middle}
+.donor-selected-table th{background:#F5F8F7;color:var(--primary-dark);font-weight:800;position:sticky;top:0}
+.donor-selected-table tr:hover td{background:#FAFCFB}
+.donor-selected-clickable{cursor:pointer}
+@media(max-width:700px){.donor-selected-details{padding:12px}.donor-selected-table{min-width:760px}}
 .company-subnav{display:flex;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid #E5ECE9;border-radius:14px;padding:8px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.025)}
 .company-subtab{border:0;background:#F4F8F6;color:#45625A;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer}.company-subtab.active{background:var(--primary);color:#fff}
 .company-pipeline{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.company-pipeline-step{font-size:11px;padding:5px 9px;border-radius:999px;background:#F0F4F2;color:#51645F}.company-pipeline-step.current{background:var(--primary-light);color:var(--primary-dark);font-weight:800}
@@ -1722,6 +1736,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
     </div>
   </div>
   <div class="list" id="listArea"></div>
+  <div id="donorSelectedDetails" class="donor-selected-details hidden"></div>
 
   </div>
   <div id="donorModuleNewPanel" class="donor-module-panel hidden">
@@ -2097,7 +2112,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzjJnIYJsJCWPsDTXD1vyoq95p3nBS0CI53QwbE-so556ltwU8GVg_LqTCFTtPDJS-CUw/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw3WOnrAT4m_KycjNoLQqz1gEXwwalevHswvK1DJ2KwL6tCALO3gYRK8Zj3WmSopK2zEQ/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -4329,8 +4344,17 @@ async function syncPull(options){
     companies=mergeEntityHistories(Array.isArray(data.companies)?data.companies:[],companies);
     companies=companies.map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
     companyConfig=mergeCompanyConfigNoLoss_(data.companyConfig,companyConfig);
-    companies=(Array.isArray(companies)?companies:[]).filter(c=>c&&typeof c==='object').map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
-    donors=(Array.isArray(donors)?donors:[]).filter(d=>d&&typeof d==='object').map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));
+    /* الحذف في المزامنة لا يحدث بالاختفاء من الشيت؛ يجب أن يكون حذفًا صريحًا
+       مسجلًا في __syncDeleted. أي شركة/جمعية موجودة محليًا تبقى ولا تُسقط بسبب
+       استجابة ناقصة أو شيت قديم. */
+    const deletedCompanyIdsPull=new Set((__syncDeleted.companies||[]).map(String));
+    const deletedDonorIdsPull=new Set((__syncDeleted.donors||[]).map(String));
+    companies=(Array.isArray(companies)?companies:[])
+      .filter(c=>c&&typeof c==='object'&&c.id!=null&&!deletedCompanyIdsPull.has(String(c.id)))
+      .map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
+    donors=(Array.isArray(donors)?donors:[])
+      .filter(d=>d&&typeof d==='object'&&d.id!=null&&!deletedDonorIdsPull.has(String(d.id)))
+      .map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));
     /* ملغى: لا يُمسح أي حركة تبرع بسبب اختلاف رقم نسخة الإعادة. */
     normalizeDonationWorkflow();
     projects=mergeProjectListsNoLoss_(Array.isArray(data.projects)?normalizeProjects(data.projects):[],projects);
@@ -4549,8 +4573,16 @@ async function syncPushNow(options){
           __lastPushError='الخادم لم يؤكد حذف أحد الحسابات بعد؛ ستتم إعادة المحاولة تلقائيًا.';
         }
       }
-      donors=Array.isArray(res.data.donors)?res.data.donors:donors;
-      companies=Array.isArray(res.data.companies)?res.data.companies:companies;
+      /* لا نسمح لاستجابة حفظ ناقصة من الخادم بإسقاط أي متبرع/شركة محليًا.
+         الحذف الوحيد المسموح به هو حذف صريح سبق تسجيله في __syncDeleted. */
+      const deletedDonorIds=new Set((__syncDeleted.donors||[]).map(String));
+      const deletedCompanyIds=new Set((__syncDeleted.companies||[]).map(String));
+      donors=mergeEntityHistories(Array.isArray(res.data.donors)?res.data.donors:[],donors)
+        .filter(d=>d&&d.id!=null&&!deletedDonorIds.has(String(d.id)))
+        .map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));
+      companies=mergeEntityHistories(Array.isArray(res.data.companies)?res.data.companies:[],companies)
+        .filter(c=>c&&c.id!=null&&!deletedCompanyIds.has(String(c.id)))
+        .map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
       projects=mergeProjectListsNoLoss_(Array.isArray(res.data.projects)?normalizeProjects(res.data.projects):[],projects);
       channels=Array.isArray(res.data.channels)&&res.data.channels.length?res.data.channels:channels;
       intentions=[...new Set([...(Array.isArray(res.data.intentions)?res.data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).map(x=>x.trim()).filter(Boolean))];
@@ -5915,14 +5947,38 @@ function statusBadge(s){
   return '<span class="badge green">متاح للتواصل</span>'
 }
 
+/* ---------- chronological ordering ---------- */
+function recordChronologyValue(x){
+  if(!x)return 0;
+  const raw=x.createdAt||x.updatedAt||x.timestamp||x.date||x.registeredDate||'';
+  const t=Date.parse(String(raw));
+  if(!isNaN(t))return t;
+  const d=String(x.date||x.registeredDate||'').trim();
+  const n=Date.parse(d);
+  return isNaN(n)?0:n;
+}
+function latestEntityChronology(entity){
+  const history=Array.isArray(entity?.history)?entity.history:[];
+  const visible=history.filter(h=>movementCreatedByCurrentUser(h));
+  return Math.max(recordChronologyValue(entity),...visible.map(recordChronologyValue))||0;
+}
+function sortEntitiesNewestFirst(list){
+  return (Array.isArray(list)?list:[]).slice().sort((a,b)=>{
+    const diff=latestEntityChronology(b)-latestEntityChronology(a);
+    return diff!==0?diff:normName(a?.name||'').localeCompare(normName(b?.name||''),'ar');
+  });
+}
+
 /* ---------- render: donors ---------- */
 function render(){
   renderStats();renderChips();
   let list=donorsFilteredList();
   if(searchTerm.trim()){let t=searchTerm.trim();list=list.filter(d=>d.name.includes(t)||(d.phone||'').includes(t))}
   if(currentFilter!=='all')list=list.filter(d=>status(d)===currentFilter);
-  list.sort((a,b)=>normName(a.name).localeCompare(normName(b.name),'ar'));
-  document.getElementById('listArea').innerHTML=list.length?list.map(card).join(''):'<div class="empty">لا توجد نتائج. جرّب تغيير البحث أو الفلتر أو إضافة متبرع.</div>'
+  list=sortEntitiesNewestFirst(list);
+  document.getElementById('listArea').innerHTML=list.length?list.map(card).join(''):'<div class="empty">لا توجد نتائج. جرّب تغيير البحث أو الفلتر أو إضافة متبرع.</div>';
+  const selected=selectedDonorDetailsId&&list.some(d=>String(d.id)===String(selectedDonorDetailsId))?selectedDonorDetailsId:'';
+  if(selected)renderSelectedDonorDetails(selected);else clearSelectedDonorDetails();
 }
 function donorsFilteredList(){
   let list=visibleDonors();
@@ -5953,7 +6009,7 @@ function card(d){
  const cls=s==='today'?'status-today':s==='month'?'status-month':'';
  const isNew=isNewDonor(d);
  return `<div class="card ${cls}">
-  <div class="info" onclick="openRecord('${d.id}')">
+  <div class="info" onclick="selectDonorDetails('${d.id}')">
    <div class="name">${escapeHtml(d.name)}</div>
    <div class="meta">
     <b>${escapeHtml(d.phone||'—')}</b>
@@ -5971,6 +6027,56 @@ function card(d){
    ${(isSuperAdmin(currentUser)||isFinance(currentUser))&&canModule('donors','delete')?`<button class="btn-danger btn-small" onclick="deleteDonor('${d.id}')">حذف</button>`:''}
   </div>
  </div>`
+}
+
+/* ---------- inline donor details in the main "المتبرعون" tab ---------- */
+let selectedDonorDetailsId='';
+function clearSelectedDonorDetails(){
+  const box=document.getElementById('donorSelectedDetails');
+  if(!box)return;
+  selectedDonorDetailsId='';
+  box.classList.add('hidden');
+  box.innerHTML='';
+}
+function selectDonorDetails(id){
+  if(!canOpenDonorRecord(currentUser)){alert('ليس لديك صلاحية عرض سجل المتبرع.');return}
+  const d=donors.find(x=>String(x.id)===String(id));
+  if(!d)return;
+  if(currentUser?.role==='employee'&&String(d.employeeId)!==String(currentUser.id)){alert('هذا المتبرع غير تابع لحسابك.');return}
+  selectedDonorDetailsId=String(id);
+  renderSelectedDonorDetails(id);
+  requestAnimationFrame(()=>document.getElementById('donorSelectedDetails')?.scrollIntoView({behavior:'smooth',block:'start'}));
+}
+function renderSelectedDonorDetails(id){
+  const box=document.getElementById('donorSelectedDetails');
+  const d=donors.find(x=>String(x.id)===String(id));
+  if(!box||!d){clearSelectedDonorDetails();return}
+  if(currentUser?.role==='employee'&&String(d.employeeId)!==String(currentUser.id)){clearSelectedDonorDetails();return}
+  const items=visibleHistoryEntries(d.history).slice().sort((a,b)=>{
+    const diff=recordChronologyValue(b)-recordChronologyValue(a);
+    return diff!==0?diff:String(b.date||'').localeCompare(String(a.date||''));
+  });
+  const donations=donationEntries(d);
+  const total=donations.reduce((sum,h)=>sum+(Number(String(h.amount||0).replace(/,/g,''))||0),0);
+  box.classList.remove('hidden');
+  box.innerHTML=`<div class="donor-selected-head">
+    <div>
+      <div class="donor-selected-title">تفاصيل المتبرع — ${escapeHtml(d.name||'—')}</div>
+      <div class="donor-selected-meta"><b>${escapeHtml(d.phone||'—')}</b> · عدد التبرعات: <b>${donations.length}</b> · إجمالي التبرعات: <b>${money(total)}</b> · عدد الحركات: <b>${items.length}</b></div>
+    </div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap">
+      ${canOpenDonorRecord(currentUser)?`<button class="btn-outline btn-small" onclick="openRecord('${String(d.id).replace(/'/g,"\\'")}')">فتح السجل الكامل</button>`:''}
+      ${canDonorContact(currentUser)?`<button class="btn-gold btn-small" onclick="openContact('${String(d.id).replace(/'/g,"\\'")}')">تسجيل تواصل</button>`:''}
+      ${canDonationType('individual',currentUser)?`<button class="btn-primary btn-small" onclick="openNewDonation('${String(d.id).replace(/'/g,"\\'")}')">تبرع جديد</button>`:''}
+      <button class="btn-outline btn-small" onclick="clearSelectedDonorDetails()">إغلاق التفاصيل</button>
+    </div>
+  </div>
+  ${items.length?`<div class="donor-selected-table-wrap"><table class="donor-selected-table"><thead><tr><th>#</th><th>التاريخ</th><th>نوع الحركة</th><th>الإجراء</th><th>القيمة</th><th>المشروع</th><th>النية</th><th>الحالة</th><th>بواسطة</th><th>ملاحظات</th></tr></thead><tbody>${items.map((x,i)=>{
+    const isDonation=x.type==='donation';
+    const fs=normalizeFinanceStatus(x.financeStatus);
+    const statusBadge=isDonation?(fs==='approved'?'<span class="badge green">معتمد ماليًا</span>':fs==='rejected'?'<span class="badge red">مرفوض ماليًا</span>':'<span class="badge amber">بانتظار الاعتماد</span>'):'<span class="badge">تواصل</span>';
+    return `<tr class="${isDonation?'donor-selected-clickable':''}" ${isDonation?`onclick="openFinanceDetail('${String(d.id).replace(/'/g,"\\'")}','${String(x.hid||'').replace(/'/g,"\\'")}')" title="اضغط لعرض تفاصيل التبرع"`:''}><td>${i+1}</td><td>${fmtDate(x.date||'')}</td><td>${isDonation?'تبرع':'تواصل'}</td><td>${escapeHtml(x.action||'حركة')}</td><td>${x.amount?money(x.amount):'—'}</td><td>${escapeHtml(x.project||'—')}</td><td>${escapeHtml(x.intention||'—')}</td><td>${statusBadge}</td><td>${escapeHtml(x.by||'—')}</td><td>${escapeHtml(x.notes||'—')}</td></tr>`;
+  }).join('')}</tbody></table></div>`:'<div class="empty">لا توجد حركات مسجلة لهذا المتبرع.</div>'}`;
 }
 
 /* ---------- render: new donors (rolling 30-day window, or a custom range) ---------- */
@@ -6924,7 +7030,7 @@ function companyFilteredList(){
     list=list.filter(c=>normName([c.name,c.legalName,c.phone,c.email,c.industry,c.commercialReg,c.taxId,c.address].join(' ')).includes(q));
   }
   if(companyFilter!=='all')list=list.filter(c=>companyStatus(c)===companyFilter);
-  return list.sort((a,b)=>normName(a.name).localeCompare(normName(b.name),'ar'));
+  return sortEntitiesNewestFirst(list);
 }
 let companiesCustomRange=false, companiesFrom='', companiesTo='';
 function applyCompaniesRange(){companiesFrom=document.getElementById('companiesFromInput').value;companiesTo=document.getElementById('companiesToInput').value;if(companiesFrom&&companiesTo&&companiesFrom>companiesTo){alert('تاريخ البداية يجب أن يكون قبل أو مساويًا لتاريخ النهاية.');return}companiesCustomRange=!!(companiesFrom||companiesTo);renderCompanies()}
