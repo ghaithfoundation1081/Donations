@@ -1810,7 +1810,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
 
   <div id="donationModuleRecordsPanel" class="donation-module-panel hidden">
     <div class="toolbar">
-      <input id="moduleDonationSearch" type="search" placeholder="ابحث باسم المتبرع أو رقم الهاتف أو المشروع">
+      <input id="moduleDonationSearch" type="search" placeholder="ابحث بالاسم أو الهاتف أو المشروع أو القناة أو حالة الحركة (جزء من الكلمة يكفي)">
       <select id="moduleDonationEmployeeFilter" class="hidden" onchange="renderModuleDonationRecords()" style="min-width:200px"></select>
       <div class="daterange">
         <label>من</label><input type="date" id="moduleDonationFrom" max="2050-12-31">
@@ -2097,7 +2097,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxJueDvErUTDf4oozcj8fulYsUW1e53FXeG0fCGTLm1hpWmBu9ibfwZEC-A0GDNtQKKlw/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxTW8n6y_d_OBBdZ679Zgj2wGsBIXgNNYd3a6SovuTUVt1L3Im61AmTkiFj1p9mYCGZ7Q/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -7344,7 +7344,14 @@ function filteredModuleDonationRows(){
   const empFilter=isManagerRole(currentUser)?(document.getElementById('moduleDonationEmployeeFilter')?.value||'all'):'';
   let rows=moduleDonationRows().filter(r=>inRange(r.date,from,to));
   if(empFilter&&empFilter!=='all')rows=rows.filter(r=>(r.responsibleEmployeeId||r.createdBy||'')===empFilter);
-  if(q)rows=rows.filter(r=>normName([r.donor,r.phone,r.project,r.intention,r.location,r.method,r.movementStatus||'قيد التنفيذ'].join(' ')).includes(q));
+  if(q){
+    const tokens=q.split(' ').filter(Boolean);
+    rows=rows.filter(r=>{
+      const fs=normalizeFinanceStatus(r.financeStatus);
+      const hay=normName([r.donor,r.phone,r.project,r.intention,r.location,r.method,normalizeMovementStatus(r.movementStatus),fs==='approved'?'معتمد ماليا':fs==='rejected'?'مرفوض ماليا':'بانتظار الاعتماد'].join(' '));
+      return tokens.every(t=>hay.includes(t));
+    });
+  }
   return rows;
 }
 
@@ -8060,7 +8067,7 @@ async function deleteProject(name){
  if(GAS_URL&&!syncDeleteOk)alert('تم حذف المشروع محليًا، لكن تعذر تأكيد الحذف على Google Sheets. سيعاد إرسال الحذف تلقائيًا عند عودة الاتصال.');
 }
 function projectContributions(name){
- const rows=[];visibleDonors().forEach(d=>donationEntries(d).forEach(h=>{if(normName(h.project)===normName(name)&&inRange(h.date,projFrom,projTo))rows.push({donor:d.name,donorId:d.id,...h})}));
+ const rows=[];visibleDonors().forEach(d=>visibleDonationEntries(d).filter(h=>h.status!=='pending').forEach(h=>{if(normName(h.project)===normName(name)&&inRange(h.date,projFrom,projTo))rows.push({donor:d.name,donorId:d.id,...h})}));
  visibleCompanies().forEach(c=>(c.history||[]).forEach(h=>{if(h&&h.type==='donation'&&normName(h.project)===normName(name)&&inRange(h.date,projFrom,projTo))rows.push({donor:c.name,donorId:'company:'+c.id,companyId:c.id,entityType:'company',...h})}));
  return rows.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 }
@@ -9954,6 +9961,69 @@ window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=
 })();
 </script>
 
+
+<style>
+.sx-wrap{position:relative;margin-bottom:6px}
+.sx-input{width:100%;box-sizing:border-box}
+.sx-list{position:absolute;right:0;left:0;top:100%;z-index:9999;background:#fff;border:1px solid #cfe3dc;border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.12);max-height:190px;overflow:auto;display:none}
+.sx-list.open{display:block}
+.sx-item{padding:9px 12px;cursor:pointer;font-size:14px;text-align:right}
+.sx-item:hover,.sx-item.act{background:#E8F6F1}
+.sx-empty{padding:9px 12px;color:#888;font-size:13px}
+</style>
+<script>
+/* بحث بجزء من الكلمة داخل خانتي: قناة أو طريقة التبرع + حالة الحركة */
+(function(){
+  var IDS=/^(md|dn|cd|ed)_(method|movementStatus)$/;
+  function norm(x){return typeof normName==='function'?normName(x):String(x||'').trim().toLowerCase()}
+  function enhance(sel){
+    if(!sel||sel.dataset.sx)return; sel.dataset.sx='1';
+    var wrap=document.createElement('div');wrap.className='sx-wrap';
+    var inp=document.createElement('input');inp.type='text';inp.className='sx-input';inp.autocomplete='off';
+    inp.placeholder='🔍 اكتب جزءًا من الكلمة للبحث ثم اختر...';
+    var list=document.createElement('div');list.className='sx-list';
+    wrap.appendChild(inp);wrap.appendChild(list);
+    sel.parentNode.insertBefore(wrap,sel);
+    var act=-1,items=[];
+    function build(){
+      var toks=norm(inp.value).split(' ').filter(Boolean);
+      items=[].slice.call(sel.options).filter(function(o){
+        if(o.disabled||o.value==='')return false;
+        var t=norm(o.textContent);return toks.every(function(k){return t.indexOf(k)>-1});
+      });
+      list.innerHTML='';act=items.length?0:-1;
+      if(!items.length){var e=document.createElement('div');e.className='sx-empty';e.textContent='لا توجد نتائج مطابقة';list.appendChild(e);return}
+      items.forEach(function(o,i){
+        var d=document.createElement('div');d.className='sx-item'+(i===0?' act':'');d.textContent=o.textContent;
+        d.onmousedown=function(ev){ev.preventDefault();pick(o)};list.appendChild(d);
+      });
+    }
+    function pick(o){
+      sel.value=o.value;
+      sel.dispatchEvent(new Event('change',{bubbles:true}));
+      inp.value='';list.classList.remove('open');
+    }
+    function mark(){[].forEach.call(list.children,function(c,i){c.classList.toggle('act',i===act)})}
+    inp.addEventListener('input',function(){build();list.classList.add('open')});
+    inp.addEventListener('focus',function(){build();list.classList.add('open')});
+    inp.addEventListener('blur',function(){setTimeout(function(){list.classList.remove('open')},120)});
+    inp.addEventListener('keydown',function(ev){
+      if(ev.key==='ArrowDown'&&items.length){act=(act+1)%items.length;mark();ev.preventDefault()}
+      else if(ev.key==='ArrowUp'&&items.length){act=(act-1+items.length)%items.length;mark();ev.preventDefault()}
+      else if(ev.key==='Enter'){ev.preventDefault();if(items[act])pick(items[act])}
+      else if(ev.key==='Escape'){list.classList.remove('open')}
+    });
+  }
+  function scan(root){
+    (root||document).querySelectorAll('select[id]').forEach(function(s){if(IDS.test(s.id))enhance(s)});
+  }
+  function start(){
+    scan(document);
+    new MutationObserver(function(){scan(document)}).observe(document.body,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
+</script>
 </body>
 <script>
 /* شركات وجمعيات: النوع إجباري عند التكويد ويُحفظ في entityKind */
