@@ -2097,7 +2097,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxTW8n6y_d_OBBdZ679Zgj2wGsBIXgNNYd3a6SovuTUVt1L3Im61AmTkiFj1p9mYCGZ7Q/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzUZDiPOOxcKpzMLg1F6LZzN32wWJSt3w5apxMLLcc9Z5ZkbbL7dYd0hDKMbryw8_cX6A/exec'; // يظل فارغًا افتراضيًا. يضع المدير الرئيسي رابط Google Apps Script يدويًا من شاشة المزامنة.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -10022,6 +10022,52 @@ window.openDonorMovementDetails=function(id,filter){const d=(donors||[]).find(x=
     new MutationObserver(function(){scan(document)}).observe(document.body,{childList:true,subtree:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
+</script>
+
+<script>
+/* إخفاء النافذة المنبثقة فورًا عند الضغط على زر ينفّذ عملية غير متزامنة (حذف/حفظ/تأكيد...)
+   بدل بقائها ظاهرة أثناء انتظار المزامنة أو التحقق. تعود النافذة للظهور تلقائيًا إذا ظهر تنبيه
+   خطأ/تحقق (مثل كلمة مرور خاطئة) حتى لا تضيع بيانات المستخدم. */
+(function(){
+  var state={dlg:false},timer=null;
+  function ov(){return document.getElementById('overlay')}
+  function reveal(){
+    var o=ov();
+    if(o&&o.dataset.busy==='1'){o.style.removeProperty('display');delete o.dataset.busy}
+    if(timer){clearTimeout(timer);timer=null}
+  }
+  ['alert','confirm','prompt'].forEach(function(n){
+    var orig=window[n];
+    window[n]=function(){
+      reveal();
+      var r=orig.apply(window,arguments);
+      if(n==='confirm'){ if(!r)state.dlg=true; } else state.dlg=true;
+      return r;
+    };
+  });
+  function isAsyncHandler(b){
+    var code=b.getAttribute('onclick')||'',re=/([A-Za-z_$][\w$.]*)\s*\(/g,m;
+    while((m=re.exec(code))){
+      var f=window[m[1].replace(/^window\./,'')];
+      if(typeof f==='function'&&f.constructor&&f.constructor.name==='AsyncFunction')return true;
+    }
+    return false;
+  }
+  document.addEventListener('click',function(e){
+    var b=e.target&&e.target.closest&&e.target.closest('#overlay button');
+    if(b)state.dlg=false;
+  },true);
+  document.addEventListener('click',function(e){
+    var b=e.target&&e.target.closest&&e.target.closest('#overlay button');
+    if(!b||!b.isConnected||state.dlg)return;
+    var o=ov();
+    if(!o||!o.contains(b)||!isAsyncHandler(b))return;
+    o.dataset.busy='1';
+    o.style.setProperty('display','none','important');
+    try{if(typeof showSaveToast==='function')showSaveToast('جارٍ التنفيذ...')}catch(_){}
+    timer=setTimeout(reveal,12000);
+  });
 })();
 </script>
 </body>
