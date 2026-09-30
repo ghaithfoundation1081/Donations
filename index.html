@@ -2132,7 +2132,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwORdBJx189T_X8f87EDKlIygEcqBSUjjcHlJMmW7oH6falwZEqLmb0nLXmidt4enB4Pw/exec'; // يظل فارغًا افتراضيًا، ويمكن للنظام استخدام رابط Google Apps Script المحفوظ مسبقًا.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxWPSl6Yy54MdJhDYYSBENNFM-oD3Z_1vWmjSTXTaq-SzFexeH3PW2QZtD4rEZyHSyG6A/exec'; // يظل فارغًا افتراضيًا، ويمكن للنظام استخدام رابط Google Apps Script المحفوظ مسبقًا.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2390,11 +2390,22 @@ async function activateAccount(){
   if(activate){user.activated=true;user.activationToken='';}
   if(reset){user.resetToken='';}
   touchUser(user);
-  const saved=await saveUsersReliable();
+  let saved=await saveUsersReliable();
+  if(GAS_URL && saved){
+    /* تأكيد صريح: لا نعتبر رابط التفعيل ناجحًا إلا إذا أصبحت حالة نفس الحساب
+       على Google Sheets مفعلة فعلًا، وليس فقط محفوظة في كاش هذا الجهاز. */
+    let central=await fetchCentralUser(username);
+    if(!central || central.activated===false){
+      saved=await saveUsersReliable();
+      central=saved?await fetchCentralUser(username):null;
+    }
+    if(!central || central.activated===false){
+      alert('تم إعداد بيانات الحساب على هذا الجهاز، لكن لم يتم تأكيد التفعيل على Google Sheets بعد. لم يتم إعلان نجاح التفعيل؛ أعد المحاولة عند عودة الاتصال.');
+      return;
+    }
+  }
   if(GAS_URL && !saved){
-    /* لا نعلن نجاح التفعيل قبل تأكيد الحفظ المركزي. الحالة المحلية تبقى كما هي
-       وستُعاد محاولة مزامنتها تلقائيًا، لكن لا نُخفي فشل التأكيد عن المستخدم. */
-    alert('تم إعداد بيانات الحساب على هذا الجهاز، لكن لم يتم تأكيد التفعيل على Google Sheets بعد. سيتم إعادة المحاولة تلقائيًا؛ لا تسجل الخروج قبل ظهور حالة الاتصال.');
+    alert('تم إعداد بيانات الحساب على هذا الجهاز، لكن لم يتم تأكيد التفعيل على Google Sheets بعد. سيتم إعادة المحاولة تلقائيًا؛ لم يتم إعلان نجاح التفعيل.');
     return;
   }
   history.replaceState({},document.title,window.location.pathname+'?portal=user');
@@ -3219,9 +3230,9 @@ function writeMirrorSheets(data) {
   data = data || {};
   var users = data.users || [], userName = {};
   users.forEach(function (u) { if (u && u.id) userName[u.id] = u.fullName || u.username || ''; });
-  writeMirrorSheet('المستخدمون', ['اسم المستخدم','الاسم الكامل','الدور','نشط','بيانات النظام الكاملة (JSON)'], users.map(function(u){
-    return [u.username || '', u.fullName || '', u.role || '', u.active === false ? 'غير نشط' : 'نشط', JSON.stringify(u)];
-  }), { hide: [5] });
+  writeMirrorSheet('المستخدمون', ['اسم المستخدم','الاسم الكامل','الدور','نشط','مفعل','بيانات النظام الكاملة (JSON)'], users.map(function(u){
+    return [u.username || '', u.fullName || '', u.role || '', u.active === false ? 'غير نشط' : 'نشط', u.activated === false ? 'غير مفعل' : 'مفعل', JSON.stringify(u)];
+  }), { hide: [6] });
   var donorsList = data.donors || [];
   writeMirrorSheet('المتبرعون', ['اسم المتبرع','الهاتف','الموظف المسؤول','تاريخ التسجيل','عدد التبرعات','عدد مرات التواصل','بيانات النظام الكاملة (JSON)'], donorsList.map(function(d){
     return [d.name || '', d.phone || '', userName[d.employeeId] || '', d.registeredDate || '', countType_(d.history, 'donation'), countType_(d.history, 'contact'), JSON.stringify(d)];
@@ -4064,8 +4075,14 @@ async function saveUsersReliable(){
   showSaveToast('تم الحفظ');
   if(!GAS_URL)return true;
   clearTimeout(pushTimer);
+  const deadline=Date.now()+15000;
+  while(__pushInFlight&&Date.now()<deadline){await new Promise(r=>setTimeout(r,80));}
+  if(__pushInFlight){
+    safeSet(localStorage,PENDING_SYNC_KEY,JSON.stringify(__makeDurablePayload()));
+    return false;
+  }
   const ok=await syncPushNow();
-  if(!ok)alert('تم حفظ التغيير محليًا، لكن تعذر تأكيده على Google Sheets الآن. سيبقى التغيير محفوظًا محليًا ولن تُستعاد الحسابات المحذوفة تلقائيًا.');
+  if(!ok)alert('تم حفظ التغيير محليًا، لكن تعذر تأكيده على Google Sheets الآن. سيبقى التغيير محفوظًا وسيُعاد رفعه تلقائيًا عند عودة الاتصال.');
   return ok;
 }
 /* ---------- سجل فوري ودائم لحركات التبرعات على Google Sheets ----------
@@ -4727,150 +4744,40 @@ function gasJsonpGet(){
     document.head.appendChild(script);
   });
 }
-function gasFormPost(action,payload){
-  /* هذا المسار البديل (iframe + form POST) يُستخدم فقط عندما يفشل fetch العادي
-     (gasCall) — وهو ما يحدث غالبًا عند فتح الملف مباشرة من الجهاز (file://) بسبب
-     قيود المتصفح على طلبات fetch عبر النطاقات من صفحة محلية. المشكلة أن نتيجة
-     الإرسال عبر iframe غير مقروءة أبدًا من جافاسكريبت (قيود الأمان بين النطاقات)،
-     فكان الكود القديم "يفترض" النجاح بمجرد أن الـ iframe انتهى من التحميل أو مرّت
-     2.5 ثانية — حتى لو لم يصل التعديل/الحذف فعليًا إلى جوجل شيت أو فشل هناك.
-     هذا هو سبب ظهور بيانات في الشيت لم تعد موجودة في النظام بعد الحذف: كانت عملية
-     الحذف "تنجح" في واجهة المستخدم محليًا دون أي تأكيد حقيقي من الخادم.
-     الإصلاح: بعد إرسال النموذج، نتحقق فعليًا من الحالة الحالية على جوجل شيت عبر
-     طلب getAll بأسلوب JSONP (يعمل حتى من file:// لأنه script tag وليس fetch)،
-     ونُرجع البيانات الحقيقية المؤكدة من الخادم بدل افتراض النجاح. لو تعذّر التحقق
-     نرفض الطلب بخطأ واضح بدل الإبلاغ الكاذب بالنجاح. */
+function gasJsonpGetUser(username){
   return new Promise((resolve,reject)=>{
-    let iframe=document.getElementById('__gasPostFrame');
-    if(!iframe){iframe=document.createElement('iframe');iframe.id='__gasPostFrame';iframe.name='__gasPostFrame';iframe.style.display='none';document.body.appendChild(iframe)}
-    const form=document.createElement('form');form.method='POST';form.action=GAS_URL;form.target='__gasPostFrame';form.style.display='none';
-    const add=(name,value)=>{const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input)};
-    add('action',action);add('payload',JSON.stringify(payload||{}));if(GAS_ACCESS_KEY)add('key',GAS_ACCESS_KEY);document.body.appendChild(form);
-    let done=false;
-    const finish=async(sent)=>{
-      if(done)return;done=true;setTimeout(()=>form.remove(),0);
-      if(!sent){reject(new Error('تعذر إرسال البيانات إلى جوجل شيت'));return}
-      /* تأخير بسيط لإعطاء الخادم فرصة لإنهاء التنفيذ قبل التحقق. */
-      await new Promise(r=>setTimeout(r,600));
-      try{
-        const verified=await gasJsonpGet();
-        resolve({data:verified});
-      }catch(verifyErr){
-        reject(new Error('تم إرسال التعديلات لكن تعذّر تأكيد وصولها فعليًا إلى جوجل شيت. سيُعاد التحقق تلقائيًا عند عودة الاتصال.'));
-      }
-    };
-    iframe.onload=()=>finish(true);try{form.submit();setTimeout(()=>finish(true),2500)}catch(e){finish(false)}
+    if(!GAS_URL)return reject(new Error('لا يوجد رابط Google Sheets'));
+    const cb='__gasUserCallback_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const script=document.createElement('script');
+    const timeout=setTimeout(()=>{cleanup();reject(new Error('انتهت مهلة التحقق من حساب المستخدم'))},12000);
+    function cleanup(){clearTimeout(timeout);try{delete window[cb]}catch(e){window[cb]=undefined}script.remove()}
+    window[cb]=data=>{cleanup();resolve(data)};
+    script.onerror=()=>{cleanup();reject(new Error('تعذر التحقق من حساب المستخدم على Google Sheets'))};
+    const q='action=getUser&username='+encodeURIComponent(String(username||''))+'&callback='+encodeURIComponent(cb)+(GAS_ACCESS_KEY?'&key='+encodeURIComponent(GAS_ACCESS_KEY):'');
+    script.src=GAS_URL+(GAS_URL.includes('?')?'&':'?')+q;
+    document.head.appendChild(script);
   });
 }
-function normalizeImportLogsLocal(list){
-  return (Array.isArray(list)?list:[]).filter(x=>x&&typeof x==='object'&&String(x.id||x.batchId||'').trim()).map(x=>({
-    id:String(x.id||x.batchId),batchId:String(x.batchId||x.id||''),fileName:String(x.fileName||'بيانات مدخلة يدويًا'),
-    validationAt:x.validationAt||'',importedAt:x.importedAt||'',completedAt:x.completedAt||'',
-    employeeName:x.employeeName||'',employeeId:x.employeeId||'',importerName:x.importerName||'',importerId:x.importerId||'',
-    totalRows:Number(x.totalRows)||0,validRows:Number(x.validRows)||0,errorRows:Number(x.errorRows)||0,
-    newRecords:Number(x.newRecords)||0,mergedRecords:Number(x.mergedRecords)||0,donationCount:Number(x.donationCount)||0,
-    contactCount:Number(x.contactCount)||0,companyCount:Number(x.companyCount)||0,individualCount:Number(x.individualCount)||0,
-    status:x.status||'تم التسجيل',errors:Array.isArray(x.errors)?x.errors.map(String).slice(0,1000):[],notes:String(x.notes||'')
-  }));
+async function fetchCentralUser(username){
+  if(!GAS_URL)return null;
+  const target=normalizeLoginUsername(username);
+  const pick=data=>{
+    if(!data||data.error||!Array.isArray(data.users))return null;
+    return data.users.find(x=>x&&normalizeLoginUsername(x.username)===target)||null;
+  };
+  try{
+    const res=await gasCall('getAll');
+    const user=pick(res);
+    if(user)return JSON.parse(JSON.stringify(user));
+  }catch(e){}
+  try{
+    const res=await gasJsonpGet();
+    const user=pick(res);
+    if(user)return JSON.parse(JSON.stringify(user));
+  }catch(e){}
+  return null;
 }
-function mergeImportLogsLocal(remoteList,localList){
-  const map=new Map();
-  [...normalizeImportLogsLocal(remoteList),...normalizeImportLogsLocal(localList)].forEach(x=>{
-    const k=String(x.id||x.batchId||'');if(!k)return;const old=map.get(k);
-    if(!old){map.set(k,x);return}
-    const ot=Date.parse(old.completedAt||old.importedAt||old.validationAt||''),xt=Date.parse(x.completedAt||x.importedAt||x.validationAt||'');
-    const newer=(!isNaN(xt)&&isNaN(ot))||(!isNaN(xt)&&!isNaN(ot)&&xt>=ot);
-    const merged=newer?{...old,...x}:{...x,...old};
-    merged.errors=(x.errors&&x.errors.length)?x.errors:(old.errors||[]);map.set(k,merged);
-  });
-  return [...map.values()].sort((a,b)=>String(b.completedAt||b.importedAt||'').localeCompare(String(a.completedAt||a.importedAt||'')));
-}
-function saveImportLogsLocal(){try{safeSet(localStorage,IMPORTLOGKEY,JSON.stringify(normalizeImportLogsLocal(importLogs).slice(0,2000)))}catch(e){}}
 
-function mergeEntityHistories(remoteList, localList){
-  const r=Array.isArray(remoteList)?remoteList:[], l=Array.isArray(localList)?localList:[];
-  const map=new Map();
-  r.forEach(x=>{if(x&&x.id!=null)map.set(String(x.id),JSON.parse(JSON.stringify(x)))});
-  l.forEach(x=>{
-    if(!x||x.id==null)return;
-    const key=String(x.id), existing=map.get(key);
-    if(!existing){map.set(key,JSON.parse(JSON.stringify(x)));return}
-    const hist=new Map();
-    (Array.isArray(existing.history)?existing.history:[]).forEach(h=>{if(h&&h.hid)hist.set(String(h.hid),h)});
-    (Array.isArray(x.history)?x.history:[]).forEach(h=>{if(h&&h.hid)hist.set(String(h.hid),h)});
-    const merged={...existing,...x};
-    merged.history=[...hist.values()];
-    map.set(key,merged);
-  });
-  return [...map.values()];
-}
-/* دمج حسابات المستخدمين بين الجهاز وGoogle Sheets اعتمادًا على updatedAt.
-   هذه الدالة ضرورية للحسابات لأن حالة التفعيل وكلمة المرور لا يجوز أن تُستبدل
-   بنسخة أقدم لمجرد أنها كانت موجودة محليًا. */
-function mergeUsersClientSafe(remoteList, localList){
-  const r=Array.isArray(remoteList)?remoteList:[], l=Array.isArray(localList)?localList:[];
-  const byId=new Map();
-  const put=(u)=>{
-    if(!u||typeof u!=='object')return;
-    const id=u.id!=null&&String(u.id)?'id:'+String(u.id):'';
-    const un=String(u.username||'').trim().toLowerCase();
-    const key=id||('u:'+un); if(!key||key==='u:')return;
-    const existing=byId.get(key);
-    if(!existing){byId.set(key,JSON.parse(JSON.stringify(u)));return}
-    const a=existing,b=u,at=Date.parse(a.updatedAt||''),bt=Date.parse(b.updatedAt||'');
-    let newer=a,older=b;
-    if(!isNaN(bt)&&isNaN(at)){newer=b;older=a;}
-    else if(!isNaN(bt)&&!isNaN(at)&&bt>=at){newer=b;older=a;}
-    else if(!isNaN(at)&&isNaN(bt)){newer=a;older=b;}
-    const merged={...older,...newer};
-    byId.set(key,merged);
-  };
-  r.forEach(put);
-  l.forEach(put);
-  const out=[...byId.values()];
-  /* إزالة أي ازدواج باقٍ بسبب تغيير اسم المستخدم مع الإبقاء على النسخة الأحدث. */
-  const final=new Map();
-  out.forEach(u=>{
-    const key=String(u.id||'').trim()||('u:'+String(u.username||'').trim().toLowerCase());
-    if(!key)return;
-    const old=final.get(key);
-    if(!old){final.set(key,u);return}
-    const ot=Date.parse(old.updatedAt||''),ut=Date.parse(u.updatedAt||'');
-    if(isNaN(ot)||(!isNaN(ut)&&ut>=ot))final.set(key,u);
-  });
-  return normalizeUsersLocal([...final.values()]);
-}
-function mergeCollaborativeData(remote){
-  const data=remote||{};
-  const deleted=__syncDeleted||{};
-  const deletedDonors=new Set((deleted.donors||[]).map(String));
-  const deletedCompanies=new Set((deleted.companies||[]).map(String));
-  const deletedHistory=(deleted.history||{});
-  const deletedValueSet=(key)=>new Set((deleted[key]||[]).map(v=>String(v).trim().toLowerCase()));
-  const deletedIndividualHistory=deletedHistory.individual||{};
-  const deletedCompanyHistory=deletedHistory.company||{};
-  const mergeWithTombstones=(remoteList,localList,entityDeleted,historyDeleted)=>{
-    const merged=mergeEntityHistories(remoteList,localList);
-    return (Array.isArray(merged)?merged:[]).filter(x=>x&&x.id!=null&&!entityDeleted.has(String(x.id))).map(x=>{
-      const blocked=new Set((historyDeleted[String(x.id)]||[]).map(String));
-      if(!blocked.size)return x;
-      return {...x,history:(Array.isArray(x.history)?x.history:[]).filter(h=>h&&(!h.hid||!blocked.has(String(h.hid))))};
-    });
-  };
-  return {
-    ...data,
-    users:mergeUsersClientSafe(data.users,USERS),
-    donors:mergeWithTombstones(data.donors,donors,deletedDonors,deletedIndividualHistory),
-    companies:mergeWithTombstones(data.companies,companies,deletedCompanies,deletedCompanyHistory),
-    projects:mergeProjectListsNoLoss_(normalizeProjects(data.projects),projects).filter(p=>p&&!((deleted.projects||[]).map(String).includes(String(p.id)))),
-    channels:normalizeChannelsLocal([...(Array.isArray(data.channels)?data.channels:[]),...(Array.isArray(channels)?channels:[])]).filter(x=>!deletedValueSet('channels').has(String(x).trim().toLowerCase())),
-    intentions:[...new Set([...(Array.isArray(data.intentions)?data.intentions:[]),...(Array.isArray(intentions)?intentions:[])].map(String).filter(Boolean))].filter(x=>!deletedValueSet('intentions').has(String(x).trim().toLowerCase())),
-    importLogs:mergeImportLogsLocal(data.importLogs,importLogs),
-    managerCategories:[...new Set([...(Array.isArray(data.managerCategories)?data.managerCategories:[]),...(Array.isArray(managerCategories)?managerCategories:[])].map(String).filter(Boolean))].filter(x=>!deletedValueSet('managerCategories').has(String(x).trim().toLowerCase())),
-    locations:[...new Set([...(Array.isArray(data.locations)?data.locations:[]),...(Array.isArray(locations)?locations:[])].map(String).filter(Boolean))].filter(x=>!deletedValueSet('locations').has(String(x).trim().toLowerCase())),
-    companyConfig:data.companyConfig||companyConfig
-  };
-}
 
 /* ملحوظة (إصلاح خلل رئيسي): كانت النتيجة المُعادة من syncPull تمثل "هل تغيّرت
    البيانات؟" فقط، وليس "هل نجحت عملية المزامنة؟". وبما أن حالة "نجحت المزامنة
@@ -5344,71 +5251,60 @@ async function login(){
   const passInput=document.getElementById('loginPass');
   const u=(userInput?.value||'').trim();
   const p=passInput?.value||'';
+  if(!u||!p){alert('يرجى إدخال اسم المستخدم وكلمة المرور.');return}
 
-  if(!u || !p){
-    alert('يرجى إدخال اسم المستخدم وكلمة المرور.');
-    return;
-  }
-
-  // Exact match first.
-  let found=USERS.find(x=>x && String(x.username||'').trim()===u);
-
-  // Then normalized match for old data (spaces/case differences).
+  let found=USERS.find(x=>x&&String(x.username||'').trim()===u);
   if(!found){
     const nu=normalizeLoginUsername(u);
-    found=USERS.find(x=>x && normalizeLoginUsername(x.username)===nu);
+    found=USERS.find(x=>x&&normalizeLoginUsername(x.username)===nu);
   }
 
-  if(!found){
-    alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
-    return;
-  }
-
-  /* إذا كانت النسخة المحلية تعرض حالة غير مفعلة/غير نشطة، لا نعتمدها مباشرة.
-     نعيد التحقق من Google Sheets مرة واحدة فقط قبل رفض الدخول؛ المسار الطبيعي
-     (حساب سليم) لا ينتظر مزامنة إضافية، حفاظًا على سرعة تسجيل الدخول. */
-  if(GAS_URL && (found.activated===false || found.active===false)){
+  /* عند وجود ربط مركزي، نتحقق من Google Sheets عندما تكون النسخة المحلية
+     ناقصة أو تحمل حالة غير مفعلة/غير نشطة؛ الحساب السليم لا ينتظر طلبًا إضافيًا. */
+  if(GAS_URL && (!found || found.activated===false || found.active===false)){
     try{
-      await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});
-      found=USERS.find(x=>x&&String(x.id||'')===String(found.id||''))
-        ||USERS.find(x=>x&&normalizeLoginUsername(x.username)===normalizeLoginUsername(u));
+      const central=await fetchCentralUser(u);
+      if(central){
+        const local=found;
+        found={...(local||{}),...central};
+        if(!found.passwordHash&&local?.passwordHash)found.passwordHash=local.passwordHash;
+        /* توافق مع الحسابات القديمة: إذا اكتملت عملية إنشاء كلمة المرور وأُزيل
+           رمز التفعيل، فإن activated=false يكون راية قديمة غير صحيحة وليست طلبًا
+           لتفعيل جديد. نصححها محليًا ثم نرفع التصحيح للمركز. */
+        if(found.activated===false && found.passwordHash && !found.activationToken){
+          found.activated=true;
+          touchUser(found);
+          queueMicrotask(()=>{try{saveUsersReliable().catch(()=>{})}catch(e){}});
+        }
+        const idx=USERS.findIndex(x=>x&&String(x.id||'')===String(found.id||''));
+        if(idx>=0)USERS[idx]=found;else USERS.push(found);
+        safeSet(localStorage,UKEY,JSON.stringify(normalizeUsersLocal(USERS)));
+      }
     }catch(e){}
   }
 
-  if(found?.activated===false){
+  if(!found){alert('اسم المستخدم أو كلمة المرور غير صحيحة.');return}
+  if(found.activated===false){
     alert('هذا الحساب لم يتم تفعيله بعد. استخدم رابط التفعيل الذي أرسله لك مدير النظام.');
     return;
   }
-
-  if(found?.active===false){
+  if(found.active===false){
     alert('هذا الحساب غير نشط. يرجى مراجعة مدير النظام.');
     return;
   }
-
-  if(syncRequiredForUserLogin() && !isCurrentUserAllowedOffline(found)){
+  if(syncRequiredForUserLogin()&&!isCurrentUserAllowedOffline(found)){
     setLoginSyncWait(true,'جارٍ انتظار الربط الفعلي مع Google Sheets...');
     alert('لا يمكن تسجيل دخول هذا المستخدم قبل نجاح المزامنة الفعلية مع Google Sheets.');
     return;
   }
-
   let ok=false;
-  try{
-    ok=await verifyLegacyPassword(found,p);
-  }catch(e){
-    ok=false;
-  }
-
-  if(!ok){
-    alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
-    return;
-  }
-
+  try{ok=await verifyLegacyPassword(found,p)}catch(e){ok=false}
+  if(!ok){alert('اسم المستخدم أو كلمة المرور غير صحيحة.');return}
   if(userInput)userInput.value='';
   if(passInput)passInput.value='';
-
-  // تم إلغاء كود/نافذة الأمان التجريبية من تسجيل الدخول حتى يعمل الحساب على أي جهاز.
   finalizeLogin(found);
 }
+
 function finalizeLogin(user){
   currentUser=user;
   safeSet(sessionStorage,SESSION,user.id);
