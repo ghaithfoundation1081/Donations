@@ -2160,7 +2160,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyL1bj4gR_e0r6SkxWDZgrRBe1SA83lmG4QHuXjh6almZy9vkqYncIKSbOBNGJZj9fFag/exec'; // يظل فارغًا افتراضيًا، ويمكن للنظام استخدام رابط Google Apps Script المحفوظ مسبقًا.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbztqLT7gJVOwZQUq4z15dZMKzbAG3VYV1hJ2ivS7B1I8kuf_dDDU3SuG6eOEYQ4UzGBlg/exec'; // يظل فارغًا افتراضيًا، ويمكن للنظام استخدام رابط Google Apps Script المحفوظ مسبقًا.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2553,6 +2553,9 @@ function doPost(e) {
       writeDonationsLog(saved.donors || []);
       writeCompanyDonationsLog(saved.companies || []);
       return jsonOut({ ok: true, data: saved });
+    } else if (action === 'logEvents') {
+      var addedEv = appendEvents_(payload.events || []);
+      return jsonOut({ ok: true, added: addedEv });
     } else if (action === 'logEvent') {
       // تسجيل فوري لحدث واحد (إضافة/تعديل/حذف/اعتماد/رفض) كسطر دائم لا يُحذف ولا
       // يُعاد كتابته تلقائيًا أبدًا، ولا ينتظر دورة المزامنة الكاملة المؤجلة.
@@ -3033,8 +3036,10 @@ function writeAll(payload) {
   var chunks = [];
   for (var i = 0; i < json.length; i += CHUNK_SIZE) chunks.push([json.substring(i, i + CHUNK_SIZE)]);
   if (!chunks.length) chunks = [['']];
-  sh.clearContents();
+  var prevRows = sh.getLastRow();
   sh.getRange(1, 1, chunks.length, 1).setValues(chunks);
+  if (prevRows > chunks.length) sh.getRange(chunks.length + 1, 1, prevRows - chunks.length, 1).clearContent();
+  try { sh.hideSheet(); } catch (e) {}
   writeMirrorSheets(data);
   return data;
 }
@@ -3046,61 +3051,170 @@ function writeAll(payload) {
   التفاصيل دون فقد الحقول المركبة أو الحركات.
 */
 var MIRROR_JSON_HEADER = 'بيانات النظام الكاملة (JSON)';
-function writeMirrorSheet(name, headers, rows) {
-  var sh = getSheet(name);
-  sh.clearContents();
-  var values = [headers].concat(rows);
-  sh.getRange(1, 1, values.length, headers.length).setValues(values);
-  if (values.length > 1) {
-    sh.getRange(1, 1, 1, headers.length).setFontWeight('bold');
-    sh.getRange(1, 1, values.length, headers.length).setWrap(false);
-    sh.getRange(1, 1, values.length, headers.length).setVerticalAlignment('middle');
-    sh.setFrozenRows(1);
-    sh.autoResizeColumns(1, headers.length);
+var CFG_JSON_SHEET = '_نسخة_الإعدادات';
+/* ---------- تنسيق موحد وجميل لكل التبويبات ---------- */
+function styleTable_(sh, nRows, nCols, opts) {
+  opts = opts || {};
+  try { sh.setRightToLeft(true); } catch (e) {}
+  var hdr = sh.getRange(1, 1, 1, nCols);
+  hdr.setBackground('#0E7A63').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true);
+  sh.setRowHeight(1, 36);
+  sh.setFrozenRows(1);
+  if (nRows > 1) {
+    var n = nRows - 1, bg = [];
+    for (var i = 0; i < n; i++) { var row = []; for (var j = 0; j < nCols; j++) row.push(i % 2 ? '#F1F8F5' : '#FFFFFF'); bg.push(row); }
+    var body = sh.getRange(2, 1, n, nCols);
+    body.setBackgrounds(bg).setVerticalAlignment('middle').setWrap(false);
+    (opts.money || []).forEach(function (c) { sh.getRange(2, c, n, 1).setNumberFormat('#,##0.##'); });
+    (opts.date || []).forEach(function (c) { sh.getRange(2, c, n, 1).setNumberFormat('yyyy-mm-dd'); });
+    (opts.wrap || []).forEach(function (c) { sh.getRange(2, c, n, 1).setWrap(true); });
+  }
+  sh.getRange(1, 1, nRows, nCols).setBorder(true, true, true, true, true, true, '#C9DDD5', SpreadsheetApp.BorderStyle.SOLID);
+  try { sh.autoResizeColumns(1, nCols); } catch (e) {}
+  for (var c = 1; c <= nCols; c++) {
+    var w = sh.getColumnWidth(c);
+    sh.setColumnWidth(c, Math.max(95, Math.min(w + 26, opts.maxWidth || 300)));
+  }
+  (opts.hide || []).forEach(function (c) { try { sh.hideColumns(c); } catch (e) {} });
+  try { sh.getRange(1, 1, nRows, nCols).createFilter(); } catch (e) {}
+  try { sh.setTabColor(opts.tab || '#0E7A63'); } catch (e) {}
+}
+/* يعيد التنسيق الكامل فقط عند تغيّر الأعمدة أو عدد الصفوف؛ غير ذلك يكتب القيم فقط (أسرع) */
+function writeStyledSheet_(sh, headers, rows, opts) {
+  opts = opts || {};
+  var values = [headers].concat(rows), nRows = values.length, nCols = headers.length;
+  var props = PropertiesService.getScriptProperties(), key = 'fmt:' + sh.getName();
+  var sig = headers.join('|') + '#' + nRows + '#' + (opts.hide || []).join(',') + '#v3';
+  var same = false;
+  try { same = props.getProperty(key) === sig; } catch (e) {}
+  if (!same) {
+    try { var f = sh.getFilter(); if (f) f.remove(); } catch (e) {}
+    try { sh.showColumns(1, sh.getMaxColumns()); } catch (e) {}
+    sh.clear();
+  } else {
+    sh.clearContents();
+  }
+  (opts.text || []).forEach(function (c) { sh.getRange(1, c, nRows, 1).setNumberFormat('@'); });
+  sh.getRange(1, 1, nRows, nCols).setValues(values);
+  if (!same) {
+    styleTable_(sh, nRows, nCols, opts);
+    try { props.setProperty(key, sig); } catch (e) {}
   }
 }
+function writeMirrorSheet(name, headers, rows, opts) {
+  writeStyledSheet_(getSheet(name), headers, rows, opts);
+}
+function deleteSheetIfExists_(name) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(name);
+    if (sh && ss.getSheets().length > 1) ss.deleteSheet(sh);
+  } catch (e) {}
+}
+function cellTxt_(item) {
+  if (item && typeof item === 'object') return item.name || item.label || JSON.stringify(item);
+  return item == null ? '' : String(item);
+}
+/* إعدادات الشركات: كل قائمة في عمود مستقل باسم عربي واضح */
+function buildConfigTable_(cfg) {
+  cfg = cfg || {};
+  var labels = { categories: 'فئات الشركات', classifications: 'تصنيف الشركات', stages: 'مراحل الشراكة', activityTypes: 'أنواع الإجراءات', sources: 'مصادر الشركات', donationSources: 'مصادر التبرع', bazaars: 'البازارات', campaigns: 'الحملات', events: 'الإيفنتات', caravans: 'القوافل' };
+  var cols = [];
+  Object.keys(labels).forEach(function (k) { if (Array.isArray(cfg[k])) cols.push({ h: labels[k], v: cfg[k].map(cellTxt_) }); });
+  Object.keys(cfg).forEach(function (k) {
+    if (labels[k] || k === 'departments' || k === 'deletedDepartments') return;
+    if (Array.isArray(cfg[k]) && cfg[k].length && typeof cfg[k][0] !== 'object') cols.push({ h: k, v: cfg[k].map(cellTxt_) });
+  });
+  if (!cols.length) return { headers: ['الإعدادات'], rows: [] };
+  var max = 0; cols.forEach(function (c) { if (c.v.length > max) max = c.v.length; });
+  var rows = [];
+  for (var i = 0; i < max; i++) rows.push(cols.map(function (c) { return c.v[i] || ''; }));
+  return { headers: cols.map(function (c) { return c.h; }), rows: rows };
+}
+function itemsText_(h) {
+  return (h.items || []).map(function (it) { return (it.name || '') + ' × ' + (it.qty || 0) + ' @ ' + (it.price || 0); }).join(' ، ');
+}
+function customText_(h) {
+  var o = h.customFields || {};
+  return Object.keys(o).map(function (k) { return k + ': ' + o[k]; }).join(' | ');
+}
+function donationTypeLabel_(h) { return h.donationType === 'inkind' ? 'عيني' : 'نقدي'; }
+function entityKindLabel_(c, isCo) { return isCo ? (c && c.entityKind === 'جمعية' ? 'جمعية' : 'شركة') : 'فرد'; }
+function financeLabel_(h) {
+  var ms = normalizeMovementStatusForSheet(h.movementStatus);
+  return h.financeStatus === 'approved' ? 'معتمد ماليًا' : (h.financeStatus === 'rejected' ? 'مرفوض ماليًا' : (ms === 'ناجحة' ? 'بانتظار اعتماد الإدارة المالية' : 'معتمد تلقائي'));
+}
+function countType_(list, t) { return (list || []).filter(function (h) { return h && h.type === t; }).length; }
 function writeMirrorSheets(data) {
   data = data || {};
-  var users = data.users || [];
+  var users = data.users || [], userName = {};
+  users.forEach(function (u) { if (u && u.id) userName[u.id] = u.fullName || u.username || ''; });
   writeMirrorSheet('المستخدمون', ['اسم المستخدم','الاسم الكامل','الدور','نشط','بيانات النظام الكاملة (JSON)'], users.map(function(u){
     return [u.username || '', u.fullName || '', u.role || '', u.active === false ? 'غير نشط' : 'نشط', JSON.stringify(u)];
-  }));
+  }), { hide: [5] });
   var donorsList = data.donors || [];
-  writeMirrorSheet('المتبرعون', ['اسم المتبرع','الهاتف','تاريخ التسجيل','عدد الحركات','بيانات النظام الكاملة (JSON)'], donorsList.map(function(d){
-    return [d.name || '', d.phone || '', d.registeredDate || '', (d.history || []).length, JSON.stringify(d)];
-  }));
+  writeMirrorSheet('المتبرعون', ['اسم المتبرع','الهاتف','الموظف المسؤول','تاريخ التسجيل','عدد التبرعات','عدد مرات التواصل','بيانات النظام الكاملة (JSON)'], donorsList.map(function(d){
+    return [d.name || '', d.phone || '', userName[d.employeeId] || '', d.registeredDate || '', countType_(d.history, 'donation'), countType_(d.history, 'contact'), JSON.stringify(d)];
+  }), { hide: [7], text: [2] });
   var companiesList = data.companies || [];
-  writeMirrorSheet('الشركات', ['اسم الشركة','الهاتف','البريد','المسؤول','عدد جهات الاتصال','عدد الإجراءات','عدد التبرعات','بيانات النظام الكاملة (JSON)'], companiesList.map(function(c){
-    var donations = (c.history || []).filter(function(h){return h && h.type === 'donation';}).length;
-    return [c.name || '', c.phone || '', c.email || '', c.employeeId || '', (c.contacts || []).length, (c.history || []).length, donations, JSON.stringify(c)];
-  }));
+  writeMirrorSheet('الشركات', ['اسم الشركة / الجمعية','النوع','الهاتف','البريد','الموظف المسؤول','عدد جهات الاتصال','عدد مرات التواصل','عدد التبرعات','بيانات النظام الكاملة (JSON)'], companiesList.map(function(c){
+    return [c.name || '', entityKindLabel_(c, true), c.phone || '', c.email || '', userName[c.employeeId] || c.employeeId || '', (c.contacts || []).length, countType_(c.history, 'contact') + countType_(c.history, 'activity'), countType_(c.history, 'donation'), JSON.stringify(c)];
+  }), { hide: [9], text: [3] });
   var projectsList = data.projects || [];
   writeMirrorSheet('المشاريع', ['كود المشروع','اسم المشروع','النية','بيانات النظام الكاملة (JSON)'], projectsList.map(function(p){
     return [p && p.code || '', p && p.name || '', p && p.intention || '', JSON.stringify(p)];
-  }));
+  }), { hide: [4] });
   var channelsList = data.channels || [];
-  writeMirrorSheet('قنوات التبرع', ['كود القناة','قناة التبرع','بيانات النظام الكاملة (JSON)'], channelsList.map(function(x){return [codeFor_(data.channelCodes, x), x || '', JSON.stringify(x)];}));
+  writeMirrorSheet('قنوات التبرع', ['كود القناة','قناة التبرع','بيانات النظام الكاملة (JSON)'], channelsList.map(function(x){return [codeFor_(data.channelCodes, x), x || '', JSON.stringify(x)];}), { hide: [3] });
   var intentionsList = data.intentions || [];
-  writeMirrorSheet('النيات', ['كود النية','نوع النية','بيانات النظام الكاملة (JSON)'], intentionsList.map(function(x){return [codeFor_(data.intentionCodes, x), x || '', JSON.stringify(x)];}));
+  writeMirrorSheet('النيات', ['كود النية','نوع النية','بيانات النظام الكاملة (JSON)'], intentionsList.map(function(x){return [codeFor_(data.intentionCodes, x), x || '', JSON.stringify(x)];}), { hide: [3] });
   var cats = data.managerCategories || [];
-  writeMirrorSheet('فئات المديرين', ['الفئة','بيانات النظام الكاملة (JSON)'], cats.map(function(x){return [x || '', JSON.stringify(x)];}));
-  writeMirrorSheet('إعدادات الشركات', ['الإعداد','بيانات النظام الكاملة (JSON)'], [['companyConfig', JSON.stringify(data.companyConfig || null)]]);
-  writeMirrorSheet('إعدادات الشركات (مفصلة)', ['الإعداد','القيمة','الكود'], buildCompanyConfigRows_(data.companyConfig));
-  writeMirrorSheet('الإدارات', ['كود الإدارة','اسم الإدارة'], ((data.companyConfig && data.companyConfig.departments) || []).map(function(d){ return [d && d.code || '', d && d.name || '']; }));
-  writeMirrorSheet('المواقع', ['الموقع'], (data.locations || []).map(function(x){ return [x || '']; }));
-  writeMirrorSheet('التكويدات', ['نوع التكويد','الكود','الاسم'], buildCodesRows_(data));
-  writeMirrorSheet('الحركات', ['النوع','التاريخ','القيمة','الجهة','المشروع','النية','القناة','الموظف المسؤول','حالة الحركة','حالة الاعتماد المالي','ملاحظات','بيانات الحركة الكاملة (JSON)'], buildMovementRows(donorsList, companiesList));
+  writeMirrorSheet('فئات المديرين', ['الفئة','بيانات النظام الكاملة (JSON)'], cats.map(function(x){return [x || '', JSON.stringify(x)];}), { hide: [2] });
+  /* نسخة JSON للإعدادات تُحفظ في تبويب مخفي للاستعادة فقط، والمعروض جدول منسق بأعمدة منفصلة */
+  writeMirrorSheet(CFG_JSON_SHEET, ['الإعداد','بيانات النظام الكاملة (JSON)'], [['companyConfig', JSON.stringify(data.companyConfig || null)]], { hide: [2] });
+  try { getSheet(CFG_JSON_SHEET).hideSheet(); } catch (e) {}
+  deleteSheetIfExists_('إعدادات الشركات (مفصلة)');
+  var cfgT = buildConfigTable_(data.companyConfig);
+  writeMirrorSheet('إعدادات الشركات', cfgT.headers, cfgT.rows, { tab: '#B8860B' });
+  var linkLabel = { bazaars: 'البازارات', campaigns: 'الحملات', events: 'الإيفنتات', caravans: 'القوافل' };
+  var cfg = data.companyConfig || {}, smap = cfg.donationSourceMap || {};
+  writeMirrorSheet('مصادر التبرع', ['مصدر التبرع','القائمة المرتبطة به','عدد العناصر في القائمة'], (cfg.donationSources || []).map(function (x) {
+    var k = smap[x];
+    return [x || '', k && linkLabel[k] ? linkLabel[k] : 'بدون ربط', k && Array.isArray(cfg[k]) ? cfg[k].length : ''];
+  }), { tab: '#B8860B' });
+  writeMirrorSheet('الإدارات', ['كود الإدارة','اسم الإدارة'], (cfg.departments || []).map(function(d){ return [d && d.code || '', d && d.name || '']; }), { tab: '#B8860B' });
+  writeMirrorSheet('المواقع', ['الموقع'], (data.locations || []).map(function(x){ return [x || '']; }), { tab: '#B8860B' });
+  writeMirrorSheet('التكويدات', ['نوع التكويد','الكود','الاسم'], buildCodesRows_(data), { tab: '#B8860B' });
+  var mov = buildMovementRows(donorsList, companiesList);
+  writeMirrorSheet('الحركات', ['نوع الحركة','نوع الجهة','التاريخ','الجهة','رقم التليفون','قيمة التبرع','نوع التبرع','الأصناف (للعيني)','المشروع','النية','قناة/طريقة التبرع','مصدر التبرع','اسم المصدر (بازار/حملة/...)','نوع التواصل','موعد المتابعة','الموظف المسؤول','حالة الحركة','حالة الاعتماد المالي','ملاحظات','حقول إضافية','بيانات الحركة الكاملة (JSON)'], mov, { hide: [21], text: [5], money: [6], date: [3, 15], wrap: [8, 19, 20], tab: '#1F5FA8' });
+  /* سجل التواصل: حركات التواصل فقط (بدون تبرعات) لعرض تاريخ كل متبرع/جهة */
+  var contactRows = mov.filter(function (r) { return r[0] !== 'تبرع'; }).map(function (r) { return [r[2], r[1], r[3], r[4], r[13], r[14], r[15], r[18]]; });
+  writeMirrorSheet('سجل التواصل', ['التاريخ','نوع الجهة','الجهة','رقم التليفون','نوع التواصل','موعد المتابعة','الموظف المسؤول','ملاحظات'], contactRows, { text: [4], date: [1, 6], wrap: [8], tab: '#1F5FA8' });
 }
 function buildMovementRows(donorsList, companiesList) {
   var rows = [];
-  (donorsList || []).forEach(function(d){(d.history || []).forEach(function(h){
-    if (!h || h.type !== 'donation') return;
-    rows.push(['فرد', h.date || '', h.amount == null ? '' : h.amount, d.name || '', h.project || '', h.intention || '', h.method || '', h.responsibleEmployeeName || h.by || '', normalizeMovementStatusForSheet(h.movementStatus), h.financeStatus === 'approved' ? 'معتمد ماليًا' : (h.financeStatus === 'rejected' ? 'مرفوض ماليًا' : (normalizeMovementStatusForSheet(h.movementStatus) === 'ناجحة' ? 'بانتظار اعتماد الإدارة المالية' : 'معتمد تلقائي')), h.notes || '', JSON.stringify({donorId:d.id, donorName:d.name, history:h})]);
-  });});
-  (companiesList || []).forEach(function(c){(c.history || []).forEach(function(h){
-    if (!h || h.type !== 'donation') return;
-    rows.push(['شركة', h.date || '', h.amount == null ? '' : h.amount, c.name || '', h.project || '', h.intention || '', h.method || '', h.responsibleEmployeeName || h.by || '', normalizeMovementStatusForSheet(h.movementStatus), h.financeStatus === 'approved' ? 'معتمد ماليًا' : (h.financeStatus === 'rejected' ? 'مرفوض ماليًا' : (normalizeMovementStatusForSheet(h.movementStatus) === 'ناجحة' ? 'بانتظار اعتماد الإدارة المالية' : 'معتمد تلقائي')), h.notes || '', JSON.stringify({companyId:c.id, companyName:c.name, history:h})]);
-  });});
+  function add(kind, isCo, ent, h) {
+    if (!h) return;
+    var label = h.type === 'donation' ? 'تبرع' : (h.type === 'contact' ? 'تواصل' : (h.type === 'activity' ? 'إجراء' : ''));
+    if (!label) return;
+    var isDon = label === 'تبرع';
+    var ms = normalizeMovementStatusForSheet(h.movementStatus);
+    var json = isCo ? { companyId: ent.id, companyName: ent.name, history: h } : { donorId: ent.id, donorName: ent.name, history: h };
+    rows.push([
+      label, kind, h.date || '', ent.name || '', ent.phone || '',
+      isDon && h.amount != null ? h.amount : '',
+      isDon ? donationTypeLabel_(h) : '',
+      isDon ? itemsText_(h) : '',
+      h.project || '', h.intention || '', h.method || '',
+      isDon ? (h.source || '') : '', isDon ? (h.sourceName || '') : '',
+      isDon ? '' : (h.action || ''), isDon ? '' : (h.nextFollowUp || ''),
+      h.responsibleEmployeeName || h.by || '',
+      isDon ? ms : '', isDon ? financeLabel_(h) : '',
+      h.notes || '', customText_(h), JSON.stringify(json)
+    ]);
+  }
+  (donorsList || []).forEach(function (d) { (d.history || []).forEach(function (h) { add('فرد', false, d, h); }); });
+  (companiesList || []).forEach(function (c) { (c.history || []).forEach(function (h) { add(entityKindLabel_(c, true), true, c, h); }); });
+  rows.sort(function (a, b) { return String(b[2]).localeCompare(String(a[2])); });
   return rows;
 }
 function readMirrorJson(name, jsonColumnIndex) {
@@ -3119,13 +3233,13 @@ function readMirrorJson(name, jsonColumnIndex) {
 }
 function readMirrorSheets() {
   var users = readMirrorJson('المستخدمون', 4);
-  var donors = readMirrorJson('المتبرعون', 4);
-  var companies = readMirrorJson('الشركات', 7);
+  var donors = readMirrorJson('المتبرعون', 6);
+  var companies = readMirrorJson('الشركات', 8);
   var projects = readMirrorJson('المشاريع', 3);
   var channels = readMirrorJson('قنوات التبرع', 2);
   var intentions = readMirrorJson('النيات', 2);
   var managerCategories = readMirrorJson('فئات المديرين', 1);
-  var cfgRows = readMirrorJson('إعدادات الشركات', 1);
+  var cfgRows = readMirrorJson(CFG_JSON_SHEET, 1);
   var hasAny = users.length || donors.length || companies.length || projects.length || channels.length || intentions.length || managerCategories.length || cfgRows.length;
   if (!hasAny) return null;
   return {
@@ -3174,7 +3288,7 @@ function writeDonationsLog(donorsList) {
   sh.clearContents();
   var header = ['التاريخ','قيمة التبرع','اسم المتبرع','رقم التليفون','المشروع','النية',
     'مكان التبرع','قناة/طريقة التبرع','الموظف المسؤول','حالة الحركة','حالة الاعتماد المالي',
-    'ملاحظات','صورة التبرع/الإيصال'];
+    'ملاحظات','صورة التبرع/الإيصال','نوع التبرع','الأصناف (للعيني)','مصدر التبرع','اسم المصدر','نوع الجهة'];
   var rows = [header];
   (donorsList || []).forEach(function (d) {
     (d.history || []).forEach(function (h) {
@@ -3193,23 +3307,18 @@ function writeDonationsLog(donorsList) {
         movementStatus,
         financeStatus,
         h.notes || '',
-        imgCell
+        imgCell,
+        donationTypeLabel_(h), itemsText_(h), h.source || '', h.sourceName || '', 'فرد'
       ]);
     });
   });
-  sh.getRange(1, 1, rows.length, header.length).setValues(rows);
-  if (rows.length > 1) {
-    sh.getRange(1, 1, rows.length, header.length).setWrap(false);
-    sh.setFrozenRows(1);
-    sh.getRange(1, 1, 1, header.length).setFontWeight('bold');
-    sh.autoResizeColumns(1, header.length);
-  }
+  writeStyledSheet_(sh, header, rows.slice(1), { text: [4], money: [2], date: [1], wrap: [12, 15], tab: '#1F5FA8' });
 }
 
 function writeCompanyDonationsLog(companiesList) {
   var sh = getSheet(SHEET_COMPANY_LOG);
   sh.clearContents();
-  var header = ['التاريخ','قيمة التبرع','اسم الشركة','الهاتف','البريد','المشروع','النية','مكان التبرع','قناة/طريقة التبرع','الموظف المسؤول','حالة الحركة','حالة الاعتماد المالي','ملاحظات'];
+  var header = ['التاريخ','قيمة التبرع','اسم الشركة','الهاتف','البريد','المشروع','النية','مكان التبرع','قناة/طريقة التبرع','الموظف المسؤول','حالة الحركة','حالة الاعتماد المالي','ملاحظات','نوع الجهة (شركة/جمعية)','نوع التبرع','الأصناف (للعيني)','مصدر التبرع','اسم المصدر'];
   var rows = [header];
   (companiesList || []).forEach(function (c) {
     (c.history || []).forEach(function (h) {
@@ -3218,37 +3327,67 @@ function writeCompanyDonationsLog(companiesList) {
       var financeStatus = movementStatus === 'ناجحة' ?
         (h.financeStatus === 'approved' ? 'معتمد ماليًا' : (h.financeStatus === 'rejected' ? 'مرفوض ماليًا' : 'بانتظار اعتماد الإدارة المالية')) :
         'معتمد تلقائي';
-      rows.push([h.date || '', h.amount == null ? '' : h.amount, c.name || '', c.phone || '', c.email || '', h.project || '', h.intention || '', h.location || '', h.method || '', h.responsibleEmployeeName || h.by || '', movementStatus, financeStatus, h.notes || '']);
+      rows.push([h.date || '', h.amount == null ? '' : h.amount, c.name || '', c.phone || '', c.email || '', h.project || '', h.intention || '', h.location || '', h.method || '', h.responsibleEmployeeName || h.by || '', movementStatus, financeStatus, h.notes || '', entityKindLabel_(c, true), donationTypeLabel_(h), itemsText_(h), h.source || '', h.sourceName || '']);
     });
   });
-  sh.getRange(1, 1, rows.length, header.length).setValues(rows);
-  if (rows.length > 1) { sh.getRange(1, 1, rows.length, header.length).setWrap(false); sh.setFrozenRows(1); sh.getRange(1,1,1,header.length).setFontWeight('bold'); sh.autoResizeColumns(1,header.length); }
+  writeStyledSheet_(sh, header, rows.slice(1), { text: [4], money: [2], date: [1], wrap: [13, 16], tab: '#1F5FA8' });
 }
 
 // سجل أحداث فوري ودائم: كل استدعاء يضيف سطرًا واحدًا بأسلوب "إلحاق" (append) فقط،
 // ولا يُستخدم فيه أبدًا clearContents أو إعادة كتابة — أي أنه لا يُحذف تلقائيًا مهما
 // تكررت أو تأخرت أو تعارضت عمليات المزامنة الكاملة الأخرى.
-function appendEventLog(payload) {
-  payload = payload || {};
-  var sh = getSheet(SHEET_EVENTS);
-  if (sh.getLastRow() < 1) {
-    var header = ['التاريخ والوقت', 'نوع الحدث', 'نوع الجهة', 'اسم الجهة', 'قيمة التبرع', 'المشروع', 'الموظف/المستخدم', 'حالة الاعتماد المالي', 'ملاحظات'];
-    sh.appendRow(header);
-    sh.getRange(1, 1, 1, header.length).setFontWeight('bold');
+var EVENT_HEADER = ['التاريخ والوقت','نوع الحدث','نوع الجهة','اسم الجهة','قيمة التبرع','المشروع','الموظف/المستخدم','حالة الاعتماد المالي','ملاحظات / التفاصيل','القسم','معرف الحدث'];
+var SHEET_ARCHIVE = 'أرشيف المحذوفات';
+var ARCHIVE_HEADER = ['التاريخ والوقت','القسم','نوع الحدث','الاسم','الموظف/المستخدم','البيانات الكاملة قبل الحذف (JSON)','معرف الحدث'];
+function ensureLogSheet_(name, header, widths, tab) {
+  var sh = getSheet(name);
+  if (sh.getLastRow() < 1 || sh.getLastColumn() < header.length) {
+    sh.getRange(1, 1, 1, header.length).setValues([header]);
+    try { sh.setRightToLeft(true); } catch (e) {}
+    sh.getRange(1, 1, 1, header.length).setBackground('#0E7A63').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true);
+    sh.setRowHeight(1, 36);
     sh.setFrozenRows(1);
+    widths.forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+    try { sh.setTabColor(tab); } catch (e) {}
+    try { sh.protect().setDescription('سجل دائم - لا يُحذف تلقائيًا').setWarningOnly(true); } catch (e) {}
   }
-  sh.appendRow([
-    new Date(),
-    payload.eventType || '',
-    payload.entityType || '',
-    payload.entityName || '',
-    payload.amount === undefined || payload.amount === null ? '' : payload.amount,
-    payload.project || '',
-    payload.actor || '',
-    payload.financeStatusLabelText || '',
-    payload.notes || ''
-  ]);
+  return sh;
 }
+// سجل أحداث دائم: إلحاق فقط (append)، بدون clear أو إعادة كتابة، مع منع تكرار نفس الحدث بمعرّفه.
+function appendEvents_(events) {
+  events = (events || []).filter(function (e) { return e && typeof e === 'object'; });
+  if (!events.length) return 0;
+  var sh = ensureLogSheet_(SHEET_EVENTS, EVENT_HEADER, [150,140,110,200,100,180,150,180,320,120,150], '#7A756A');
+  var idCol = EVENT_HEADER.length, last = sh.getLastRow(), seen = {};
+  if (last > 1) {
+    var from = Math.max(2, last - 3000);
+    sh.getRange(from, idCol, last - from + 1, 1).getValues().forEach(function (r) { if (r[0]) seen[String(r[0])] = true; });
+  }
+  var rows = [], arch = [];
+  events.forEach(function (ev) {
+    var id = String(ev.id || '');
+    if (id && seen[id]) return;
+    if (id) seen[id] = true;
+    var d = ev.ts ? new Date(ev.ts) : new Date();
+    if (isNaN(d.getTime())) d = new Date();
+    rows.push([d, ev.eventType || '', ev.entityType || '', ev.entityName || '', ev.amount === undefined || ev.amount === null ? '' : ev.amount, ev.project || '', ev.actor || '', ev.financeStatusLabelText || '', ev.notes || '', ev.section || '', id]);
+    if (ev.archive) arch.push([d, ev.section || '', ev.eventType || '', ev.entityName || '', ev.actor || '', String(ev.archive).substring(0, 45000), id]);
+  });
+  if (rows.length) {
+    var r0 = sh.getLastRow() + 1;
+    sh.getRange(r0, 1, rows.length, EVENT_HEADER.length).setValues(rows);
+    sh.getRange(r0, 1, rows.length, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
+    sh.getRange(r0, 9, rows.length, 1).setWrap(true);
+  }
+  if (arch.length) {
+    var ash = ensureLogSheet_(SHEET_ARCHIVE, ARCHIVE_HEADER, [150,120,140,200,150,500,150], '#A32D2D');
+    var a0 = ash.getLastRow() + 1;
+    ash.getRange(a0, 1, arch.length, ARCHIVE_HEADER.length).setValues(arch);
+    ash.getRange(a0, 1, arch.length, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
+  }
+  return rows.length;
+}
+function appendEventLog(payload) { appendEvents_([payload || {}]); }
 
 function normalizeMovementStatusForSheet(value) {
   var v = String(value || '').trim().replace(/[ًٌٍَُِّْـ]/g, '');
@@ -3802,23 +3941,86 @@ function sendInstantDonationLog(eventType,info){
     }).catch(()=>{});
   }catch(e){}
 }
-function logDonationChangesAndSnapshot(){
-  const current=__snapshotDonationState();
-  if(!GAS_URL){__lastDonationSnapshot=current;return}
-  const prev=__lastDonationSnapshot||{};
-  Object.keys(current).forEach(hid=>{
-    const cur=current[hid],old=prev[hid];
-    if(!old){sendInstantDonationLog('إضافة تبرع',cur);return}
-    if(old.financeStatus!==cur.financeStatus){
-      sendInstantDonationLog(cur.financeStatus==='approved'?'اعتماد مالي':(cur.financeStatus==='rejected'?'رفض مالي':'تعديل تبرع'),cur);
-    }else if(old.amount!==cur.amount||old.project!==cur.project||old.movementStatus!==cur.movementStatus){
-      sendInstantDonationLog('تعديل تبرع',cur);
-    }
-  });
-  Object.keys(prev).forEach(hid=>{if(!current[hid])sendInstantDonationLog('حذف تبرع',prev[hid])});
-  __lastDonationSnapshot=current;
-}
+function logDonationChangesAndSnapshot(){__logAllChanges()}
 
+/* ===== سجل الحركات الفوري والدائم: كل شيء يُسجَّل في الشيت لحظة حدوثه ولا يُفقد =====
+   يشمل: التبرعات، التواصل، المتبرعين، الشركات/الجمعيات، التكويد (مشاريع/قنوات/نيات/مصادر/بازارات/حملات/...)،
+   المستخدمين، الإدارات. أي إضافة أو تعديل أو حذف. الأحداث تُحفظ في طابور محلي دائم وتُعاد محاولة إرسالها
+   حتى تصل (أوفلاين/فشل مؤقت)، ولكل حدث معرّف فلا يتكرر في الشيت. الحذف يُسجَّل معه أرشيف كامل للبيانات. */
+const EVQ_KEY='donors_event_queue_v2';
+let __lastAllSnap=null,__evq=[],__evFlushing=false,__evRetryTimer=null;
+try{__evq=JSON.parse(safeGet(localStorage,EVQ_KEY)||'[]');if(!Array.isArray(__evq))__evq=[]}catch(e){__evq=[]}
+const __CFG_LABELS={categories:'فئة شركات',classifications:'تصنيف شركات',stages:'مرحلة شراكة',activityTypes:'نوع إجراء',sources:'مصدر شركات',donationSources:'مصدر تبرع',bazaars:'بازار',campaigns:'حملة',events:'إيفنت',caravans:'قافلة'};
+function __t(v){return v==null?'':(typeof v==='object'?String(v.name||v.label||JSON.stringify(v)):String(v)).trim()}
+function __stripJson(o){try{return JSON.stringify(o,(k,v)=>k==='attachmentData'?undefined:v)||''}catch(e){return ''}}
+function __donF(h){return {'المبلغ':h.amount,'نوع التبرع':h.donationType==='inkind'?'عيني':'نقدي','المشروع':h.project,'النية':h.intention,'القناة':h.method,'مصدر التبرع':h.source,'اسم المصدر':h.sourceName,'حالة الحركة':h.movementStatus,'الاعتماد المالي':__financeLabelFor({financeStatus:h.financeStatus||'pending',movementStatus:h.movementStatus}),'ملاحظات':h.notes}}
+function __contF(h){return {'التاريخ':h.date,'نوع التواصل/الإجراء':h.action,'موعد المتابعة':h.nextFollowUp,'ملاحظات':h.notes}}
+function __fdesc(f){return Object.keys(f||{}).filter(k=>f[k]!==''&&f[k]!=null).map(k=>k+': '+f[k]).join(' | ')}
+function __fdiff(o,n){const ks=new Set([...Object.keys(o||{}),...Object.keys(n||{})]),out=[];ks.forEach(k=>{const a=o&&o[k]==null?'':String(o[k]),b=n&&n[k]==null?'':String(n[k]);if(a!==b)out.push(k+': '+(a||'—')+' ← '+(b||'—'))});return out.join(' | ')}
+function __snapAll(){
+  const m={};
+  const put=(key,group,kind,name,f,ref,extra)=>{m[key]=Object.assign({group,kind,name:name||'',f:f||{},ref},extra||{})};
+  (Array.isArray(donors)?donors:[]).forEach(d=>{if(!d||d.id==null)return;
+    put('d:'+d.id,'متبرعون','متبرع',d.name,{'الاسم':d.name,'الهاتف':d.phone,'الموظف المسؤول':d.employeeId},d);
+    (d.history||[]).forEach(h=>{if(!h||!h.hid)return;
+      if(h.type==='donation')put('dn:'+h.hid,'تبرعات','تبرع',d.name,__donF(h),h,{ent:'فرد',amount:h.amount,project:h.project,fin:h.financeStatus||'pending',ms:h.movementStatus});
+      else if(h.type==='contact')put('dc:'+h.hid,'تواصل','تواصل',d.name,__contF(h),h,{ent:'فرد'});
+    })});
+  (Array.isArray(companies)?companies:[]).forEach(c=>{if(!c||c.id==null)return;const k=c.entityKind==='جمعية'?'جمعية':'شركة';
+    put('c:'+c.id,'شركات وجمعيات',k,c.name,{'الاسم':c.name,'الهاتف':c.phone,'البريد':c.email,'النوع':k},c);
+    (c.history||[]).forEach(h=>{if(!h||!h.hid)return;
+      if(h.type==='donation')put('cn:'+h.hid,'تبرعات','تبرع',c.name,__donF(h),h,{ent:k,amount:h.amount,project:h.project,fin:h.financeStatus||'pending',ms:h.movementStatus});
+      else if(h.type==='contact'||h.type==='activity')put('cc:'+h.hid,'تواصل',h.type==='contact'?'تواصل':'إجراء',c.name,__contF(h),h,{ent:k});
+    })});
+  (Array.isArray(projects)?projects:[]).forEach(p=>{if(p&&p.name)put('p:'+(p.code||p.name),'تكويد','مشروع',p.name,{'الاسم':p.name,'الكود':p.code,'النية':p.intention},p)});
+  const simple=(arr,pre,kind)=>(Array.isArray(arr)?arr:[]).forEach(x=>{const n=__t(x);if(n)put(pre+normName(n),'تكويد',kind,n,{'الاسم':n},n)});
+  simple(channels,'ch:','قناة تبرع');simple(intentions,'nt:','نية');simple(managerCategories,'mc:','فئة مديرين');simple(locations,'lo:','موقع');
+  const cfg=companyConfig||{};
+  Object.keys(__CFG_LABELS).forEach(k=>simple(cfg[k],'cf:'+k+':',__CFG_LABELS[k]));
+  (Array.isArray(cfg.departments)?cfg.departments:[]).forEach(d=>{if(d&&d.id)put('dp:'+d.id,'تكويد','إدارة',d.name,{'الاسم':d.name,'الكود':d.code},d)});
+  (Array.isArray(USERS)?USERS:[]).forEach(u=>{if(u&&u.id!=null)put('u:'+u.id,'مستخدمون','مستخدم',u.fullName||u.username,{'الاسم':u.fullName,'اسم المستخدم':u.username,'الدور':u.role,'الحالة':u.active===false?'غير نشط':'نشط'},u)});
+  return m;
+}
+function __evSave(){try{safeSet(localStorage,EVQ_KEY,JSON.stringify(__evq.slice(-1000).map(e=>e.archive&&e.archive.length>8000?Object.assign({},e,{archive:e.archive.slice(0,8000)}):e)))}catch(e){}}
+function __logAllChanges(){
+  let cur;try{cur=__snapAll()}catch(e){return}
+  const prev=__lastAllSnap;__lastAllSnap=cur;
+  if(!prev||!GAS_URL)return;
+  const actor=(currentUser&&currentUser.fullName)||'',now=new Date().toISOString(),out=[];
+  const mk=(type,e,extra)=>out.push(Object.assign({id:uid(),ts:now,eventType:type,section:e.group,entityType:e.ent||e.kind,entityName:e.name,amount:e.amount==null?'':e.amount,project:e.project||'',actor,financeStatusLabelText:e.fin!==undefined?__financeLabelFor({financeStatus:e.fin,movementStatus:e.ms}):'',notes:''},extra||{}));
+  Object.keys(cur).forEach(k=>{const e=cur[k],o=prev[k];
+    if(!o){mk('إضافة '+e.kind,e,{notes:__fdesc(e.f)});return}
+    const ch=__fdiff(o.f,e.f);if(!ch)return;
+    let type='تعديل '+e.kind;
+    if(e.kind==='تبرع'&&o.fin!==e.fin)type=e.fin==='approved'?'اعتماد مالي':(e.fin==='rejected'?'رفض مالي':'تعديل تبرع');
+    mk(type,e,{notes:ch});
+  });
+  Object.keys(prev).forEach(k=>{if(cur[k])return;const o=prev[k];
+    mk('حذف '+o.kind,o,{notes:__fdesc(o.f),archive:(o.group==='مستخدمون'?JSON.stringify(o.f):__stripJson(o.ref)).slice(0,45000)});
+  });
+  if(!out.length)return;
+  out.forEach(ev=>__evq.push(ev));__evSave();__evFlush();
+}
+async function __evFlush(){
+  if(__evFlushing||!GAS_URL||!__evq.length)return;
+  __evFlushing=true;
+  try{
+    while(__evq.length){
+      const batch=__evq.slice(0,100);let res=null;
+      try{res=await gasCall('logEvents',{events:batch})}catch(e){res=null}
+      if(res&&res.error&&/غير معروف/.test(String(res.error))){ /* كود شيت قديم: إرسال فردي */
+        for(const ev of batch){const r=await gasCall('logEvent',ev);if(!r||r.error)throw new Error('evlog')}
+        res={ok:true};
+      }
+      if(!res||res.error)throw new Error('evlog');
+      __evq.splice(0,batch.length);__evSave();
+    }
+  }catch(e){clearTimeout(__evRetryTimer);__evRetryTimer=setTimeout(__evFlush,15000)}
+  finally{__evFlushing=false}
+}
+window.addEventListener('online',()=>{__evFlush()});
+setInterval(()=>{__evFlush()},60000);setTimeout(()=>{__evFlush()},4000);
+window.addEventListener('pagehide',()=>{try{if(GAS_URL&&__evq.length&&navigator.sendBeacon)navigator.sendBeacon(GAS_URL,new Blob([JSON.stringify({action:'logEvents',payload:{events:__evq.slice(0,200)},key:GAS_ACCESS_KEY})],{type:'text/plain;charset=utf-8'}))}catch(e){}});
 function persist(){safeSet(localStorage,DKEY,JSON.stringify(donors));logDonationChangesAndSnapshot();syncPushDebounced();refreshFinanceBadge();showSaveToast('تم الحفظ')}
 function persistCompanies(){safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));logDonationChangesAndSnapshot();syncPushDebounced();showSaveToast('تم الحفظ')}
 function persistCompanyConfig(){companyConfig=normalizeCompanyConfig(companyConfig);safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));syncPushDebounced();showSaveToast('تم الحفظ')}
@@ -4155,7 +4357,7 @@ async function loadAll(){
     if(isAdminPortal() && Array.isArray(USERS)&&USERS.length) unlockNonAdminLogin();
     else lockNonAdminLogin('النظام غير مرتبط بـ Google Sheets — حسابات المستخدمين مقفلة حتى يتم الربط الفعلي.');
   }
-  __lastDonationSnapshot=__snapshotDonationState(); /* نقطة انطلاق السجل الفوري: لا نسجّل الحركات الموجودة مسبقًا كـ"جديدة" */
+  try{__lastAllSnap=__snapAll()}catch(e){} __lastDonationSnapshot=__snapshotDonationState(); /* نقطة انطلاق السجل الفوري: لا نسجّل الحركات الموجودة مسبقًا كـ"جديدة" */
   USERS.forEach(u=>{if(typeof u.active==='undefined')u.active=true;if(!u.followScope)u.followScope='both';if(!u.permissions)u.permissions=defaultPermissionsFor(u);});
   await migrateLegacyPasswords();
   saveUsers();
@@ -4471,6 +4673,7 @@ async function syncPull(options){
       safeSet(localStorage,IKEY,JSON.stringify(intentions));
       safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));
       safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));
+      try{__lastAllSnap=__snapAll()}catch(e){}
     }
 
     lastSyncAt=new Date().toISOString();
@@ -4618,6 +4821,7 @@ function __restorePendingSnapshot(){
   }catch(e){return false}
 }
 function syncPushDebounced(){
+  try{__logAllChanges()}catch(e){}
   __localDirty=true;__localRevision++;
   __queueDurableSnapshot();
   if(!GAS_URL)return;
@@ -4684,6 +4888,7 @@ async function syncPushNow(options){
       safeSet(localStorage,COMPANYKEY,JSON.stringify(companies));safeSet(localStorage,PKEY,JSON.stringify(projects));
       safeSet(localStorage,CKEY,JSON.stringify(channels));safeSet(localStorage,IKEY,JSON.stringify(intentions));
       safeSet(localStorage,MCKEY,JSON.stringify(managerCategories));safeSet(localStorage,COMPANYCONFIGKEY,JSON.stringify(companyConfig));
+      try{__lastAllSnap=__snapAll()}catch(e){}
     }
     if(__localRevision===revisionAtStart && (safeGet(localStorage,PENDING_SYNC_KEY)||'')===pendingAtStart){
       __localDirty=false;__clearDurableSnapshotIfCurrent();
@@ -4699,7 +4904,7 @@ async function syncPushNow(options){
       return false;
     }
     __lastPushError='';
-    setConnStatus('on');return true;
+    setConnStatus('on');__evFlush();return true;
   }catch(e){
     __queueDurableSnapshot();setConnStatus('off');
     __lastPushError=(e&&e.message)?e.message:'تعذر حفظ التعديلات على جوجل شيت';
@@ -8726,7 +8931,7 @@ function importEmployeeOptions(){
 function openImport(){
   if(!currentUser||!canModule('importData','add',currentUser)){alert('ليس لديك صلاحية استيراد البيانات.');return}
   ensureProjectCodes();ensureChannelCodes();ensureIntentionCodes();
-  openModal(`<h3>استيراد بيانات</h3><div class="small-note" style="margin-bottom:10px">الشيت القياسي الموحد مع تابة <b>تبرع جديد</b>: <b>التاريخ، قيمة التبرع، اسم المتبرع، رقم التليفون، المشروع، النية، مكان التبرع، قناة/طريقة التبرع، الموظف المسؤول، حالة الحركة، حالة الاعتماد المالي، ملاحظات</b>. <br>حالة الحركة إلزامية، وحالة الاعتماد المالي يتم تحديدها تلقائيًا: <b>ناجحة = بانتظار اعتماد الإدارة المالية</b>، وأي حالة أخرى = <b>معتمد</b>.<br><br><b>لتفادي أخطاء الكتابة اليدوية:</b> يمكنك كتابة <b>كود المشروع</b> (مثل P1) بدلًا من اسمه الكامل في عمود "المشروع"، و<b>كود القناة</b> (مثل C1) بدلًا من اسمها في عمود "قناة/طريقة التبرع"، و<b>كود النية</b> (مثل N1) بدلًا من كتابتها في عمود "النية"، و<b>كود حالة الحركة</b> (1=ناجحة، 2=مرفوضة، 3=قيد التنفيذ، 4=اخرى) بدلًا من كتابتها كاملة. الاسم الكامل ما زال يعمل أيضًا لو فضّلت كتابته يدويًا. اضغط "عرض الأكواد الحالية" لمعرفة كود كل عنصر، أو نزّل نموذج الشيت لتجدها في تبويب منفصل بداخله.<br><br><b>شروط القبول:</b> يُرفض السطر إن كان التاريخ غير صحيح أو بصيغة غير مدعومة (yyyy-mm-dd) أو تاريخًا مستقبليًا، أو كان المشروع/القناة/النية (لو كُتبت) غير موجودين أصلًا في النظام بنفس الاسم أو الكود.<br><br><b>التبرع العيني:</b> اكتب «عيني» في عمود «نوع التبرع»، واترك عمود «قيمة التبرع» فارغًا، واكتب الأصناف في العمود الأخير بالصيغة: اسم:كمية:سعر؛اسم:كمية:سعر (مثال: بطاطين:10:50؛ملابس:5:80). القيمة الإجمالية تُحسب تلقائيًا من الأصناف. لو العمود فاضي أو كتبت «نقدي»، تُعامل الحركة كتبرع نقدي عادي.</div><div class="field"><label>الموظف المسؤول عن البيانات المستوردة</label><select id="importEmployeeSelect">${importEmployeeOptions()}</select></div><div class="field"><input type="file" id="importFile" accept=".xlsx,.xls,.csv,.tsv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></div><div class="field"><textarea id="importText" style="min-height:150px" placeholder="2026-08-18\t500\tإسلام أحمد\t010...\tP1\tN1\tالقاهرة\tC1\tالموظف المسؤول\t1\tتحدد تلقائيًا\tملاحظة"></textarea></div><div class="modal-actions"><button class="btn-primary" onclick="runImport()">استيراد</button><button class="btn-outline" onclick="downloadImportTemplate()">تنزيل نموذج الشيت</button><button class="btn-outline" onclick="openImportCodesReference()">عرض الأكواد الحالية</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
+  openModal(`<h3>استيراد بيانات</h3><div class="small-note" style="margin-bottom:10px">الشيت القياسي الموحد مع تابة <b>تبرع جديد</b>: <b>التاريخ، قيمة التبرع، اسم المتبرع، رقم التليفون، المشروع، النية، مكان التبرع، قناة/طريقة التبرع، الموظف المسؤول، حالة الحركة، حالة الاعتماد المالي، ملاحظات</b>. <br>حالة الحركة إلزامية، وحالة الاعتماد المالي يتم تحديدها تلقائيًا: <b>ناجحة = بانتظار اعتماد الإدارة المالية</b>، وأي حالة أخرى = <b>معتمد</b>.<br><br><b>لتفادي أخطاء الكتابة اليدوية:</b> يمكنك كتابة <b>كود المشروع</b> (مثل P1) بدلًا من اسمه الكامل في عمود "المشروع"، و<b>كود القناة</b> (مثل C1) بدلًا من اسمها في عمود "قناة/طريقة التبرع"، و<b>كود النية</b> (مثل N1) بدلًا من كتابتها في عمود "النية"، و<b>كود حالة الحركة</b> (1=ناجحة، 2=مرفوضة، 3=قيد التنفيذ، 4=اخرى) بدلًا من كتابتها كاملة. الاسم الكامل ما زال يعمل أيضًا لو فضّلت كتابته يدويًا. اضغط "عرض الأكواد الحالية" لمعرفة كود كل عنصر، أو نزّل نموذج الشيت لتجدها في تبويب منفصل بداخله.<br><br><b>شروط القبول:</b> يُرفض السطر إن كان التاريخ غير صحيح أو بصيغة غير مدعومة (yyyy-mm-dd) أو تاريخًا مستقبليًا، أو كان المشروع/القناة/النية (لو كُتبت) غير موجودين أصلًا في النظام بنفس الاسم أو الكود.<br><br><b>التبرع العيني:</b> اكتب «عيني» في عمود «نوع التبرع»، واترك عمود «قيمة التبرع» فارغًا، واكتب الأصناف في العمود الأخير بالصيغة: اسم:كمية:سعر؛اسم:كمية:سعر (مثال: بطاطين:10:50؛ملابس:5:80). القيمة الإجمالية تُحسب تلقائيًا من الأصناف. لو العمود فاضي أو كتبت «نقدي»، تُعامل الحركة كتبرع نقدي عادي.<br><br><b>الأعمدة الجديدة:</b> «نوع الحركة» (تبرع / تواصل فقط)، «نوع الجهة» (فرد / شركة / جمعية — الشركة والجمعية لازم تكون مكودة في النظام بنفس الاسم)، «مصدر التبرع» و«اسم المصدر» (بازار / حملة / إيفنت / قافلة)، وأي معيار جديد يُضاف في «تبرع جديد» يظهر تلقائيًا في نموذج الشيت. <b>حركة التواصل فقط:</b> اكتب «تواصل» في «نوع الحركة» واختر «نوع التواصل»، ولا تحتاج قيمة أو مشروع أو نية أو قناة، وتظهر في سجل المتبرع/الجهة دون أي أثر مالي.</div><div class="field"><label>الموظف المسؤول عن البيانات المستوردة</label><select id="importEmployeeSelect">${importEmployeeOptions()}</select></div><div class="field"><input type="file" id="importFile" accept=".xlsx,.xls,.csv,.tsv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></div><div class="field"><textarea id="importText" style="min-height:150px" placeholder="2026-08-18\t500\tإسلام أحمد\t010...\tP1\tN1\tالقاهرة\tC1\tالموظف المسؤول\t1\tتحدد تلقائيًا\tملاحظة"></textarea></div><div class="modal-actions"><button class="btn-primary" onclick="runImport()">استيراد</button><button class="btn-outline" onclick="downloadImportTemplate()">تنزيل نموذج الشيت</button><button class="btn-outline" onclick="openImportCodesReference()">عرض الأكواد الحالية</button><button class="btn-outline" onclick="closeModal()">إلغاء</button></div>`);
   const fileEl=document.getElementById('importFile'); fileEl.onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const ext=(f.name.split('.').pop()||'').toLowerCase();if((ext==='xlsx'||ext==='xls')&&window.XLSX){const buf=await f.arrayBuffer();const wb=XLSX.read(buf,{type:'array',cellDates:false,raw:false});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});document.getElementById('importText').value=rows.map(r=>r.map(v=>String(v??'').trim()).join('\t')).join('\n')}else{const r=new FileReader();r.onload=ev=>document.getElementById('importText').value=ev.target.result;r.readAsText(f,'UTF-8')}}catch(err){alert('تعذر قراءة ملف Excel/CSV. تأكد أن الملف سليم ثم حاول مرة أخرى.')}};
 }
 function openImportCodesReference(){
@@ -11423,5 +11628,190 @@ setTimeout(applyTabs,300);
 })();
 </script>
 
+<script id="erp-import-template-dropdowns">
+(function(){
+if(window.__impDD)return;window.__impDD=1;
+const X=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const SEP=' — ';
+/* ---- عمود Excel ---- */
+const colL=i=>{let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s};
+/* ---- ZIP بسيط (بدون ضغط) بدون أي مكتبة خارجية ---- */
+const CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRC[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0};
+function zip(files){
+ const enc=new TextEncoder(),parts=[],cen=[];let off=0;
+ const u16=v=>[v&255,(v>>>8)&255],u32=v=>[v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255];
+ files.forEach(([name,txt])=>{
+  const nb=enc.encode(name),db=enc.encode(txt),crc=crc32(db);
+  const lh=new Uint8Array([0x50,0x4B,3,4,...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0x21),...u32(crc),...u32(db.length),...u32(db.length),...u16(nb.length),...u16(0)]);
+  parts.push(lh,nb,db);
+  cen.push(new Uint8Array([0x50,0x4B,1,2,...u16(20),...u16(20),...u16(0x0800),...u16(0),...u16(0),...u16(0x21),...u32(crc),...u32(db.length),...u32(db.length),...u16(nb.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(off)]),nb);
+  off+=lh.length+nb.length+db.length});
+ const cs=cen.reduce((s,a)=>s+a.length,0);
+ const end=new Uint8Array([0x50,0x4B,5,6,...u16(0),...u16(0),...u16(files.length),...u16(files.length),...u32(cs),...u32(off),...u16(0)]);
+ return new Blob([...parts,...cen,end],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+/* ---- خلايا ---- */
+const cs=(r,c,v,s)=>'<c r="'+colL(c)+r+'"'+(s!==undefined?' s="'+s+'"':'')+' t="inlineStr"><is><t xml:space="preserve">'+X(v)+'</t></is></c>';
+const cn=(r,c,v,s)=>'<c r="'+colL(c)+r+'"'+(s!==undefined?' s="'+s+'"':'')+'><v>'+Number(v)+'</v></c>';
+const row=(r,cells,ht)=>'<row r="'+r+'"'+(ht?' ht="'+ht+'" customHeight="1"':'')+'>'+cells.join('')+'</row>';
+const NS='xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+const cols=w=>'<cols>'+w.map((x,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+x[0]+'" customWidth="1"'+(x[1]!==undefined?' style="'+x[1]+'"':'')+'/>').join('')+'</cols>';
+const view=(frozen,rtl)=>'<sheetViews><sheetView '+(rtl?'rightToLeft="1" ':'')+'workbookViewId="0">'+(frozen?'<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/>':'')+'</sheetView></sheetViews>';
+const STYLES='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet '+NS+'><fonts count="3"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="11"/><color rgb="FF0B5F50"/><name val="Arial"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0E7A63"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF7F2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFB7CFC7"/></left><right style="thin"><color rgb="FFB7CFC7"/></right><top style="thin"><color rgb="FFB7CFC7"/></top><bottom style="thin"><color rgb="FFB7CFC7"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+const LISTS_NAME='القوائم', DATA_NAME='بيانات الاستيراد', CODES_NAME='الأكواد';
+
+window.buildImportTemplateBlob=function(){
+ ensureProjectCodes();ensureChannelCodes();ensureIntentionCodes();
+ const lp=projects.map(p=>(p.code||'')+SEP+(p.name||'')).filter(x=>x!==SEP);
+ const lc=channels.map(c=>channelCode(c)+SEP+c);
+ const li=intentions.map(x=>intentionCode(x)+SEP+x);
+ const ls=Object.keys(MOVEMENT_STATUS_CODES).map(k=>k+SEP+MOVEMENT_STATUS_CODES[k]);
+ const lt=['نقدي','عيني'];const EX=importExtraCols();
+ const lists=[['المشاريع (الكود — الاسم)',lp],['النيات (الكود — الاسم)',li],['القنوات وطرق التبرع (الكود — الاسم)',lc],['حالة الحركة (الكود — الاسم)',ls],['نوع التبرع',lt],...EX.filter(x=>x.list).map(x=>[x.title,x.list])];
+ /* --- ورقة القوائم --- */
+ const maxLen=Math.max(...lists.map(l=>l[1].length),1);
+ let lrows=row(1,lists.map((l,i)=>cs(1,i,l[0],3)),30);
+ for(let r=0;r<maxLen;r++)lrows+=row(r+2,lists.map((l,i)=>l[1][r]!==undefined?cs(r+2,i,l[1][r]):'').filter(Boolean));
+ const listsXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet '+NS+'>'+view(true,true)+'<sheetFormatPr defaultRowHeight="15"/>'+cols(lists.map(()=>[32]))+'<sheetData>'+lrows+'</sheetData></worksheet>';
+ const ref=i=>"'"+LISTS_NAME+"'!$"+colL(i)+'$2:$'+colL(i)+'$'+(Math.max(lists[i][1].length,1)+1);
+ /* --- ورقة البيانات --- */
+ const H=['التاريخ (yyyy-mm-dd)','قيمة التبرع (نقدي فقط — اتركه فارغًا للعيني)','اسم المتبرع','رقم التليفون','المشروع ▼ (اختر من القائمة)','النية ▼ (اختر من القائمة)','(عمود غير مستخدم — اتركه فارغًا)','قناة/طريقة التبرع ▼ (اختر من القائمة)','الموظف المسؤول','حالة الحركة ▼ (اختر من القائمة)','حالة الاعتماد المالي','ملاحظات','نوع التبرع ▼ (نقدي/عيني)','الأصناف (للعيني فقط — اسم:كمية:سعر؛اسم:كمية:سعر)',...EX.map(x=>x.h)];
+ const p0=lp[0]||'',i0=li[0]||'',c0=lc[0]||'',s0=ls[0]||'';
+ const ex1=[['t',todayStr(),2],['n',500],['t','مثال: إسلام أحمد'],['t','01000000000',2],['t',p0],['t',i0],['t',''],['t',c0],['t','يحدد من شاشة الاستيراد'],['t',s0],['t','تلقائيًا — بانتظار اعتماد الإدارة المالية'],['t',''],['t','نقدي'],['t',''],...EX.map(x=>['t',x.e1||''])];
+ const ex2=[['t',todayStr(),2],['t',''],['t','مثال: منى سعيد'],['t','01000000001',2],['t',p0],['t',i0],['t',''],['t',c0],['t','يحدد من شاشة الاستيراد'],['t',s0],['t','تلقائيًا — بانتظار اعتماد الإدارة المالية'],['t',''],['t','عيني'],['t','بطاطين:10:50؛ملابس:5:80'],...EX.map(x=>['t',x.e2||''])];const ex3=[['t',todayStr(),2],['t',''],['t','مثال: أحمد علي'],['t','01000000002',2],['t',''],['t',''],['t',''],['t',''],['t',''],['t',''],['t',''],['t','تواصل فقط — بدون تبرع فعلي'],['t',''],['t',''],...EX.map(x=>['t',x.e3||''])];
+ const mkRow=(r,a)=>row(r,a.map((c,i)=>c[0]==='n'?cn(r,i,c[1]):cs(r,i,c[1],c[2])).filter((x,i)=>!(a[i][0]==='t'&&a[i][1]==='')));
+ const dvCol=(i,l,title,prompt)=>'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" errorTitle="قيمة غير صحيحة" error="اختر قيمة من القائمة المنسدلة فقط." promptTitle="'+X(title)+'" prompt="'+X(prompt)+'" sqref="'+colL(i)+'2:'+colL(i)+'3000"><formula1>'+X(ref(l))+'</formula1></dataValidation>';
+ const dvs=[dvCol(4,0,'المشروع','اختر المشروع من القائمة (الكود — الاسم).'),dvCol(5,1,'النية','اختر النية من القائمة (الكود — الاسم).'),dvCol(7,2,'القناة','اختر قناة/طريقة التبرع من القائمة.'),dvCol(9,3,'حالة الحركة','اختر حالة الحركة من القائمة.'),dvCol(12,4,'نوع التبرع','نقدي أو عيني.'),...EX.map((x,j)=>x.list?dvCol(14+j,5+EX.filter((y,k)=>k<j&&y.list).length,x.title,'اختر من القائمة.'):'').filter(Boolean)];
+ const dataXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet '+NS+'>'+view(true,true)+'<sheetFormatPr defaultRowHeight="15"/>'+cols([[16,2],[20],[24],[16,2],[34],[26],[18],[34],[24],[22],[30],[24],[16],[42],...EX.map(()=>[26])])+'<sheetData>'+row(1,H.map((h,i)=>cs(1,i,h,1)),48)+mkRow(2,ex1)+mkRow(3,ex2)+mkRow(4,ex3)+'</sheetData><dataValidations count="'+dvs.length+'">'+dvs.join('')+'</dataValidations></worksheet>';
+ /* --- ورقة الأكواد المرجعية --- */
+ let crow=row(1,['نوع العنصر','الكود','الاسم/الوصف'].map((h,i)=>cs(1,i,h,3))),r=2;
+ projects.forEach(p=>crow+=row(r++,[cs(r,0,'مشروع'),cs(r,1,p.code||''),cs(r,2,p.name||'')]));
+ channels.forEach(c=>crow+=row(r++,[cs(r,0,'قناة/طريقة تبرع'),cs(r,1,channelCode(c)),cs(r,2,c)]));
+ intentions.forEach(x=>crow+=row(r++,[cs(r,0,'نية'),cs(r,1,intentionCode(x)),cs(r,2,x)]));
+ Object.keys(MOVEMENT_STATUS_CODES).forEach(k=>crow+=row(r++,[cs(r,0,'حالة الحركة'),cs(r,1,k),cs(r,2,MOVEMENT_STATUS_CODES[k])]));
+ const codesXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet '+NS+'>'+view(true,true)+'<sheetFormatPr defaultRowHeight="15"/>'+cols([[20],[10],[36]])+'<sheetData>'+crow+'</sheetData></worksheet>';
+ const R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+ return zip([
+  ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'],
+  ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="'+R+'/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+  ['xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook '+NS+' xmlns:r="'+R+'"><bookViews><workbookView xWindow="0" yWindow="0" windowWidth="24000" windowHeight="12000" activeTab="0"/></bookViews><sheets><sheet name="'+X(DATA_NAME)+'" sheetId="1" r:id="rId1"/><sheet name="'+X(LISTS_NAME)+'" sheetId="2" r:id="rId2"/><sheet name="'+X(CODES_NAME)+'" sheetId="3" r:id="rId3"/></sheets></workbook>'],
+  ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="'+R+'/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="'+R+'/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="'+R+'/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Type="'+R+'/styles" Target="styles.xml"/></Relationships>'],
+  ['xl/styles.xml',STYLES],['xl/worksheets/sheet1.xml',dataXml],['xl/worksheets/sheet2.xml',listsXml],['xl/worksheets/sheet3.xml',codesXml]]);
+};
+const _old=window.downloadImportTemplate;
+window.downloadImportTemplate=function(){
+ try{
+  const blob=buildImportTemplateBlob(),a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='نموذج_استيراد_التبرعات_الموحد.xlsx';document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
+ }catch(e){console.error(e);if(typeof _old==='function')_old();else alert('تعذر إنشاء النموذج.')}
+};
+/* ---- قراءة القيم القادمة من القوائم المنسدلة: «الكود — الاسم» ---- */
+function codePart(v){const s=String(v||'').trim(),m=s.match(/^(.+?)\s*[—–]\s*.+$/);return m?m[1].trim():s}
+function fix(v,byCode,byName){const s=String(v||'').trim();if(!s)return s;if(byCode(s)||byName(s))return s;const c=codePart(s);return (c!==s&&byCode(c))?c:s}
+const _run=window.runImport;
+window.runImport=function(){
+ const t=document.getElementById('importText');
+ if(t&&t.value&&t.value.indexOf('\t')>-1){
+  t.value=t.value.split(/\r?\n/).map(line=>{
+   if(!line.trim()||line.indexOf('\t')<0)return line;const c=line.split('\t');
+   if(/^(التاريخ|date)/i.test((c[0]||'').trim()))return line;
+   if(c[4]!==undefined)c[4]=fix(c[4],projectByCode,v=>projects.find(p=>normName(p.name)===normName(v)));
+   if(c[5]!==undefined)c[5]=fix(c[5],intentionByCode,v=>intentions.find(x=>normName(x)===normName(v)));
+   if(c[7]!==undefined)c[7]=fix(c[7],channelByCode,v=>channels.find(x=>normName(x)===normName(v)));
+   if(c[9]!==undefined){const s=String(c[9]).trim(),m=s.match(/^([1-4])\s*(?:[—–\-(=]|$)/);if(m&&!MOVEMENT_STATUS_CODES[s])c[9]=m[1]}
+   return c.join('\t')}).join('\n');
+ }
+ return _run.apply(this,arguments);
+};
+})();
+</script>
+
+
+<script>
+/* أعمدة الشيت الإضافية: ثابتة + أي حقل جديد يُضاف في فورم «تبرع جديد» يُلتقط تلقائيًا */
+window.importExtraCols=function(){
+ companyConfig=normalizeCompanyConfig(companyConfig);const cc=companyConfig,u=a=>[...new Set((a||[]).filter(Boolean))],ds=cc.donationSources||[];
+ const cols=[
+  {k:'movement',h:'نوع الحركة ▼ (تبرع/تواصل فقط)',title:'نوع الحركة',list:['تبرع','تواصل'],e1:'تبرع',e2:'تبرع',e3:'تواصل'},
+  {k:'entity',h:'نوع الجهة ▼ (فرد/شركة/جمعية)',title:'نوع الجهة',list:['فرد','شركة','جمعية'],e1:'فرد',e2:'فرد',e3:'فرد'},
+  {k:'source',h:'مصدر التبرع ▼',title:'مصدر التبرع',list:u(ds),e1:ds[0]||'',e2:ds[0]||''},
+  {k:'sourceName',h:'اسم المصدر ▼ (بازار/حملة/إيفنت/قافلة — لو المصدر مرتبط بقائمة)',title:'اسم المصدر',list:u([...(cc.bazaars||[]),...(cc.campaigns||[]),...(cc.events||[]),...(cc.caravans||[])])},
+  {k:'action',h:'نوع التواصل ▼ (لحركات التواصل فقط)',title:'نوع التواصل',list:CONTACT_ACTIONS.slice(),e3:CONTACT_ACTIONS[0]},
+  {k:'next',h:'موعد المتابعة القادمة (yyyy-mm-dd — اختياري)'}
+ ];
+ const known=['md_date','md_entityType','md_amount','md_donationType','md_name','md_company','md_phone','md_project','md_intention','md_method','md_source','md_sourceName','md_employee','md_attachment','md_movementStatus'];
+ document.querySelectorAll('#donationModuleNewPanel .donation-form-grid .field').forEach(f=>{const el=f.querySelector('select,input,textarea');if(!el||!el.id||known.includes(el.id)||el.type==='file')return;const lab=(f.querySelector('label')?.textContent||el.id).replace(/[*▼]/g,'').trim(),sel=el.tagName==='SELECT';cols.push({k:'x:'+el.id,dyn:true,h:lab+(sel?' ▼':''),title:lab,list:sel?[...el.options].map(o=>o.value).filter(Boolean):undefined})});
+ return cols;
+};
+window.runImport=async function(){
+ const employeeId=document.getElementById('importEmployeeSelect').value;
+ if(!employeeId){alert('يرجى اختيار الموظف المسؤول عن البيانات المستوردة أولًا.');return}
+ const employee=USERS.find(u=>u.id===employeeId&&u.role==='employee');if(!employee){alert('تعذر العثور على الموظف المحدد.');return}
+ const raw=document.getElementById('importText').value.trim();if(!raw)return;
+ ensureProjectCodes();ensureChannelCodes();ensureIntentionCodes();companyConfig=normalizeCompanyConfig(companyConfig);
+ const rows=parseImportRows(raw),dyn=importExtraCols().filter(x=>x.dyn),hasHdr=rows.length&&/^(التاريخ|date)/i.test(String(rows[0][0]||'').trim()),hdr=hasHdr?rows[0].map(x=>String(x).trim()):[],srcReq=hdr.some(x=>/^مصدر التبرع/.test(x));
+ let added=0,merged=0,skipped=0,contacts=0,coTouched=false;const errors=[];
+ const cp=v=>{const m=String(v||'').trim().match(/^(.+?)\s*[—–]\s*.+$/);return m?m[1].trim():String(v||'').trim()};
+ const fx=(v,byCode,byName)=>{const s=String(v||'').trim();if(!s||byCode(s)||byName(s))return s;const c=cp(s);return c!==s&&byCode(c)?c:s};
+ const nowIso=new Date().toISOString();
+ rows.forEach((c,index)=>{
+  if(hasHdr&&index===0)return;
+  const g=i=>String(c[i]??'').trim(),bad=m=>{skipped++;errors.push(`السطر ${index+1}: ${m}`)};
+  const date=normalizeImportDate(c[0]),name=g(2),phone=g(3),notes=g(11),ent=g(15),isCo=/^(شركة|جمعية|company)$/i.test(ent),isContact=/^(تواصل|contact)$/i.test(g(14));
+  if(date===null)return bad(`التاريخ «${c[0]||''}» غير صالح أو غير مطابق لصيغة النظام (yyyy-mm-dd) أو تاريخ مستقبلي.`);
+  if(!name)return bad('اسم المتبرع/الجهة فارغ.');
+  const co=isCo?companies.find(x=>normName(x.name)===normName(name)):null;
+  if(isCo&&!co)return bad(`الجهة «${name}» غير مكودة في الشركات والجمعيات (سجّلها أولًا بنفس الاسم).`);
+  if(co&&co.entityKind&&/^(شركة|جمعية)$/.test(ent)&&ent!==co.entityKind)return bad(`«${name}» مسجلة في النظام كـ«${co.entityKind}» وليست «${ent}».`);
+  const by={by:employee.fullName,createdBy:employee.id,imported:true,importedBy:currentUser.id,importedByName:currentUser.fullName,importedAt:nowIso};
+  const push=(h)=>{
+   if(isCo){co.history=co.history||[];co.history.push(h);if(h.type==='donation')co.lastDonationDate=date;if(h.nextFollowUp)co.nextFollowUp=h.nextFollowUp;coTouched=true;merged++;return}
+   const d=findDuplicate(name,phone,'');
+   if(d){d.history=d.history||[];d.history.push(h);if(h.nextFollowUp)d.nextFollowUp=h.nextFollowUp;merged++}
+   else{donors.push({id:uid(),name,phone,employeeId:employee.id,createdBy:employee.id,registeredDate:date,nextFollowUp:h.nextFollowUp||'',history:[h]});added++}
+  };
+  if(isContact){ /* حركة تواصل فقط — بدون أي أثر مالي */
+   const action=g(18),nx=g(19);
+   if(!action)return bad('نوع التواصل مطلوب لحركة التواصل.');
+   if(nx&&!/^\d{4}-\d{1,2}-\d{1,2}$/.test(nx))return bad(`موعد المتابعة «${nx}» غير صالح (yyyy-mm-dd).`);
+   const h={type:'contact',hid:uid(),date,action,location:'',notes,nextFollowUp:nx,followUpStatus:nx&&typeof statusFor==='function'?statusFor(nx):'none',...by};
+   if(isCo){h.contactName='';h.contactRole=''}
+   push(h);contacts++;return;
+  }
+  if(!canDonationType(isCo?'company':'individual',currentUser))return bad(isCo?'ليس لديك صلاحية تسجيل تبرعات الشركات.':'ليس لديك صلاحية تسجيل تبرعات الأفراد.');
+  const amount=g(1).replace(/,/g,''),isInkind=/^(عيني|عينى|inkind|in-kind)$/i.test(g(12)),rawMS=g(9),ms=(()=>{const s=rawMS,m=s.match(/^([1-4])\s*(?:[—–\-(=]|$)/);return normalizeMovementStatus(m&&!MOVEMENT_STATUS_CODES[s]?m[1]:s)})();
+  let items=[],finalAmount=amount;
+  if(isInkind){items=parseImportItemsCell(c[13]);if(!items.length||items.some(it=>!it.name||!(it.qty>0)||!(it.price>0)))return bad('التبرع العيني يتطلب عمود الأصناف بالصيغة (اسم:كمية:سعر) مفصولة بـ ؛ لكل صنف، بكل الحقول مكتملة.');finalAmount=String(items.reduce((t,it)=>t+it.qty*it.price,0))}
+  else if(!amount||isNaN(Number(amount))||Number(amount)<=0)return bad('قيمة التبرع غير صالحة.');
+  if(!rawMS)return bad('حالة الحركة مطلوبة.');
+  const project=fx(g(4),projectByCode,v=>projects.find(p=>normName(p.name)===normName(v)));if(!project)return bad('المشروع مطلوب.');
+  const po=projectByCode(project)||projects.find(p=>normName(p.name)===normName(project));if(!po)return bad(`المشروع «${project}» غير موجود أو غير مكود في النظام.`);
+  const inRaw=fx(g(5),intentionByCode,v=>intentions.find(x=>normName(x)===normName(v)));
+  let intention=inRaw?(intentionByCode(inRaw)||intentions.find(x=>normName(x)===normName(inRaw))||''):'';if(!inRaw&&po.intention)intention=po.intention;
+  if(inRaw&&!intention)return bad(`النية «${inRaw}» غير موجودة في النظام.`);if(!intention)return bad('النية مطلوبة.');
+  const mRaw=fx(g(7),channelByCode,v=>channels.find(x=>normName(x)===normName(v))),channel=channelByCode(mRaw)||channels.find(x=>normName(x)===normName(mRaw))||'';
+  if(!isInkind&&!channel)return bad('قناة/طريقة التبرع غير موجودة في النظام.');
+  const source=g(16),sourceName=g(17),srcOk=ds=>(companyConfig.donationSources||[]).find(x=>normName(x)===normName(ds));
+  if(srcReq&&!source)return bad('مصدر التبرع مطلوب.');
+  let srcFinal='',srcNameFinal='';
+  if(source){srcFinal=srcOk(source);if(!srcFinal)return bad(`مصدر التبرع «${source}» غير موجود في الإعدادات.`);
+   const key=donationSourceCatalogKey(srcFinal);
+   if(key){srcNameFinal=(companyConfig[key]||[]).find(x=>normName(x)===normName(sourceName));if(!srcNameFinal)return bad(`يجب اختيار ${donationSourceLabel(srcFinal)} مكوّد في الإعدادات لمصدر «${srcFinal}».`)}}
+  const nx=g(19);
+  const customFields={};dyn.forEach(x=>{const i=hdr.indexOf(x.h);if(i>-1&&String(c[i]??'').trim())customFields[x.h.replace(/\s*▼$/,'')]=String(c[i]).trim()});
+  const h={type:'donation',hid:uid(),date,action:'تبرع جديد',amount:finalAmount,donationType:isInkind?'inkind':'cash',items,project:po.name,intention,location:'',method:channel,source:srcFinal,sourceName:srcNameFinal,notes,status:'confirmed',movementStatus:ms,financeStatus:ms==='ناجحة'?'pending':'approved',entityType:isCo?'company':'individual',responsibleEmployeeId:employee.id,responsibleEmployeeName:employee.fullName,...by};
+  if(Object.keys(customFields).length)h.customFields=customFields;
+  if(isCo){h.companyId=co.id;h.companyName=co.name}
+  push(h);
+ });
+ persist();if(coTouched)persistCompanies();render();closeModal();
+ let msg=`تم الاستيراد تحت اسم الموظف "${employee.fullName}".\nسجلات جديدة: ${added}\nتم دمجها مع جهات موجودة: ${merged}\nمنها حركات تواصل فقط: ${contacts}\nتم تجاهلها: ${skipped}`;
+ if(errors.length)msg+=`\n\nأسباب التجاهل (أول 10):\n`+errors.slice(0,10).join('\n');
+ alert(msg);
+ if(GAS_URL)syncPushNow().then(ok=>{if(!ok)alert('⚠️ تم حفظ بيانات الاستيراد على الجهاز، لكن تعذر رفعها إلى Google Sheets الآن. سيُعاد الإرسال تلقائيًا عند عودة الاتصال.')});
+};
+</script>
 </body>
 </html>
