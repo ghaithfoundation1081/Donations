@@ -2132,7 +2132,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqd6_JLcRK7NzHJH01KebiH5NYVar4ygltfDOyxDclY9C08VQ8bCjq5X1q_pA9ylvnug/exec'; // يظل فارغًا افتراضيًا، ويمكن للنظام استخدام رابط Google Apps Script المحفوظ مسبقًا.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwORdBJx189T_X8f87EDKlIygEcqBSUjjcHlJMmW7oH6falwZEqLmb0nLXmidt4enB4Pw/exec'; // يظل فارغًا افتراضيًا، ويمكن للنظام استخدام رابط Google Apps Script المحفوظ مسبقًا.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2390,7 +2390,13 @@ async function activateAccount(){
   if(activate){user.activated=true;user.activationToken='';}
   if(reset){user.resetToken='';}
   touchUser(user);
-  await saveUsersReliable();
+  const saved=await saveUsersReliable();
+  if(GAS_URL && !saved){
+    /* لا نعلن نجاح التفعيل قبل تأكيد الحفظ المركزي. الحالة المحلية تبقى كما هي
+       وستُعاد محاولة مزامنتها تلقائيًا، لكن لا نُخفي فشل التأكيد عن المستخدم. */
+    alert('تم إعداد بيانات الحساب على هذا الجهاز، لكن لم يتم تأكيد التفعيل على Google Sheets بعد. سيتم إعادة المحاولة تلقائيًا؛ لا تسجل الخروج قبل ظهور حالة الاتصال.');
+    return;
+  }
   history.replaceState({},document.title,window.location.pathname+'?portal=user');
   prepareActivationScreen();
   alert(reset?'تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.':'تم تفعيل الحساب بنجاح. يمكنك الآن تسجيل الدخول.');
@@ -4798,6 +4804,42 @@ function mergeEntityHistories(remoteList, localList){
   });
   return [...map.values()];
 }
+/* دمج حسابات المستخدمين بين الجهاز وGoogle Sheets اعتمادًا على updatedAt.
+   هذه الدالة ضرورية للحسابات لأن حالة التفعيل وكلمة المرور لا يجوز أن تُستبدل
+   بنسخة أقدم لمجرد أنها كانت موجودة محليًا. */
+function mergeUsersClientSafe(remoteList, localList){
+  const r=Array.isArray(remoteList)?remoteList:[], l=Array.isArray(localList)?localList:[];
+  const byId=new Map();
+  const put=(u)=>{
+    if(!u||typeof u!=='object')return;
+    const id=u.id!=null&&String(u.id)?'id:'+String(u.id):'';
+    const un=String(u.username||'').trim().toLowerCase();
+    const key=id||('u:'+un); if(!key||key==='u:')return;
+    const existing=byId.get(key);
+    if(!existing){byId.set(key,JSON.parse(JSON.stringify(u)));return}
+    const a=existing,b=u,at=Date.parse(a.updatedAt||''),bt=Date.parse(b.updatedAt||'');
+    let newer=a,older=b;
+    if(!isNaN(bt)&&isNaN(at)){newer=b;older=a;}
+    else if(!isNaN(bt)&&!isNaN(at)&&bt>=at){newer=b;older=a;}
+    else if(!isNaN(at)&&isNaN(bt)){newer=a;older=b;}
+    const merged={...older,...newer};
+    byId.set(key,merged);
+  };
+  r.forEach(put);
+  l.forEach(put);
+  const out=[...byId.values()];
+  /* إزالة أي ازدواج باقٍ بسبب تغيير اسم المستخدم مع الإبقاء على النسخة الأحدث. */
+  const final=new Map();
+  out.forEach(u=>{
+    const key=String(u.id||'').trim()||('u:'+String(u.username||'').trim().toLowerCase());
+    if(!key)return;
+    const old=final.get(key);
+    if(!old){final.set(key,u);return}
+    const ot=Date.parse(old.updatedAt||''),ut=Date.parse(u.updatedAt||'');
+    if(isNaN(ot)||(!isNaN(ut)&&ut>=ot))final.set(key,u);
+  });
+  return normalizeUsersLocal([...final.values()]);
+}
 function mergeCollaborativeData(remote){
   const data=remote||{};
   const deleted=__syncDeleted||{};
@@ -4817,7 +4859,7 @@ function mergeCollaborativeData(remote){
   };
   return {
     ...data,
-    users:normalizeUsersLocal(mergeEntityHistories(data.users,USERS)),
+    users:mergeUsersClientSafe(data.users,USERS),
     donors:mergeWithTombstones(data.donors,donors,deletedDonors,deletedIndividualHistory),
     companies:mergeWithTombstones(data.companies,companies,deletedCompanies,deletedCompanyHistory),
     projects:mergeProjectListsNoLoss_(normalizeProjects(data.projects),projects).filter(p=>p&&!((deleted.projects||[]).map(String).includes(String(p.id)))),
@@ -4900,7 +4942,7 @@ async function syncPull(options){
        غير محذوف صراحة، ويُفضَّل الحساب الأحدث فعليًا (updatedAt) عند تعارض نفس المعرّف. */
     USERS=options.forceOverwriteLocal
       ? normalizeUsersLocal(Array.isArray(data.users)?data.users:USERS)
-      : normalizeUsersLocal(mergeEntityHistories(Array.isArray(data.users)?data.users:[],USERS).filter(u=>u&&__deletedUserIds.indexOf(String(u.id))===-1));
+      : mergeUsersClientSafe(Array.isArray(data.users)?data.users:[],USERS).filter(u=>u&&__deletedUserIds.indexOf(String(u.id))===-1);
     donors=mergeEntityHistories(Array.isArray(data.donors)?data.donors:[],donors).map(d=>({...d,history:Array.isArray(d.history)?d.history:[]}));
     companies=mergeEntityHistories(Array.isArray(data.companies)?data.companies:[],companies);
     companies=companies.map(c=>({...c,contacts:Array.isArray(c.contacts)?c.contacts:[],history:Array.isArray(c.history)?c.history:[],tags:Array.isArray(c.tags)?c.tags:[],tasks:Array.isArray(c.tasks)?c.tasks:[]}));
@@ -5322,12 +5364,23 @@ async function login(){
     return;
   }
 
-  if(found.activated===false){
+  /* إذا كانت النسخة المحلية تعرض حالة غير مفعلة/غير نشطة، لا نعتمدها مباشرة.
+     نعيد التحقق من Google Sheets مرة واحدة فقط قبل رفض الدخول؛ المسار الطبيعي
+     (حساب سليم) لا ينتظر مزامنة إضافية، حفاظًا على سرعة تسجيل الدخول. */
+  if(GAS_URL && (found.activated===false || found.active===false)){
+    try{
+      await syncPull({preserveLocalIfRemoteEmpty:true,silent:true});
+      found=USERS.find(x=>x&&String(x.id||'')===String(found.id||''))
+        ||USERS.find(x=>x&&normalizeLoginUsername(x.username)===normalizeLoginUsername(u));
+    }catch(e){}
+  }
+
+  if(found?.activated===false){
     alert('هذا الحساب لم يتم تفعيله بعد. استخدم رابط التفعيل الذي أرسله لك مدير النظام.');
     return;
   }
 
-  if(found.active===false){
+  if(found?.active===false){
     alert('هذا الحساب غير نشط. يرجى مراجعة مدير النظام.');
     return;
   }
