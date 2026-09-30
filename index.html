@@ -2132,7 +2132,7 @@ document.getElementById('ghaithHeaderLogo').src=document.getElementById('ghaithL
      ثم حوّل الناتج لسلسلة hex (أو استخدم دالة sha256Hex('رمزك_الجديد') المعرّفة أسفل هذا الملف).
      القيمة الحالية أدناه تقابل الرمز الافتراضي 'ghaith@2022' — يجب تغييرها قبل التوزيع الفعلي.
    ========================================================= */
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwbNNnJKsgFSRc4dwlZZuexBhc_8n645ct8iHEmQp0EEWcosH_kxo5YwGC91jtGzBGNJw/exec'; // يظل فارغًا افتراضيًا، ويمكن للنظام استخدام رابط Google Apps Script المحفوظ مسبقًا.
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzqd6_JLcRK7NzHJH01KebiH5NYVar4ygltfDOyxDclY9C08VQ8bCjq5X1q_pA9ylvnug/exec'; // يظل فارغًا افتراضيًا، ويمكن للنظام استخدام رابط Google Apps Script المحفوظ مسبقًا.
 const SETUP_CODE_HASH = 'e2e0171dbbb31fa8fe07fedaa0e472f23e37f7283f2be8f0121dd23ae6090057';
 /* =========================================================
    GAS_ACCESS_KEY: مفتاح سري مشترك بين هذا الملف وبين Code.gs داخل جوجل شيت.
@@ -2689,11 +2689,12 @@ function applyFinanceProtection(payload) {
   if (payload && payload.__allowDonationReset === true) return payload;
   var old = readAll();
   if (!old || old.error) return payload; // لا توجد بيانات سابقة موثوقة لمقارنتها: لا داعي للحماية
-  payload.donors = protectEntityList(old.donors || [], payload.donors || []);
-  payload.companies = protectEntityList(old.companies || [], payload.companies || []);
+  var deletedHistory = payload.__deletedHistory || {individual:{},company:{}};
+  payload.donors = protectEntityList(old.donors || [], payload.donors || [], deletedHistory.individual || {});
+  payload.companies = protectEntityList(old.companies || [], payload.companies || [], deletedHistory.company || {});
   return payload;
 }
-function protectEntityList(oldList, newList) {
+function protectEntityList(oldList, newList, deletedHistory) {
   oldList = Array.isArray(oldList) ? oldList : [];
   newList = Array.isArray(newList) ? newList : [];
   var newMap = {};
@@ -2714,7 +2715,11 @@ function protectEntityList(oldList, newList) {
     newEntity.history = Array.isArray(newEntity.history) ? newEntity.history : [];
     var histMap = {};
     newEntity.history.forEach(function (h) { if (h && h.hid) histMap[h.hid] = h; });
+    var explicitlyDeleted = deletedHistory && deletedHistory[String(oldEntity.id)] || [];
+    var explicitDeleteMap = {};
+    (Array.isArray(explicitlyDeleted) ? explicitlyDeleted : []).forEach(function(hid){ explicitDeleteMap[String(hid)] = true; });
     protectedHistory.forEach(function (oldH) {
+      if (oldH && oldH.hid != null && explicitDeleteMap[String(oldH.hid)]) return;
       var newH = histMap[oldH.hid];
       if (!newH) {
         // تم حذف حركة معتمدة/مرفوضة ماليًا في النسخة الجديدة الواردة: نعيدها كما
@@ -3531,8 +3536,8 @@ function jsonOut(obj) {
 
 const UKEY='donors_users_v3', DKEY='donors_donors_v3', COMPANYKEY='donors_companies_v1', COMPANYCONFIGKEY='donors_company_config_v1', PKEY='donors_projects_v3', CKEY='donors_channels_v1', IKEY='donors_intentions_v1', MCKEY='donors_manager_categories_v1', LOCATIONSKEY='donors_locations_v1', DELETED_SYNC_KEY='donors_deleted_sync_v1', SESSION='donors_session_v3', GASKEY='donors_gas_url_v1', SYNCKEY='donors_last_sync_v1', CHCODEKEY='donors_channel_codes_v1', INCODEKEY='donors_intention_codes_v1', PENDING_SYNC_KEY='donors_pending_sync_v2', BASE_SYNC_KEY='donors_base_sync_v2';
 const IMPORTLOGKEY='donors_import_logs_v1';
-const DONATION_RESET_VERSION='2026-09-30-v5';
-const SYSTEM_CLEAN_VERSION='2026-09-30-ERP-CLEAN-01';
+const DONATION_RESET_VERSION='2026-09-30-v6';
+const SYSTEM_CLEAN_VERSION='2026-09-30-ERP-CLEAN-02';
 const SYSTEM_CLEAN_KEY='ghaith_erp_clean_version_v1';
 let __pendingDonationReset=false;
 
@@ -4673,7 +4678,7 @@ let __localDirty=false;
    سلوك فوري عملي بدون تغيير البنية الحالية للنظام. */
 let __bgSyncInFlight=false;
 let __lastBgSyncAt=0;
-const __BG_SYNC_MIN_INTERVAL=900; // تحديث مركزي شبه فوري
+const __BG_SYNC_MIN_INTERVAL=700; // تحديث مركزي شبه فوري، مع تجنب الطلبات المتقاربة جدًا
 
 async function __backgroundFreshnessSync(force=false){
   if(__bgSyncInFlight||!GAS_URL||!currentUser)return;
@@ -4694,7 +4699,7 @@ async function __backgroundFreshnessSync(force=false){
 /* فحص خفيف عند العودة للنافذة بدل polling مستمر. */
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)__backgroundFreshnessSync(true)});
 window.addEventListener('focus',()=>__backgroundFreshnessSync(true));
-setInterval(()=>{if(!document.hidden)__backgroundFreshnessSync(false)},10000);
+setInterval(()=>{if(!document.hidden)__backgroundFreshnessSync(false)},3000);
 
 /* ---------- Google Sheets sync ---------- */
 function gasCall(action,payload){
@@ -10402,12 +10407,16 @@ window.deleteDonation=async function(id,hid){
  if(!canEditDeleteDonationEntry(entry,'delete')){alert(entry.financeStatus==='approved'?'هذه الحركة معتمدة ماليًا، والحذف متاح للإدارة المالية فقط.':'ليس لديك صلاحية حذف هذه الحركة.');return}
  if(!confirm('حذف هذا التبرع نهائيًا؟ سيتم حفظ الحذف على Google Sheets لمنع عودة الحركة مرة أخرى. لا يمكن التراجع عن هذا الإجراء.'))return;
  if(GAS_URL){await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});const freshD=donors.find(x=>x.id===id),freshEntry=freshD&&(freshD.history||[]).find(h=>h.hid===hid);if(!freshEntry){alert('تعذر الحذف: الحركة غير موجودة بالفعل في آخر نسخة متزامنة. تم تحديث النظام تلقائيًا.');render();return}if(!canEditDeleteDonationEntry(freshEntry,'delete')){alert('تعذر الحذف: تغيرت حالة الحركة على جهاز آخر أو تم اعتمادها ماليًا. تم تحديث بياناتك تلقائيًا.');render();if(currentView==='financeReview')renderFinanceReview();return}d=freshD;entry=freshEntry}
- d.history=(d.history||[]).filter(h=>h.hid!==hid);persist();closeModal();render();if(currentView==='financeReview')renderFinanceReview();if(currentView==='donations')renderDonations();if(currentView==='reports')renderReports();if(GAS_URL)syncPushNow({silent:false}).then(ok=>{if(!ok)alert('تم حذف الحركة محليًا، لكن تعذر حفظ الحذف على Google Sheets. أعد المحاولة عند توفر الاتصال.')});
+ __markSyncHistoryDeleted('individual',id,hid);
+ d.history=(d.history||[]).filter(h=>h.hid!==hid);persist();closeModal();render();if(currentView==='financeReview')renderFinanceReview();if(currentView==='donations')renderDonations();if(currentView==='reports')renderReports();
+ if(GAS_URL){const ok=await syncPushNow({silent:false});if(!ok)alert('تم حذف الحركة محليًا وتسجيل الحذف، لكن تعذر تأكيده على Google Sheets. سيُعاد إرسال الحذف تلقائيًا عند عودة الاتصال.');}
 };
 window.deleteCompanyDonation=async function(id,hid){
  let c=(companies||[]).find(x=>String(x.id)===String(id));let e=c&&(c.history||[]).find(x=>x&&x.hid===hid&&x.type==='donation');if(!c||!e)return;if(!canEditDeleteDonationEntry(e,'delete')){alert('هذه الحركة غير قابلة للحذف حسب حالة الاعتماد والصلاحيات.');return}if(!confirm('حذف حركة التبرع هذه نهائيًا؟ سيتم حفظ الحذف على Google Sheets فورًا.'))return;
  if(GAS_URL){await syncPull({preserveLocalIfRemoteEmpty:true,silent:false});const freshC=(companies||[]).find(x=>String(x.id)===String(id));const freshE=freshC&&(freshC.history||[]).find(x=>x&&x.hid===hid&&x.type==='donation');if(!freshE){alert('تعذر الحذف: الحركة غير موجودة في آخر نسخة متزامنة.');render();return}if(!canEditDeleteDonationEntry(freshE,'delete')){alert('تعذر الحذف: تغيرت حالة الحركة على جهاز آخر.');render();return}c=freshC;e=freshE}
- c.history=(c.history||[]).filter(x=>x.hid!==hid);persistCompanies();closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();if(GAS_URL)syncPushNow({silent:false});
+ __markSyncHistoryDeleted('company',id,hid);
+ c.history=(c.history||[]).filter(x=>x.hid!==hid);persistCompanies();closeModal();if(typeof renderModuleDonationRecords==='function')renderModuleDonationRecords();if(currentView==='companies')renderCompanies();if(currentView==='financeReview')renderFinanceReview();
+ if(GAS_URL){const ok=await syncPushNow({silent:false});if(!ok)alert('تم حذف الحركة محليًا وتسجيل الحذف، لكن تعذر تأكيده على Google Sheets. سيُعاد إرسال الحذف تلقائيًا عند عودة الاتصال.');}
 };
 const css=document.createElement('style');css.id='final-requested-layout-fixes-v3';css.textContent=`
 #app>.top-tabs~#donationModuleView,#app>.top-tabs~#donorsView,#app>.top-tabs~#companiesView,#app>.top-tabs~#projectsView,#app>.top-tabs~#channelsView{height:calc(100vh - 122px)!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding-bottom:34px!important;box-sizing:border-box!important}
@@ -12435,76 +12444,12 @@ async function confirmImportAfterValidation(){
 </script>
 
 
-<script id="performance-stability-fix-v1">
+<script id="performance-stability-fix-v2">
 (function(){
-  'use strict';
-  if(window.__performanceStabilityFixApplied)return;
-  window.__performanceStabilityFixApplied=true;
-
-  let bgCount=0,bgTimer=null,bgEl=null,bgText=null;
-  function ensureBgIndicator(){
-    if(bgEl&&document.body.contains(bgEl))return;
-    bgEl=document.createElement('div');
-    bgEl.id='systemNetworkActivity';
-    bgEl.setAttribute('aria-live','polite');
-    bgEl.innerHTML='<span class="system-network-spinner" aria-hidden="true"></span><span id="systemNetworkActivityText">جارٍ تنفيذ العملية...</span>';
-    const st=document.createElement('style');
-    st.id='systemNetworkActivityStyles';
-    st.textContent='\
-      #systemNetworkActivity{position:fixed;top:134px;left:22px;z-index:100000;display:none;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:#fff;border:1px solid #dce9e4;box-shadow:0 8px 24px rgba(0,72,60,.12);color:#16564b;font:700 12px Tahoma,Arial,sans-serif;pointer-events:none;direction:rtl;}\
-      #systemNetworkActivity .system-network-spinner{width:14px;height:14px;border-radius:50%;border:2px solid #cfe7df;border-top-color:#0e8a63;display:inline-block;animation:systemNetworkSpin .75s linear infinite;}\
-      @keyframes systemNetworkSpin{to{transform:rotate(360deg)}}\
-      @media(max-width:760px){#systemNetworkActivity{top:104px;left:10px}}';
-    document.head.appendChild(st);
-    document.body.appendChild(bgEl);
-    bgText=bgEl.querySelector('#systemNetworkActivityText');
-  }
-  function bgStart(label){
-    bgCount++;
-    clearTimeout(bgTimer);
-    bgTimer=setTimeout(function(){
-      if(bgCount<=0)return;
-      ensureBgIndicator();
-      if(bgText)bgText.textContent=label||'جارٍ تنفيذ العملية...';
-      if(bgEl)bgEl.style.display='flex';
-    },280);
-  }
-  function bgEnd(){
-    bgCount=Math.max(0,bgCount-1);
-    if(bgCount===0){
-      clearTimeout(bgTimer);bgTimer=null;
-      if(bgEl)bgEl.style.display='none';
-    }
-  }
-
-  try{
-    if(typeof window.gasCall==='function'&&!window.gasCall.__perfWrapped){
-      const oldGasCall=window.gasCall;
-      const wrappedGasCall=function(action,payload){
-        bgStart(action==='getAll'?'جارٍ تحديث البيانات...':'جارٍ حفظ/تنفيذ العملية...');
-        return Promise.resolve(oldGasCall.apply(this,arguments)).finally(bgEnd);
-      };
-      wrappedGasCall.__perfWrapped=true;window.gasCall=wrappedGasCall;
-    }
-    if(typeof window.gasJsonpGet==='function'&&!window.gasJsonpGet.__perfWrapped){
-      const oldJsonp=window.gasJsonpGet;
-      const wrappedJsonp=function(){
-        bgStart('جارٍ التحقق من البيانات...');
-        return Promise.resolve(oldJsonp.apply(this,arguments)).finally(bgEnd);
-      };
-      wrappedJsonp.__perfWrapped=true;window.gasJsonpGet=wrappedJsonp;
-    }
-    if(typeof window.gasFormPost==='function'&&!window.gasFormPost.__perfWrapped){
-      const oldForm=window.gasFormPost;
-      const wrappedForm=function(){
-        bgStart('جارٍ إرسال البيانات...');
-        return Promise.resolve(oldForm.apply(this,arguments)).finally(bgEnd);
-      };
-      wrappedForm.__perfWrapped=true;window.gasFormPost=wrappedForm;
-    }
-  }catch(e){console.error('[Performance wrapper]',e)}
-
-  window.addEventListener('beforeunload',function(){try{clearTimeout(window.__donorRecordRefreshTimer)}catch(_){}});
+  // تم إلغاء مؤشر الشبكة العائم القديم الذي كان يظهر يسار الشاشة.
+  // المزامنة الخلفية تظل صامتة، ومؤشر العملية الرسمي هو globalSyncSpinner ويظهر فقط
+  // عند العمليات التي تستدعي __syncIndicatorShow صراحةً.
+  window.addEventListener('beforeunload',function(){try{clearTimeout(window.__donorRecordRefreshTimer)}catch(_){} });
 })();
 </script>
 
